@@ -83,15 +83,35 @@ export function LandingCmsPage() {
       return
     }
 
-    if (file.size > 3 * 1024 * 1024) {
-      alert('Image file size should be less than 3MB.')
-      return
-    }
-
     const reader = new FileReader()
     reader.onload = () => {
-      const result = reader.result as string
-      setForm(prev => ({ ...prev, hero_bg_image: result }))
+      const img = new Image()
+      img.onload = () => {
+        // Downscale to max 1920x1080 while preserving aspect ratio
+        const maxWidth = 1920
+        const maxHeight = 1080
+        let { width, height } = img
+
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height)
+          width = Math.round(width * ratio)
+          height = Math.round(height * ratio)
+        }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height)
+          // Compress to lightweight JPEG (~150KB - 250KB)
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82)
+          setForm(prev => ({ ...prev, hero_bg_image: compressedDataUrl }))
+        } else {
+          setForm(prev => ({ ...prev, hero_bg_image: reader.result as string }))
+        }
+      }
+      img.src = reader.result as string
     }
     reader.readAsDataURL(file)
   }

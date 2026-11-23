@@ -75,6 +75,19 @@ export const DEFAULT_LANDING_SETTINGS: LandingPageSettings = {
 
 const LOCAL_STORAGE_KEY = 'classbank_landing_settings'
 
+function safeSaveToLocalStorage(data: LandingPageSettings) {
+  try {
+    const toStore: LandingPageSettings = { ...data }
+    // If the image is a base64 data URL, avoid blowing up localStorage's 5MB quota
+    if (toStore.hero_bg_image && toStore.hero_bg_image.startsWith('data:') && toStore.hero_bg_image.length > 200000) {
+      toStore.hero_bg_image = ''
+    }
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(toStore))
+  } catch (err) {
+    console.warn('LocalStorage quota exceeded or restricted; skipping local cache:', err)
+  }
+}
+
 export function useLandingSettings() {
   const [settings, setSettings] = useState<LandingPageSettings>(() => {
     try {
@@ -111,13 +124,13 @@ export function useLandingSettings() {
             : DEFAULT_LANDING_SETTINGS.stats_data,
         }
         setSettings(merged)
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged))
-        } catch {}
+        safeSaveToLocalStorage(merged)
       } else {
         // Fallback to cached or defaults
-        const cached = localStorage.getItem(LOCAL_STORAGE_KEY)
-        if (cached) setSettings(JSON.parse(cached))
+        try {
+          const cached = localStorage.getItem(LOCAL_STORAGE_KEY)
+          if (cached) setSettings(JSON.parse(cached))
+        } catch {}
       }
     } catch (e: any) {
       setError(e.message)
@@ -145,21 +158,20 @@ export function useLandingSettings() {
         .from('landing_page_settings')
         .upsert(payload as never)
 
+      setSettings(payload)
+      safeSaveToLocalStorage(payload)
+      setSaving(false)
+
       if (err) {
-        // Also save to localStorage so changes reflect locally even before SQL migration runs
-        setSettings(payload)
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload))
-        setSaving(false)
         return `Saved locally (Database notice: ${err.message})`
       }
 
-      setSettings(payload)
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload))
-      setSaving(false)
       return null
     } catch (e: any) {
+      setSettings(payload)
+      safeSaveToLocalStorage(payload)
       setSaving(false)
-      return e.message || 'Failed to save settings'
+      return e.message || 'Saved locally with warning'
     }
   }
 
