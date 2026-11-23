@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Smartphone, Check, Share2 } from 'lucide-react'
+import { Download, Smartphone, Check, Share2, MoreVertical } from 'lucide-react'
 import { usePwaInstall } from '../../hooks/usePwaInstall'
 import { Modal } from '../ui/Modal'
 
@@ -11,7 +11,7 @@ interface PwaInstallButtonProps {
 
 export function PwaInstallButton({ className = '', size = 'md' }: PwaInstallButtonProps) {
   const { isInstalled, isIos, promptInstall } = usePwaInstall()
-  const [showIosModal, setShowIosModal] = useState(false)
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false)
   const [installSuccess, setInstallSuccess] = useState(false)
 
   if (isInstalled) {
@@ -24,13 +24,16 @@ export function PwaInstallButton({ className = '', size = 'md' }: PwaInstallButt
 
   const handleClick = async () => {
     if (isIos) {
-      setShowIosModal(true)
+      setShowInstructionsModal(true)
       return
     }
 
     const success = await promptInstall()
     if (success) {
       setInstallSuccess(true)
+    } else {
+      // If native browser prompt is not immediately triggered, open visual guide
+      setShowInstructionsModal(true)
     }
   }
 
@@ -48,25 +51,50 @@ export function PwaInstallButton({ className = '', size = 'md' }: PwaInstallButt
         <Download size={size === 'sm' ? 13 : 14} className="opacity-80" />
       </button>
 
-      {/* iOS Instructions Modal */}
-      {showIosModal && (
-        <Modal open={showIosModal} onClose={() => setShowIosModal(false)} title="Install ClassBank on iPhone / iPad">
+      {/* PWA Installation Instructions Modal */}
+      {showInstructionsModal && (
+        <Modal
+          open={showInstructionsModal}
+          onClose={() => setShowInstructionsModal(false)}
+          title={isIos ? 'Install ClassBank on iPhone / iPad' : 'Install ClassBank on Your Device'}
+        >
           <div className="space-y-4 text-sm text-text">
-            <p className="text-secondary">
-              Follow these two quick steps to add ClassBank to your iPhone or iPad home screen:
-            </p>
-            <ol className="space-y-3 list-decimal list-inside bg-bg-elevated p-3.5 rounded-card border border-border">
-              <li className="leading-relaxed">
-                Tap the <strong className="text-brand-600 dark:text-brand-400">Share</strong> button <Share2 size={15} className="inline mx-1 text-brand-600" /> at the bottom of Safari.
-              </li>
-              <li className="leading-relaxed">
-                Scroll down and tap <strong className="text-brand-600 dark:text-brand-400">Add to Home Screen</strong>.
-              </li>
-            </ol>
+            {isIos ? (
+              <>
+                <p className="text-secondary">
+                  Follow these two quick steps in Safari to add ClassBank to your home screen:
+                </p>
+                <ol className="space-y-3 list-decimal list-inside bg-bg-elevated p-3.5 rounded-card border border-border">
+                  <li className="leading-relaxed">
+                    Tap the <strong className="text-brand-600 dark:text-brand-400">Share</strong> button <Share2 size={15} className="inline mx-1 text-brand-600" /> at the bottom of Safari.
+                  </li>
+                  <li className="leading-relaxed">
+                    Scroll down and tap <strong className="text-brand-600 dark:text-brand-400">Add to Home Screen</strong>.
+                  </li>
+                </ol>
+              </>
+            ) : (
+              <>
+                <p className="text-secondary">
+                  To install ClassBank as a fast standalone app on Android or PC:
+                </p>
+                <ol className="space-y-3 list-decimal list-inside bg-bg-elevated p-3.5 rounded-card border border-border">
+                  <li className="leading-relaxed">
+                    Tap the <strong>3 dots menu</strong> <MoreVertical size={15} className="inline mx-0.5 text-brand-600" /> in the top right corner of Chrome.
+                  </li>
+                  <li className="leading-relaxed">
+                    Select <strong className="text-brand-600 dark:text-brand-400">Install app</strong> or <strong className="text-brand-600 dark:text-brand-400">Add to Home screen</strong>.
+                  </li>
+                  <li className="leading-relaxed">
+                    Tap <strong>Install</strong> to add ClassBank to your phone home screen!
+                  </li>
+                </ol>
+              </>
+            )}
             <div className="flex justify-end pt-2">
               <button
-                onClick={() => setShowIosModal(false)}
-                className="px-4 py-2 text-xs font-semibold rounded-btn bg-brand-600 text-white"
+                onClick={() => setShowInstructionsModal(false)}
+                className="px-4 py-2 text-xs font-semibold rounded-btn bg-brand-600 text-white cursor-pointer"
               >
                 Got It
               </button>

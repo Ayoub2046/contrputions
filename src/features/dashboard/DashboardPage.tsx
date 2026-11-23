@@ -70,7 +70,7 @@ function StudentDashboard({ userId, classId }: { userId: string; classId: string
           <div>
             <span className="text-[11px] text-white/40 font-medium block mb-1">{t('dashboard.myContributions')}</span>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-serif font-bold tracking-tight text-white tabular-nums">
+              <span className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-white tabular-nums">
                 {formatCurrency(data.personalTotal)}
               </span>
               <span className="text-sm text-white/30">/ {formatCurrency(data.target)}</span>
@@ -94,18 +94,18 @@ function StudentDashboard({ userId, classId }: { userId: string; classId: string
 
       <Card>
         <CardContent className="p-0">
-          <div className="grid grid-cols-3 divide-x divide-border/40 text-center py-4">
-            <div className="px-2 space-y-0.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted font-medium block">{t('dashboard.totalContributions')}</span>
-              <span className="text-base font-bold text-text tabular-nums block">{formatCurrency(data.classTotal)}</span>
+          <div className="grid grid-cols-3 divide-x divide-border/40 text-center py-3.5 sm:py-4">
+            <div className="px-1 sm:px-2 space-y-0.5 min-w-0">
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted font-medium block truncate">{t('dashboard.totalContributions')}</span>
+              <span className="text-sm sm:text-base font-bold text-text tabular-nums block truncate">{formatCurrency(data.classTotal)}</span>
             </div>
-            <div className="px-2 space-y-0.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted font-medium block">{t('dashboard.totalExpenses')}</span>
-              <span className="text-base font-bold text-text tabular-nums block">{formatCurrency(data.expenseTotal)}</span>
+            <div className="px-1 sm:px-2 space-y-0.5 min-w-0">
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted font-medium block truncate">{t('dashboard.totalExpenses')}</span>
+              <span className="text-sm sm:text-base font-bold text-text tabular-nums block truncate">{formatCurrency(data.expenseTotal)}</span>
             </div>
-            <div className="px-2 space-y-0.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted font-medium block">{t('dashboard.remainingBalance')}</span>
-              <span className={cn('text-base font-bold tabular-nums block', isPositive ? 'text-success' : 'text-error')}>
+            <div className="px-1 sm:px-2 space-y-0.5 min-w-0">
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted font-medium block truncate">{t('dashboard.remainingBalance')}</span>
+              <span className={cn('text-sm sm:text-base font-bold tabular-nums block truncate', isPositive ? 'text-success' : 'text-error')}>
                 {formatCurrency(data.remainingBalance)}
               </span>
             </div>
