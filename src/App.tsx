@@ -15,6 +15,7 @@ import { AdminsPage } from './features/admins/AdminsPage'
 import { RecycleBinPage } from './features/recyclebin/RecycleBinPage'
 import { LandingPage } from './features/landing/LandingPage'
 import { LandingCmsPage } from './features/cms/LandingCmsPage'
+import { AdminContactsPage } from './features/admins/AdminContactsPage'
 
 function AppLayout() {
   const { user, signOut } = useAuth()
@@ -34,6 +35,7 @@ function AppLayout() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admins" element={<AdminsPage />} />
           <Route path="/recycle-bin" element={<RecycleBinPage />} />
+          <Route path="/admin-contacts" element={<AdminContactsPage />} />
           <Route path="/landing-cms" element={<LandingCmsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

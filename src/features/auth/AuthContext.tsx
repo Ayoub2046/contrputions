@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { supabase } from '../../lib/supabase'
 import type { Profile } from '../../lib/types'
 import { AUTH_EMAIL_DOMAIN } from '../../lib/constants'
+import { normalizeAuthPassword } from '../../lib/utils'
 
 interface AdminClassInfo {
   id: string
@@ -78,9 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function signIn(studentId: string, password: string): Promise<string | null> {
-    const email = `${studentId}@${AUTH_EMAIL_DOMAIN}`
+    const cleanId = studentId.trim()
+    const email = `${cleanId}@${AUTH_EMAIL_DOMAIN}`
+    const finalPassword = normalizeAuthPassword(cleanId, password)
     setLoading(true)
-    const { error, data } = await supabase.auth.signInWithPassword({ email, password })
+    const { error, data } = await supabase.auth.signInWithPassword({ email, password: finalPassword })
     if (error) { setLoading(false); return error.message }
     if (data?.user) {
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single()

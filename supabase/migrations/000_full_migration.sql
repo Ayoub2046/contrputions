@@ -384,8 +384,8 @@ CREATE POLICY "public_read_landing_settings"
 CREATE POLICY "admins_manage_landing_settings"
   ON landing_page_settings FOR ALL
   TO authenticated
-  USING (user_role() IN ('super_admin', 'admin'))
-  WITH CHECK (user_role() IN ('super_admin', 'admin'));
+  USING (user_role() = 'super_admin')
+  WITH CHECK (user_role() = 'super_admin');
 
 INSERT INTO landing_page_settings (
   id,
@@ -416,3 +416,108 @@ INSERT INTO landing_page_settings (
   '✨ Real-time transparency: All contributions and expenses audited live with zero hidden balances.',
   ''
 ) ON CONFLICT (id) DO NOTHING;
+
+-- 9. CLASS COMMENTS (Student feedback & discussion inside dashboard)
+CREATE TABLE IF NOT EXISTS public.class_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id UUID NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_class_comments_class_id ON public.class_comments(class_id);
+CREATE INDEX IF NOT EXISTS idx_class_comments_created_at ON public.class_comments(created_at DESC);
+
+ALTER TABLE public.class_comments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "super_admin_all_class_comments" ON public.class_comments
+  FOR ALL TO authenticated
+  USING (user_role() = 'super_admin')
+  WITH CHECK (user_role() = 'super_admin');
+
+CREATE POLICY "admin_select_class_comments" ON public.class_comments
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.class_admins
+      WHERE class_admins.admin_id = auth.uid()
+        AND class_admins.class_id = class_comments.class_id
+    )
+  );
+
+CREATE POLICY "admin_insert_class_comments" ON public.class_comments
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = user_id AND
+    EXISTS (
+      SELECT 1 FROM public.class_admins
+      WHERE class_admins.admin_id = auth.uid()
+        AND class_admins.class_id = class_comments.class_id
+    )
+  );
+
+CREATE POLICY "admin_delete_class_comments" ON public.class_comments
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.class_admins
+      WHERE class_admins.admin_id = auth.uid()
+        AND class_admins.class_id = class_comments.class_id
+    )
+  );
+
+CREATE POLICY "student_select_class_comments" ON public.class_comments
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+        AND profiles.class_id = class_comments.class_id
+    )
+  );
+
+CREATE POLICY "student_insert_class_comments" ON public.class_comments
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = user_id AND
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+        AND profiles.class_id = class_comments.class_id
+    )
+  );
+
+CREATE POLICY "student_delete_class_comments" ON public.class_comments
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
+
+-- 10. ADMIN COMMUNICATIONS & DIRECT CONTACT CHANNEL
+CREATE TABLE IF NOT EXISTS public.admin_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_messages_created_at ON public.admin_messages(created_at DESC);
+
+ALTER TABLE public.admin_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "admins_select_admin_messages" ON public.admin_messages
+  FOR SELECT TO authenticated
+  USING (user_role() IN ('super_admin', 'admin'));
+
+CREATE POLICY "admins_insert_admin_messages" ON public.admin_messages
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = sender_id AND
+    user_role() IN ('super_admin', 'admin')
+  );
+
+CREATE POLICY "admins_delete_admin_messages" ON public.admin_messages
+  FOR DELETE TO authenticated
+  USING (
+    user_role() = 'super_admin' OR sender_id = auth.uid()
+  );

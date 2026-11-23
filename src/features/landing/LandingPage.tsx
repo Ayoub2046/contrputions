@@ -7,6 +7,7 @@ import { LandingMercySection } from './LandingMercySection'
 import { LandingFeatures } from './LandingFeatures'
 import { LandingHowItWorks } from './LandingHowItWorks'
 import { LandingFooter } from './LandingFooter'
+import { PwaInstallBanner } from '../../components/pwa/PwaInstallBanner'
 import { ArrowRight, Sparkles } from 'lucide-react'
 
 export function LandingPage() {
@@ -14,6 +15,9 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-bg-main text-text selection:bg-brand-600 selection:text-white">
+      {/* Mobile/Desktop PWA Install Banner */}
+      <PwaInstallBanner />
+
       {/* Top Announcement Bar */}
       {settings.show_announcement && settings.announcement_text && (
         <aside

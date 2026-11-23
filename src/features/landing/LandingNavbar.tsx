@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../../hooks/useTheme'
 import { Sun, Moon, Globe, Menu, X, ArrowRight, LogOut, HeartHandshake } from 'lucide-react'
+import { PwaInstallButton } from '../../components/pwa/PwaInstallButton'
 
 export function LandingNavbar() {
   const { i18n } = useTranslation()
@@ -37,6 +38,9 @@ export function LandingNavbar() {
 
         {/* Right side controls */}
         <div className="hidden sm:flex items-center gap-3">
+          {/* PWA Install Button */}
+          <PwaInstallButton size="sm" />
+
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
@@ -135,6 +139,7 @@ export function LandingNavbar() {
           </div>
 
           <div className="pt-2 border-t border-border flex items-center justify-between">
+            <PwaInstallButton size="sm" />
             <button
               onClick={toggleLanguage}
               className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-btn border border-border text-secondary"

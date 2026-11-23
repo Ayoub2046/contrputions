@@ -46,6 +46,12 @@ async function verifyAdminAuth(req) {
   return { ok: true, caller: callerProfile, callerId: callerAuth.id }
 }
 
+function normalizeAuthPassword(sid, pwd) {
+  const p = (pwd || sid || '').trim()
+  if (p.length < 6) return p.padEnd(6, '0')
+  return p
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS')
@@ -67,9 +73,13 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { student_id, name, password, class_id, role, phone } = req.body || {}
 
-      if (!student_id || !name || !password) {
-        return res.status(400).json({ error: 'Missing required fields: student_id, name, and password' })
+      if (!student_id || !name) {
+        return res.status(400).json({ error: 'Missing required fields: student_id and name' })
       }
+
+      const cleanId = student_id.trim()
+      const rawPassword = password && password.trim() ? password.trim() : cleanId
+      const finalPassword = normalizeAuthPassword(cleanId, rawPassword)
 
       // Privilege check: Only super_admin can create admins or super_admins
       const targetRole = role || 'student'
@@ -80,7 +90,7 @@ export default async function handler(req, res) {
       // If class admin, ensure target user is assigned to a class
       const targetClassId = class_id || auth.caller.class_id || null
 
-      const email = `${student_id}@${AUTH_DOMAIN}`
+      const email = `${cleanId}@${AUTH_DOMAIN}`
 
       // Create Supabase Auth User with service_role privileges
       const authRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -90,7 +100,7 @@ export default async function handler(req, res) {
           apikey: SERVICE_ROLE_KEY,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password, email_confirm: true }),
+        body: JSON.stringify({ email, password: finalPassword, email_confirm: true }),
       })
 
       const authData = await authRes.json()

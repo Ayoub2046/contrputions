@@ -24,10 +24,10 @@ export function StudentForm({ initial, onSave, onCancel, classId, classes }: Stu
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!studentId.trim() || !name.trim()) { setError(t('students.form.validation.required')); return }
-    if (!initial && !password.trim()) { setError(t('students.form.validation.passwordRequired')); return }
     if (classes && !selectedClassId) { setError(t('students.form.validation.classRequired')); return }
     setLoading(true)
-    const err = await onSave(studentId.trim(), name.trim(), initial ? undefined : password.trim(), selectedClassId || undefined, phone.trim() || null)
+    const finalPassword = initial ? undefined : (password.trim() || studentId.trim())
+    const err = await onSave(studentId.trim(), name.trim(), finalPassword, selectedClassId || undefined, phone.trim() || null)
     if (err) setError(err)
     setLoading(false)
   }
@@ -81,15 +81,17 @@ export function StudentForm({ initial, onSave, onCancel, classId, classes }: Stu
       )}
 
       {!initial && (
-        <Input
-          id="spassword"
-          label={t('students.form.password')}
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder={t('students.form.passwordPlaceholder')}
-          required
-        />
+        <div>
+          <Input
+            id="spassword"
+            label={`${t('students.form.password')} (Optional - Default is Student ID)`}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={studentId.trim() ? `Default: ${studentId.trim()}` : 'Default is Student ID'}
+          />
+          <p className="mt-1 text-xs text-muted">If left blank, the student will log in using their Student ID as password.</p>
+        </div>
       )}
       <div className="flex justify-end gap-3">
         <Button type="button" variant="secondary" onClick={onCancel}>{t('students.modal.cancel')}</Button>

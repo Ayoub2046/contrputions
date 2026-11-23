@@ -10,6 +10,7 @@ import { useStudentDashboard } from './useStudentDashboard'
 import { cn, formatCurrency, formatDate } from '../../lib/utils'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { PiggyBank, Shield } from 'lucide-react'
+import { ClassCommentsSection } from './ClassCommentsSection'
 import type { Profile } from '../../lib/types'
 
 function StudentDashboard({ userId, classId }: { userId: string; classId: string | null }) {
@@ -144,6 +145,9 @@ function StudentDashboard({ userId, classId }: { userId: string; classId: string
           </Card>
         )}
       </div>
+
+      {/* Class Student Comments & Discussion Section */}
+      <ClassCommentsSection classId={classId} />
     </div>
   )
 }

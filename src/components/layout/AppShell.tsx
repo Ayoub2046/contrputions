@@ -13,6 +13,7 @@ import {
   Moon,
 } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
+import { PwaInstallButton } from '../pwa/PwaInstallButton'
 import type { UserRole } from '../../lib/types'
 
 interface AppShellProps {
@@ -140,6 +141,7 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
         <span className="font-semibold text-text truncate">{t('app.name')}</span>
       </div>
       <div className="flex items-center gap-2">
+        <PwaInstallButton size="sm" />
         {adminClasses.length > 0 && (
           <select
             value={activeClassId ?? ''}

@@ -16,3 +16,11 @@ export function formatDate(date: string): string {
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ')
 }
+
+export function normalizeAuthPassword(studentId: string, password?: string): string {
+  const p = (password || studentId).trim()
+  if (p.length < 6) {
+    return p.padEnd(6, '0')
+  }
+  return p
+}

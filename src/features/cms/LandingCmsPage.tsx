@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { Navigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -35,12 +37,17 @@ const ICON_OPTIONS = [
 ]
 
 export function LandingCmsPage() {
+  const { user } = useAuth()
   const { settings, saving, saveSettings, resetDefaults } = useLandingSettings()
 
   const [form, setForm] = useState<LandingPageSettings>(settings)
   const [bgMode, setBgMode] = useState<'preset' | 'custom' | 'upload'>('preset')
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [activeTab, setActiveTab] = useState<'hero' | 'announcement' | 'features' | 'stats'>('hero')
+
+  if (user && user.role !== 'super_admin') {
+    return <Navigate to="/dashboard" replace />
+  }
 
   useEffect(() => {
     setForm(settings)

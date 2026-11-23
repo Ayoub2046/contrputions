@@ -15,9 +15,11 @@ import {
   Moon,
   Trash2,
   ExternalLink,
+  MessageSquare,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useTheme } from '../../hooks/useTheme'
+import { PwaInstallButton } from '../pwa/PwaInstallButton'
 import type { UserRole } from '../../lib/types'
 
 interface SidebarProps {
@@ -29,6 +31,7 @@ const navItems: Record<UserRole, { to: string; icon: any; key: string }[]> = {
   super_admin: [
     { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
     { to: '/admins', icon: Shield, key: 'admins' },
+    { to: '/admin-contacts', icon: MessageSquare, key: 'adminContacts' },
     { to: '/classes', icon: Users, key: 'classes' },
     { to: '/students', icon: Users, key: 'students' },
     { to: '/contributions', icon: Wallet, key: 'contributions' },
@@ -40,12 +43,12 @@ const navItems: Record<UserRole, { to: string; icon: any; key: string }[]> = {
   ],
   admin: [
     { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
+    { to: '/admin-contacts', icon: MessageSquare, key: 'adminContacts' },
     { to: '/students', icon: Users, key: 'students' },
     { to: '/contributions', icon: Wallet, key: 'contributions' },
     { to: '/expenses', icon: Receipt, key: 'expenses' },
     { to: '/reports', icon: FileText, key: 'reports' },
     { to: '/recycle-bin', icon: Trash2, key: 'recycleBin' },
-    { to: '/landing-cms', icon: Globe, key: 'landingCms' },
   ],
   student: [
     { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
@@ -109,6 +112,7 @@ export function Sidebar({ role, onSignOut }: SidebarProps) {
       </nav>
 
       <div className="p-4 border-t border-border space-y-2">
+        <PwaInstallButton className="w-full justify-center mb-1" size="sm" />
         <a
           href="/"
           target="_blank"

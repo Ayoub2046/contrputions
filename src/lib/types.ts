@@ -51,6 +51,28 @@ export interface ActivityLog {
   timestamp: string
 }
 
+export interface ClassComment {
+  id: string
+  class_id: string
+  user_id: string
+  content: string
+  created_at: string
+  author_name?: string
+  author_role?: UserRole
+  author_student_id?: string
+}
+
+export interface AdminMessage {
+  id: string
+  sender_id: string
+  content: string
+  category: 'general' | 'announcement' | 'urgent' | 'query'
+  created_at: string
+  sender_name?: string
+  sender_role?: UserRole
+  sender_phone?: string
+}
+
 export interface FeatureItem {
   title: string
   desc: string

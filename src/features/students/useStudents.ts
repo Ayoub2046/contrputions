@@ -45,11 +45,12 @@ export function useStudents(classId?: string | null) {
     const errors: string[] = []
     for (let i = 0; i < lines.length; i++) {
       const [sid, name, password, phone] = lines[i]
-      if (!sid || !name || !password) {
-        errors.push(`Row ${i + 1}: missing fields`)
+      if (!sid || !name) {
+        errors.push(`Row ${i + 1}: missing required fields (student_id, name)`)
         continue
       }
-      const err = await create(sid.trim(), name.trim(), password.trim(), importClassId, phone?.trim() || null)
+      const finalPwd = (password && password.trim()) ? password.trim() : sid.trim()
+      const err = await create(sid.trim(), name.trim(), finalPwd, importClassId, phone?.trim() || null)
       if (err) errors.push(`Row ${i + 1} (${sid}): ${err}`)
     }
     return errors
