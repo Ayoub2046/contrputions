@@ -11,6 +11,8 @@ dist-ssr/
 # Environment variables & secrets (NEVER commit to Git)
 .env
 .env.*
+vercel.env
+*.env
 !.env.example
 
 # Editor & OS files

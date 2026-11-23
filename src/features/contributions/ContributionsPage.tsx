@@ -131,18 +131,18 @@ export function ContributionsPage() {
             {/* Mobile */}
             <div className="lg:hidden divide-y divide-border/40">
               {contributions.map((c) => (
-                <div key={c.id} className="flex items-center justify-between px-4 py-3">
+                <div key={c.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-bg-elevated/40 transition-colors">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="size-8 rounded-full bg-success/10 flex items-center justify-center shrink-0">
-                      <PiggyBank size={15} className="text-success" />
+                    <div className="size-9 rounded-full bg-success/10 flex items-center justify-center shrink-0">
+                      <PiggyBank size={16} className="text-success" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-text truncate">{c.profiles?.name}</p>
-                      <p className="text-xs text-muted">{c.profiles?.student_id} &middot; {formatDate(c.date)}</p>
+                      <p className="text-xs text-muted font-mono">{c.profiles?.student_id} &middot; {formatDate(c.date)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 ml-2">
-                    <span className="text-sm font-bold text-success tabular-nums">+{formatCurrency(Number(c.amount))}</span>
+                    <span className="text-base font-bold text-success tabular-nums">+{formatCurrency(Number(c.amount))}</span>
                     <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>
                       <Pencil size={15} />
                     </Button>

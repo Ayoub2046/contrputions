@@ -89,10 +89,10 @@ export function ExpensesPage() {
             {/* Mobile */}
             <div className="lg:hidden divide-y divide-border/40">
               {expenses.map((e) => (
-                <div key={e.id} className="flex items-center justify-between px-4 py-3">
+                <div key={e.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-bg-elevated/40 transition-colors">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="size-8 rounded-full bg-error/10 flex items-center justify-center shrink-0">
-                      <Receipt size={15} className="text-error" />
+                    <div className="size-9 rounded-full bg-error/10 flex items-center justify-center shrink-0">
+                      <Receipt size={16} className="text-error" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-text truncate">{e.description}</p>
@@ -100,7 +100,7 @@ export function ExpensesPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-2">
-                    <span className="text-sm font-bold text-error tabular-nums">-{formatCurrency(Number(e.amount))}</span>
+                    <span className="text-base font-bold text-error tabular-nums">-{formatCurrency(Number(e.amount))}</span>
                     <Button variant="ghost" size="sm" onClick={() => remove(e.id)}>
                       <Trash2 size={15} className="text-error" />
                     </Button>

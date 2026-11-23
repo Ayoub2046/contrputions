@@ -58,7 +58,7 @@ export function useClassComments(classId: string | null) {
           try {
             const cached = localStorage.getItem(cacheKey)
             if (cached) setComments(JSON.parse(cached))
-          } catch {}
+          } catch { }
         }
       } else if (data) {
         const mapped: ClassComment[] = data.map((item: any) => ({
@@ -76,7 +76,7 @@ export function useClassComments(classId: string | null) {
         if (cacheKey) {
           try {
             localStorage.setItem(cacheKey, JSON.stringify(mapped))
-          } catch {}
+          } catch { }
         }
       }
     } catch (e: any) {
@@ -124,7 +124,7 @@ export function useClassComments(classId: string | null) {
         try {
           const current = [newComment, ...comments]
           localStorage.setItem(cacheKey, JSON.stringify(current))
-        } catch {}
+        } catch { }
       }
 
       // Broadcast WhatsApp-style popup notification to all students and admins in class
@@ -137,7 +137,7 @@ export function useClassComments(classId: string | null) {
         senderRole: user.role,
         classId: classId,
         createdAt: newComment.created_at,
-      }).catch(() => {})
+      }).catch(() => { })
 
       setSubmitting(false)
       if (err) {
@@ -159,7 +159,7 @@ export function useClassComments(classId: string | null) {
         try {
           const updated = comments.filter((c) => c.id !== id)
           localStorage.setItem(cacheKey, JSON.stringify(updated))
-        } catch {}
+        } catch { }
       }
       return null
     } catch (e: any) {

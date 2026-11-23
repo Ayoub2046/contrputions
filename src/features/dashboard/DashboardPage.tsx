@@ -285,14 +285,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-5 max-w-lg mx-auto lg:max-w-none">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-text">{t('dashboard.title')}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-text">{t('dashboard.title')}</h1>
           <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name })}</p>
         </div>
         <Button
           onClick={() => setShowBroadcast(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs sm:text-sm shadow-sm"
+          className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs sm:text-sm shadow-sm"
         >
           <Send size={15} /> 📢 Broadcast Notification
         </Button>
@@ -308,7 +308,7 @@ export function DashboardPage() {
               {formatCurrency(data.remainingBalance)}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-4 border-t border-white/10">
             <div>
               <span className="text-[11px] text-white/40 font-medium block mb-0.5">{t('dashboard.totalContributions')}</span>
               <p className="text-lg font-bold tabular-nums">{formatCurrency(data.totalContributions)}</p>
@@ -332,7 +332,7 @@ export function DashboardPage() {
             <div className="h-full bg-warning transition-all duration-500" style={{ width: `${(data.partialCount / totalS) * 100}%` }} />
             <div className="h-full bg-error transition-all duration-500" style={{ width: `${(data.unpaidCount / totalS) * 100}%` }} />
           </div>
-          <div className="flex items-center justify-between flex-wrap gap-y-2 text-xs">
+          <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2 text-xs">
             <div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-success" /><span className="text-secondary font-medium">{data.paidCount} {t('dashboard.paid')}</span></div>
             <div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-warning" /><span className="text-secondary font-medium">{data.partialCount} {t('dashboard.partial')}</span></div>
             <div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-error" /><span className="text-secondary font-medium">{data.unpaidCount} {t('dashboard.unpaid')}</span></div>

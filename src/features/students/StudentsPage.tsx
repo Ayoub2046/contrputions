@@ -244,25 +244,27 @@ export function StudentsPage() {
             {/* Mobile */}
             <div className="lg:hidden divide-y divide-border/40">
               {displayStudents.map((s, i) => (
-                <div key={s.id} className="flex items-center justify-between px-4 py-3">
+                <div key={s.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-bg-elevated/40 transition-colors">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-muted font-mono mb-0.5">#{i + 1} &middot; <span className="text-brand-600 font-semibold">{s.student_id}</span></p>
                     <p className="text-sm font-medium text-text truncate">{s.name}</p>
                     {s.phone && <p className="text-xs text-muted">{s.phone}</p>}
                     {isAdmin && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs font-mono text-text">
+                      <div className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-md bg-bg-elevated border border-border">
+                        <span className="text-[11px] text-muted">Pass:</span>
+                        <span className="text-xs font-mono font-semibold text-text">
                           {visiblePasswords.has(s.id) ? normalizeAuthPassword(s.student_id) : '••••••'}
                         </span>
                         <button
                           onClick={() => togglePassword(s.id)}
-                          className="text-muted hover:text-text transition-colors"
+                          className="text-muted hover:text-text transition-colors p-0.5"
+                          title={visiblePasswords.has(s.id) ? 'Hide password' : 'Show password'}
                         >
                           {visiblePasswords.has(s.id) ? <EyeOff size={12} /> : <Eye size={12} />}
                         </button>
                       </div>
                     )}
-                    <div className="flex items-center gap-3 mt-1">
+                    <div className="flex items-center gap-3 mt-1.5">
                       <Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge>
                       <span className="text-xs font-semibold tabular-nums text-text">
                         {formatCurrency((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).total)}

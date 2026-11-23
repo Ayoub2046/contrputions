@@ -70,8 +70,8 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
   // Positioning classes: If in sidebar, open to the right (flyout) on desktop so it never clips off-screen
   const dropdownPositionClasses =
     placement === 'sidebar'
-      ? 'absolute z-[100] right-0 top-full mt-2 lg:top-0 lg:left-full lg:right-auto lg:ml-3 lg:mt-0 w-[calc(100vw-2rem)] sm:w-96 md:w-[420px] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
-      : 'absolute z-[100] right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-96 md:w-[420px] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+      ? 'absolute z-[100] right-0 top-full mt-2 lg:top-0 lg:left-full lg:right-auto lg:ml-3 lg:mt-0 w-[calc(100vw-1.5rem)] max-w-[420px] sm:w-96 md:w-[420px] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+      : 'absolute z-[100] right-0 top-full mt-2 w-[calc(100vw-1.5rem)] max-w-[420px] sm:w-96 md:w-[420px] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
 
   return (
     <div className="relative inline-block" ref={dropdownRef}>
