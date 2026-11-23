@@ -80,11 +80,3 @@ export function LandingPage() {
     </div>
   )
 }
-        </section>
-      </main>
-
-      {/* Footer */}
-      <LandingFooter />
-    </div>
-  )
-}
