@@ -221,15 +221,7 @@ CREATE POLICY "super_admin_all_class_admins"
 CREATE POLICY "admin_read_class_admins"
   ON class_admins FOR SELECT
   TO authenticated
-  USING (
-    user_role() = 'admin'
-    AND (
-      admin_id = auth.uid()
-      OR class_id IN (
-        SELECT class_id FROM class_admins WHERE admin_id = auth.uid()
-      )
-    )
-  );
+  USING (admin_id = auth.uid());
 
 -- CONTRIBUTIONS
 CREATE POLICY "super_admin_all_contributions"
