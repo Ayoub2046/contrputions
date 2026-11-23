@@ -13,10 +13,11 @@ export function useClassComments(classId: string | null) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const cacheKey = classId ? `${LOCAL_STORAGE_KEY_PREFIX}${classId}` : null
+  const isSuperAdmin = user?.role === 'super_admin'
+  const cacheKey = classId ? `${LOCAL_STORAGE_KEY_PREFIX}${classId}` : `${LOCAL_STORAGE_KEY_PREFIX}all`
 
   const fetchComments = useCallback(async () => {
-    if (!classId) {
+    if (!classId && !isSuperAdmin) {
       setComments([])
       setLoading(false)
       return
@@ -26,7 +27,7 @@ export function useClassComments(classId: string | null) {
     setError(null)
 
     try {
-      const { data, error: err } = await supabase
+      let query = supabase
         .from('class_comments')
         .select(`
           id,
@@ -34,14 +35,22 @@ export function useClassComments(classId: string | null) {
           user_id,
           content,
           created_at,
+          classes:class_id (
+            name
+          ),
           profiles:user_id (
             name,
             role,
             student_id
           )
         `)
-        .eq('class_id', classId)
         .order('created_at', { ascending: false })
+
+      if (classId && classId !== 'all') {
+        query = query.eq('class_id', classId)
+      }
+
+      const { data, error: err } = await query
 
       if (err) {
         // Fallback to local cache if table not ready or offline
@@ -55,6 +64,7 @@ export function useClassComments(classId: string | null) {
         const mapped: ClassComment[] = data.map((item: any) => ({
           id: item.id,
           class_id: item.class_id,
+          class_name: item.classes?.name ?? '',
           user_id: item.user_id,
           content: item.content,
           created_at: item.created_at,
@@ -74,15 +84,16 @@ export function useClassComments(classId: string | null) {
     } finally {
       setLoading(false)
     }
-  }, [classId, cacheKey])
+  }, [classId, cacheKey, isSuperAdmin])
 
   useEffect(() => {
     fetchComments()
   }, [fetchComments])
 
-  const addComment = async (content: string): Promise<string | null> => {
-    if (!content.trim() || !classId || !user) {
-      return 'Comment content is required.'
+  const addComment = async (content: string, targetClassId?: string): Promise<string | null> => {
+    const finalClassId = targetClassId || classId
+    if (!content.trim() || !finalClassId || !user) {
+      return 'Comment content and class are required.'
     }
 
     setSubmitting(true)
@@ -90,7 +101,7 @@ export function useClassComments(classId: string | null) {
 
     const newComment: ClassComment = {
       id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-      class_id: classId,
+      class_id: finalClassId,
       user_id: user.id,
       content: content.trim(),
       created_at: new Date().toISOString(),
@@ -102,7 +113,7 @@ export function useClassComments(classId: string | null) {
     try {
       const { error: err } = await supabase.from('class_comments').insert({
         id: newComment.id,
-        class_id: classId,
+        class_id: finalClassId,
         user_id: user.id,
         content: content.trim(),
       } as never)

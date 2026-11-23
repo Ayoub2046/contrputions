@@ -2,11 +2,31 @@ import { useState, useRef, useEffect } from 'react'
 import { useNotifications } from './NotificationContext'
 import { useAuth } from '../auth/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Bell, CheckCheck, Send, Volume2, ShieldAlert } from 'lucide-react'
+import { Bell, CheckCheck, Send, Volume2, ShieldAlert, X, Wallet, Receipt, MessageSquare, Info } from 'lucide-react'
 import { BroadcastNotificationModal } from './BroadcastNotificationModal'
 import { formatDate } from '../../lib/utils'
 
-export function NotificationBell() {
+interface NotificationBellProps {
+  placement?: 'sidebar' | 'header'
+}
+
+function getCategoryIcon(cat?: string) {
+  switch (cat) {
+    case 'contribution':
+      return <Wallet size={14} className="text-emerald-500" />
+    case 'expense':
+      return <Receipt size={14} className="text-amber-500" />
+    case 'reminder':
+      return <Bell size={14} className="text-blue-500" />
+    case 'announcement':
+    case 'news':
+      return <MessageSquare size={14} className="text-emerald-500" />
+    default:
+      return <Info size={14} className="text-brand-500" />
+  }
+}
+
+export function NotificationBell({ placement = 'header' }: NotificationBellProps) {
   const { user } = useAuth()
   const {
     notifications,
@@ -47,6 +67,12 @@ export function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
+  // Positioning classes: If in sidebar, open to the right (flyout) on desktop so it never clips off-screen
+  const dropdownPositionClasses =
+    placement === 'sidebar'
+      ? 'absolute z-[100] right-0 top-full mt-2 lg:top-0 lg:left-full lg:right-auto lg:ml-3 lg:mt-0 w-[calc(100vw-2rem)] sm:w-96 md:w-[420px] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+      : 'absolute z-[100] right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-96 md:w-[420px] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+
   return (
     <div className="relative inline-block" ref={dropdownRef}>
       {/* Bell Trigger Button */}
@@ -63,13 +89,13 @@ export function NotificationBell() {
           </span>
         )}
       </button>
-      
+
       {/* Notifications Dropdown Drawer */}
       {open && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-bg-card border border-border shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className={dropdownPositionClasses}>
           {/* Header */}
           <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-bg-elevated/40">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="font-bold text-sm text-text">Notifications</span>
               {fcmToken && (
                 <span
@@ -95,6 +121,13 @@ export function NotificationBell() {
                   <CheckCheck size={14} /> Mark read
                 </button>
               )}
+              <button
+                onClick={() => setOpen(false)}
+                className="text-muted hover:text-text p-1 rounded-full transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
             </div>
           </div>
 
@@ -107,7 +140,7 @@ export function NotificationBell() {
               </div>
               <button
                 onClick={requestPermission}
-                className="shrink-0 px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-btn text-[11px] font-bold transition-colors cursor-pointer"
+                className="shrink-0 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-btn text-[11px] font-bold transition-colors cursor-pointer"
               >
                 Allow
               </button>
@@ -139,7 +172,7 @@ export function NotificationBell() {
           </div>
 
           {/* Notification Items List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-border/40">
+          <div className="max-h-96 overflow-y-auto divide-y divide-border/40">
             {notifications.length === 0 ? (
               <div className="py-8 text-center text-muted space-y-1">
                 <Bell size={24} className="mx-auto opacity-30 mb-2" />
@@ -151,23 +184,28 @@ export function NotificationBell() {
                 <div
                   key={n.id}
                   onClick={() => markAsRead(n.id)}
-                  className={`p-3 transition-colors cursor-pointer flex items-start gap-3 ${
+                  className={`p-3.5 transition-colors cursor-pointer flex items-start gap-3 ${
                     n.read ? 'hover:bg-bg-elevated/50' : 'bg-emerald-50/40 dark:bg-emerald-950/20 hover:bg-emerald-50/70'
                   }`}
                 >
                   <div className="size-8 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Bell size={14} />
+                    {getCategoryIcon(n.category)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className={`text-xs truncate ${n.read ? 'font-medium text-text' : 'font-bold text-text'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-xs break-words leading-snug ${n.read ? 'font-medium text-text' : 'font-bold text-text'}`}>
                         {n.title}
                       </p>
-                      {!n.read && <span className="size-2 rounded-full bg-emerald-500 shrink-0" />}
+                      {!n.read && <span className="size-2 rounded-full bg-emerald-500 shrink-0 mt-1" />}
                     </div>
-                    <p className="text-[11px] text-secondary mt-0.5 line-clamp-2 leading-relaxed">{n.body}</p>
-                    <div className="flex items-center justify-between mt-1 text-[10px] text-muted">
-                      <span>{n.senderName ? `By ${n.senderName}` : 'System'}</span>
+
+                    {/* Full notification body with text wrapping */}
+                    <p className="text-xs text-secondary mt-1 leading-relaxed break-words whitespace-pre-wrap">
+                      {n.body}
+                    </p>
+
+                    <div className="flex items-center justify-between mt-2 text-[10px] text-muted">
+                      <span>{n.senderName ? `By ${n.senderName}` : 'ClassBank'}</span>
                       <span>{formatDate(n.createdAt)}</span>
                     </div>
                   </div>

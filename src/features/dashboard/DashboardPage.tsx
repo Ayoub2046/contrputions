@@ -265,6 +265,8 @@ export function DashboardPage() {
                   </div>
                 </>
               )}
+              {/* Class Student Comments & Discussion Section for Super Admin */}
+              <ClassCommentsSection classId={classId} />
             </CardContent>
           </Card>
         ) : (
@@ -337,6 +339,9 @@ export function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+      {/* Class Student Comments & Discussion Section */}
+      <ClassCommentsSection classId={classId} />
+
       <BroadcastNotificationModal
         open={showBroadcast}
         onClose={() => setShowBroadcast(false)}

@@ -60,6 +60,7 @@ export interface ClassComment {
   author_name?: string
   author_role?: UserRole
   author_student_id?: string
+  class_name?: string
 }
 
 export interface AdminMessage {
