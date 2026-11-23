@@ -11,11 +11,17 @@ import {
   saveLocalStoredNotifications,
   persistNotification,
 } from './notificationService'
+import {
+  requestFcmToken,
+  getStoredFcmToken,
+  setupFcmForegroundListener,
+} from './firebaseMessaging'
 import type { PushNotificationPayload, StoredNotification, NotificationCategory } from './notificationTypes'
 
 interface NotificationContextType {
   permission: NotificationPermission
   isSupported: boolean
+  fcmToken: string | null
   notifications: StoredNotification[]
   unreadCount: number
   activeBanner: PushNotificationPayload | null
@@ -34,13 +40,39 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const { user, activeClassId } = useAuth()
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [isSupported, setIsSupported] = useState(false)
+  const [fcmToken, setFcmToken] = useState<string | null>(getStoredFcmToken())
   const [notifications, setNotifications] = useState<StoredNotification[]>([])
   const [activeBanner, setActiveBanner] = useState<PushNotificationPayload | null>(null)
 
-  // Initialize permission status
+  // Initialize permission status & FCM Token if granted
   useEffect(() => {
     setIsSupported(isNotificationSupported())
-    setPermission(getNotificationPermission())
+    const currentPerm = getNotificationPermission()
+    setPermission(currentPerm)
+
+    if (currentPerm === 'granted') {
+      requestFcmToken(user?.id).then((token) => {
+        if (token) setFcmToken(token)
+      })
+    }
+  }, [user?.id])
+
+  // Setup Firebase foreground listener
+  useEffect(() => {
+    let unsub: (() => void) | null = null
+    setupFcmForegroundListener((notif) => {
+      setActiveBanner(notif)
+      setNotifications((prev) => [
+        { ...notif, read: false },
+        ...prev.filter((p) => p.id !== notif.id),
+      ])
+    }).then((fn) => {
+      unsub = fn
+    })
+
+    return () => {
+      if (unsub) unsub()
+    }
   }, [])
 
   // Fetch notifications
@@ -94,8 +126,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const handleRequestPermission = useCallback(async () => {
     const perm = await requestNotificationPermission()
     setPermission(perm)
+    if (perm === 'granted') {
+      const token = await requestFcmToken(user?.id)
+      if (token) setFcmToken(token)
+    }
     return perm
-  }, [])
+  }, [user?.id])
 
   const broadcast = useCallback(
     async (data: { title: string; body: string; category?: NotificationCategory; classId?: string | null }) => {
@@ -160,6 +196,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       value={{
         permission,
         isSupported,
+        fcmToken,
         notifications,
         unreadCount,
         activeBanner,

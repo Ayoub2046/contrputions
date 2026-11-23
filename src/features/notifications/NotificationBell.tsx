@@ -12,6 +12,7 @@ export function NotificationBell() {
     notifications,
     unreadCount,
     permission,
+    fcmToken,
     requestPermission,
     markAllAsRead,
     markAsRead,
@@ -62,7 +63,7 @@ export function NotificationBell() {
           </span>
         )}
       </button>
-
+      
       {/* Notifications Dropdown Drawer */}
       {open && (
         <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-bg-card border border-border shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -70,6 +71,14 @@ export function NotificationBell() {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-bg-elevated/40">
             <div className="flex items-center gap-2">
               <span className="font-bold text-sm text-text">Notifications</span>
+              {fcmToken && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full"
+                  title="Firebase Cloud Messaging active"
+                >
+                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" /> FCM Live
+                </span>
+              )}
               {unreadCount > 0 && (
                 <span className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                   {unreadCount} new
