@@ -34,7 +34,7 @@ export const DEFAULT_LANDING_SETTINGS: LandingPageSettings = {
   hero_badge: '✦ Class Mutual Support & Contribution Transparency',
   hero_title: 'Transparent Class Contributions & Student Charity',
   hero_subtitle: 'A student-first mutual aid and contribution platform. Real-time contribution tracking, audited expense logs, and collective peer support so no classmate is left behind.',
-  hero_bg_image: '',
+  hero_bg_image: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?q=80&w=2070&auto=format&fit=crop',
   hero_bg_overlay_opacity: 85,
   cta_primary_text: 'Access Class Portal',
   cta_primary_link: '/login',

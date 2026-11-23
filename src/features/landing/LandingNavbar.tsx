@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../../hooks/useTheme'
-import { Sun, Moon, Globe, Menu, X, ArrowRight, ShieldCheck, LogOut, HeartHandshake } from 'lucide-react'
+import { Sun, Moon, Globe, Menu, X, ArrowRight, LogOut, HeartHandshake } from 'lucide-react'
 
 export function LandingNavbar() {
-  const { t, i18n } = useTranslation()
+  const { i18n } = useTranslation()
   const { user, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)

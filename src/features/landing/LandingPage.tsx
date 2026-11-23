@@ -10,7 +10,7 @@ import { LandingFooter } from './LandingFooter'
 import { ArrowRight, Sparkles } from 'lucide-react'
 
 export function LandingPage() {
-  const { settings, loading } = useLandingSettings()
+  const { settings } = useLandingSettings()
 
   return (
     <div className="min-h-screen bg-bg-main text-text selection:bg-brand-600 selection:text-white">

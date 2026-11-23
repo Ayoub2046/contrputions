@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -36,8 +35,7 @@ const ICON_OPTIONS = [
 ]
 
 export function LandingCmsPage() {
-  const { t } = useTranslation()
-  const { settings, loading, saving, saveSettings, resetDefaults } = useLandingSettings()
+  const { settings, saving, saveSettings, resetDefaults } = useLandingSettings()
 
   const [form, setForm] = useState<LandingPageSettings>(settings)
   const [bgMode, setBgMode] = useState<'preset' | 'custom' | 'upload'>('preset')

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { HeartHandshake, Quote, ShieldAlert, Users2, Sparkles, ArrowRight, Heart } from 'lucide-react'
+import { HeartHandshake, Quote, ShieldAlert, Users2, ArrowRight, Heart } from 'lucide-react'
 
 export function LandingMercySection() {
   return (

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ShieldCheck, Smartphone, Globe } from 'lucide-react'
+import { ShieldCheck, Smartphone } from 'lucide-react'
 
 export function LandingFooter() {
   const currentYear = new Date().getFullYear()
