@@ -26,7 +26,7 @@ export function StudentForm({ initial, onSave, onCancel, classId, classes }: Stu
     if (!studentId.trim() || !name.trim()) { setError(t('students.form.validation.required')); return }
     if (classes && !selectedClassId) { setError(t('students.form.validation.classRequired')); return }
     setLoading(true)
-    const finalPassword = initial ? undefined : (password.trim() || studentId.trim())
+    const finalPassword = password.trim() ? password.trim() : (initial ? undefined : studentId.trim())
     const err = await onSave(studentId.trim(), name.trim(), finalPassword, selectedClassId || undefined, phone.trim() || null)
     if (err) setError(err)
     setLoading(false)
@@ -42,7 +42,6 @@ export function StudentForm({ initial, onSave, onCancel, classId, classes }: Stu
         value={studentId}
         onChange={(e) => setStudentId(e.target.value)}
         placeholder={t('students.form.studentIdPlaceholder')}
-        disabled={!!initial}
         error={error}
         required
       />
@@ -80,19 +79,21 @@ export function StudentForm({ initial, onSave, onCancel, classId, classes }: Stu
         </div>
       )}
 
-      {!initial && (
-        <div>
-          <Input
-            id="spassword"
-            label={`${t('students.form.password')} (Optional - Default is Student ID)`}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={studentId.trim() ? `Default: ${studentId.trim()}` : 'Default is Student ID'}
-          />
-          <p className="mt-1 text-xs text-muted">If left blank, the student will log in using their Student ID as password.</p>
-        </div>
-      )}
+      <div>
+        <Input
+          id="spassword"
+          label={initial ? 'Change Password (leave blank to keep current)' : `${t('students.form.password')} (Optional - Default is Student ID)`}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder={initial ? 'Enter new password or leave blank' : (studentId.trim() ? `Default: ${studentId.trim()}` : 'Default is Student ID')}
+        />
+        <p className="mt-1 text-xs text-muted">
+          {initial
+            ? 'Leave blank to keep password unchanged. Default password is the student ID.'
+            : 'If left blank, the student will log in using their Student ID as password.'}
+        </p>
+      </div>
       <div className="flex justify-end gap-3">
         <Button type="button" variant="secondary" onClick={onCancel}>{t('students.modal.cancel')}</Button>
         <Button type="submit" loading={loading}>{initial ? t('students.modal.update') : t('students.modal.create')}</Button>

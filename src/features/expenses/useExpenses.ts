@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
 import type { Expense } from '../../lib/types'
 
 export function useExpenses(classId?: string | null) {
@@ -31,6 +32,16 @@ export function useExpenses(classId?: string | null) {
   }
 
   async function remove(id: string) {
+    const item = expenses.find((e) => e.id === id)
+    if (item) {
+      await moveToRecycleBin(
+        'expense',
+        id,
+        item.description,
+        { ...item },
+        item.class_id
+      )
+    }
     const { error } = await supabase.from('expenses').delete().eq('id', id)
     if (!error) fetch()
     return error?.message ?? null

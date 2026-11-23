@@ -54,7 +54,7 @@ function normalizeAuthPassword(sid, pwd) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, PUT, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
   if (req.method === 'OPTIONS') return res.status(204).end()
@@ -138,6 +138,75 @@ export default async function handler(req, res) {
       }
 
       return res.status(201).json({ id: authData.id })
+    }
+
+    if (req.method === 'PUT') {
+      const { id, student_id, password, name, phone, class_id } = req.body || {}
+      if (!id) return res.status(400).json({ error: 'Missing user id' })
+
+      // Target privilege check
+      if (auth.caller.role !== 'super_admin') {
+        const targetCheck = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${id}&select=role`, {
+          headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}`, apikey: SERVICE_ROLE_KEY },
+        })
+        const target = (await targetCheck.json())?.[0]
+        if (target && target.role !== 'student') {
+          return res.status(403).json({ error: 'Forbidden: Admins can only modify student accounts' })
+        }
+      }
+
+      // 1. Update Auth user (email/password) if provided
+      const authUpdates = {}
+      if (student_id) {
+        authUpdates.email = `${student_id.trim()}@${AUTH_DOMAIN}`
+      }
+      if (password) {
+        authUpdates.password = normalizeAuthPassword(student_id || '', password)
+      }
+
+      if (Object.keys(authUpdates).length > 0) {
+        const authRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+            apikey: SERVICE_ROLE_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(authUpdates),
+        })
+
+        if (!authRes.ok) {
+          const errData = await authRes.json().catch(() => ({}))
+          return res.status(400).json({ error: errData.msg || errData.message || 'Failed to update auth credentials' })
+        }
+      }
+
+      // 2. Update profile in database
+      const profileUpdates = {}
+      if (student_id) profileUpdates.student_id = student_id.trim()
+      if (name) profileUpdates.name = name.trim()
+      if (phone !== undefined) profileUpdates.phone = phone ? phone.trim() : null
+      if (class_id !== undefined) profileUpdates.class_id = class_id
+
+      if (Object.keys(profileUpdates).length > 0) {
+        const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${id}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+            apikey: SERVICE_ROLE_KEY,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify(profileUpdates),
+        })
+
+        if (!profileRes.ok) {
+          const errData = await profileRes.json().catch(() => ({}))
+          return res.status(400).json({ error: errData.message || 'Failed to update profile' })
+        }
+      }
+
+      return res.status(200).json({ ok: true })
     }
 
     if (req.method === 'DELETE') {

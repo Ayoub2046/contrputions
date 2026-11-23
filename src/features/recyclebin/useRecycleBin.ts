@@ -1,32 +1,32 @@
 import { useState, useCallback } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { useContributions } from '../contributions/useContributions'
-import type { ContributionWithStudent } from '../contributions/useContributions'
+import { fetchRecycleBinItems, restoreRecycleItem, permanentDeleteRecycleItem } from './recycleBinManager'
+import type { RecycleBinItem } from './recycleBinManager'
 
 export function useRecycleBin() {
-  const { activeClassId } = useAuth()
-  const { fetchDeleted, restore, permanentDelete } = useContributions(activeClassId)
-  const [deleted, setDeleted] = useState<ContributionWithStudent[]>([])
+  const { activeClassId, user } = useAuth()
+  const [deleted, setDeleted] = useState<RecycleBinItem[]>([])
   const [loading, setLoading] = useState(false)
 
   const refetch = useCallback(async () => {
     setLoading(true)
-    const data = await fetchDeleted()
+    const classIdFilter = user?.role === 'super_admin' ? undefined : activeClassId
+    const data = await fetchRecycleBinItems(classIdFilter)
     setDeleted(data)
     setLoading(false)
-  }, [fetchDeleted])
+  }, [activeClassId, user?.role])
 
-  const restoreItem = useCallback(async (id: string): Promise<string | null> => {
-    const err = await restore(id)
+  const restoreItem = useCallback(async (item: RecycleBinItem): Promise<string | null> => {
+    const err = await restoreRecycleItem(item)
     if (!err) await refetch()
     return err
-  }, [restore, refetch])
+  }, [refetch])
 
-  const permanentDeleteItem = useCallback(async (id: string): Promise<string | null> => {
-    const err = await permanentDelete(id)
+  const permanentDeleteItem = useCallback(async (item: RecycleBinItem): Promise<string | null> => {
+    const err = await permanentDeleteRecycleItem(item)
     if (!err) await refetch()
     return err
-  }, [permanentDelete, refetch])
+  }, [refetch])
 
   return { deleted, loading, refetch, restoreItem, permanentDeleteItem }
 }

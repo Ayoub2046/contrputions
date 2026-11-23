@@ -11,14 +11,15 @@ import { Badge } from '../../components/ui/Badge'
 import { StudentForm } from './StudentForm'
 import { StudentImport } from './StudentImport'
 import { useStudents } from './useStudents'
-import { formatCurrency } from '../../lib/utils'
+import { formatCurrency, normalizeAuthPassword } from '../../lib/utils'
 import { SkeletonTable } from '../../components/ui/Skeleton'
-import { Search, Plus, Pencil, Trash2, Wallet } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, Wallet, Eye, EyeOff } from 'lucide-react'
 
 export function StudentsPage() {
   const { t } = useTranslation()
   const { user, activeClassId } = useAuth()
   const isSuperAdmin = user?.role === 'super_admin'
+  const isAdmin = user?.role === 'admin' || isSuperAdmin
   const { students, loading, search, setSearch, create, update, remove, importCSV } = useStudents(activeClassId)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
 
@@ -34,6 +35,20 @@ export function StudentsPage() {
   const [showImport, setShowImport] = useState(false)
   const [importClassId, setImportClassId] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+  // Class filter for super admin
+  const [classFilter, setClassFilter] = useState<string>('all')
+
+  // Password visibility per student
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
+  function togglePassword(id: string) {
+    setVisiblePasswords(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const [paymentData, setPaymentData] = useState<Record<string, { total: number; status: string }>>({})
 
@@ -53,11 +68,16 @@ export function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all')
   const filters = ['all', 'paid', 'partial', 'unpaid'] as const
 
-  const selectClass = 'w-full rounded-btn border border-border-hover bg-bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30'
+  const selectClass = 'rounded-btn border border-border-hover bg-bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30'
+
+  // Apply filters: class filter (super admin only) + status filter
+  const filteredByClass = isSuperAdmin && classFilter !== 'all'
+    ? students.filter(s => s.class_id === classFilter)
+    : students
 
   const displayStudents = statusFilter === 'all'
-    ? students
-    : students.filter(s => (paymentData[s.id]?.status ?? 'unpaid') === statusFilter)
+    ? filteredByClass
+    : filteredByClass.filter(s => (paymentData[s.id]?.status ?? 'unpaid') === statusFilter)
 
   const badgeVariant = (status: string) =>
     status === 'paid' ? 'success' : status === 'partial' ? 'warning' : 'danger'
@@ -83,7 +103,7 @@ export function StudentsPage() {
               <select
                 value={importClassId}
                 onChange={(e) => setImportClassId(e.target.value)}
-                className={selectClass}
+                className={`w-full ${selectClass}`}
               >
                 <option value="">{t('students.selectClass')}</option>
                 {availableClasses.map((c) => (
@@ -98,6 +118,24 @@ export function StudentsPage() {
 
       <Card>
         <div className="px-4 pt-4 space-y-3">
+          {/* Class filter — super admin only */}
+          {isSuperAdmin && availableClasses.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted font-medium">Filter by class:</span>
+              <select
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+                className={selectClass}
+                style={{ minWidth: 160 }}
+              >
+                <option value="all">All Classes</option>
+                {availableClasses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <Input
@@ -148,6 +186,7 @@ export function StudentsPage() {
                     <Th>{t('students.columns.studentId')}</Th>
                     <Th>{t('students.columns.phone')}</Th>
                     <Th>{t('students.columns.name')}</Th>
+                    {isAdmin && <Th>Password</Th>}
                     <Th>{t('students.columns.status')}</Th>
                     <Th className="text-right">{t('students.columns.totalContributed')}</Th>
                     <Th className="text-right">{t('students.columns.actions')}</Th>
@@ -157,9 +196,29 @@ export function StudentsPage() {
                   {displayStudents.map((s, i) => (
                     <tr key={s.id}>
                       <td className="px-4 py-3 text-xs text-muted text-center">{i + 1}</td>
-                      <Td className="font-mono text-sm text-muted">{s.student_id}</Td>
+                      <Td className="font-mono text-sm text-brand-600 font-semibold">{s.student_id}</Td>
                       <Td className="text-sm text-muted">{s.phone || '—'}</Td>
                       <Td className="font-medium text-text">{s.name}</Td>
+                      {isAdmin && (
+                        <Td>
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-xs text-text">
+                              {visiblePasswords.has(s.id)
+                                ? normalizeAuthPassword(s.student_id)
+                                : '••••••'}
+                            </span>
+                            <button
+                              onClick={() => togglePassword(s.id)}
+                              className="text-muted hover:text-text transition-colors p-0.5"
+                              title={visiblePasswords.has(s.id) ? 'Hide password' : 'Show password'}
+                            >
+                              {visiblePasswords.has(s.id)
+                                ? <EyeOff size={13} />
+                                : <Eye size={13} />}
+                            </button>
+                          </div>
+                        </Td>
+                      )}
                       <Td><Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge></Td>
                       <Td className="text-right font-semibold tabular-nums text-text">
                         <span className="inline-flex items-center gap-1">
@@ -187,9 +246,22 @@ export function StudentsPage() {
               {displayStudents.map((s, i) => (
                 <div key={s.id} className="flex items-center justify-between px-4 py-3">
                   <div className="min-w-0 flex-1">
-                      <p className="text-xs text-muted font-mono mb-0.5">#{i + 1} &middot; {s.student_id}</p>
-                      <p className="text-sm font-medium text-text truncate">{s.name}</p>
-                      {s.phone && <p className="text-xs text-muted">{s.phone}</p>}
+                    <p className="text-xs text-muted font-mono mb-0.5">#{i + 1} &middot; <span className="text-brand-600 font-semibold">{s.student_id}</span></p>
+                    <p className="text-sm font-medium text-text truncate">{s.name}</p>
+                    {s.phone && <p className="text-xs text-muted">{s.phone}</p>}
+                    {isAdmin && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs font-mono text-text">
+                          {visiblePasswords.has(s.id) ? normalizeAuthPassword(s.student_id) : '••••••'}
+                        </span>
+                        <button
+                          onClick={() => togglePassword(s.id)}
+                          className="text-muted hover:text-text transition-colors"
+                        >
+                          {visiblePasswords.has(s.id) ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                      </div>
+                    )}
                     <div className="flex items-center gap-3 mt-1">
                       <Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge>
                       <span className="text-xs font-semibold tabular-nums text-text">
@@ -219,7 +291,7 @@ export function StudentsPage() {
           classes={isSuperAdmin ? availableClasses : undefined}
           onSave={async (sid, name, password, cid, phone) =>
             editStudent
-              ? update(editStudent.id, { name, phone: phone || null, ...(cid ? { class_id: cid } : {}) })
+              ? update(editStudent.id, { name, phone: phone || null, student_id: sid, ...(cid ? { class_id: cid } : {}) }, password || undefined)
               : create(sid, name, password!, cid, phone)
           }
           onCancel={() => setShowForm(false)}

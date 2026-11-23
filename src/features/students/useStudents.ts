@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { adminCreateUser, adminDeleteUser } from '../../lib/admin-api'
+import { adminCreateUser, adminDeleteUser, adminUpdateUser } from '../../lib/admin-api'
+import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
 import type { Profile } from '../../lib/types'
 
 export function useStudents(classId?: string | null) {
@@ -26,13 +27,37 @@ export function useStudents(classId?: string | null) {
     return null
   }
 
-  async function updateProfile(id: string, updates: Record<string, unknown>) {
+  async function updateProfile(
+    id: string,
+    updates: { student_id?: string; name?: string; phone?: string | null; class_id?: string | null },
+    newPassword?: string
+  ) {
     const { error } = await supabase.from('profiles').update(updates as never).eq('id', id)
+    if (updates.student_id || newPassword) {
+      await adminUpdateUser(id, {
+        student_id: updates.student_id,
+        password: newPassword,
+        name: updates.name,
+        phone: updates.phone,
+        class_id: updates.class_id,
+      })
+    }
     if (!error) fetch()
     return error?.message ?? null
   }
 
   async function remove(id: string) {
+    // Capture student details before deleting for recycle bin
+    const student = students.find(s => s.id === id)
+    if (student) {
+      await moveToRecycleBin(
+        'student',
+        id,
+        student.name,
+        { student_id: student.student_id, name: student.name, phone: student.phone, role: student.role },
+        student.class_id ?? null
+      )
+    }
     const { error } = await supabase.from('profiles').delete().eq('id', id)
     if (!error) {
       await adminDeleteUser(id)

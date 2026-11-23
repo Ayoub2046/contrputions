@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
 import type { Contribution } from '../../lib/types'
 
 export interface ContributionWithStudent extends Contribution {
@@ -45,6 +46,16 @@ export function useContributions(classId?: string | null) {
   }
 
   async function remove(id: string) {
+    const item = contributions.find((c) => c.id === id)
+    if (item) {
+      await moveToRecycleBin(
+        'contribution',
+        id,
+        `${item.profiles?.name || 'Student'} ($${item.amount})`,
+        { ...item },
+        item.class_id
+      )
+    }
     const { error } = await supabase.from('contributions').update({ deleted_at: new Date().toISOString() } as never).eq('id', id)
     if (!error) fetch()
     return error?.message ?? null
