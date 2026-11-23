@@ -1,0 +1,61 @@
+import { useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Button } from '../../components/ui/Button'
+import { Upload, FileDown } from 'lucide-react'
+
+interface StudentImportProps {
+  onImport: (rows: string[][]) => Promise<string[]>
+}
+
+export function StudentImport({ onImport }: StudentImportProps) {
+  const { t } = useTranslation()
+  const [errors, setErrors] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function downloadTemplate() {
+    const csv = 'student_id,name,password,phone\n2024-0001,Juan Dela Cruz,pass123,+63 912 345 6789\n2024-0002,Maria Santos,pass456,+63 987 654 3210'
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'student_template.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setErrors([])
+    setLoading(true)
+    const text = await file.text()
+    const lines = text.split('\n').filter(Boolean).slice(1).map((l) => l.split(',').map((c) => c.trim()))
+    const result = await onImport(lines)
+    setErrors(result)
+    setLoading(false)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <Button variant="secondary" onClick={downloadTemplate}>
+          <FileDown size={16} /> {t('import.template')}
+        </Button>
+        <label className="cursor-pointer">
+          <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
+          <span className="inline-flex items-center gap-2 rounded-btn border border-border bg-bg-card px-4 py-2 text-sm font-medium text-secondary hover:bg-bg-elevated hover:text-text transition-colors">
+            <Upload size={16} /> {t('import.importCsv')}
+          </span>
+        </label>
+      </div>
+      {loading && <p className="text-sm text-muted">{t('import.loading')}</p>}
+      {errors.length > 0 && (
+        <div className="rounded-btn bg-error/10 p-3 max-h-40 overflow-y-auto border border-error/20">
+          {errors.map((e, i) => (
+            <p key={i} className="text-sm text-error">{e}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

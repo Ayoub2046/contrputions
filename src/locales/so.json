@@ -1,0 +1,360 @@
+{
+  "app": {
+    "name": "ClassBank"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "classes": "Fasalada",
+    "students": "Ardayda",
+    "contributions": "Kaalmooyinka",
+    "expenses": "Kharashaadka",
+    "reports": "Warbixinno",
+    "settings": "Settings",
+    "admins": "Maamulayaasha",
+    "signOut": "Ka bax",
+    "activeClass": "Fasalka Firfircoon",
+    "darkMode": "Hab Mugdi",
+    "lightMode": "Hab Iftiin",
+    "recycleBin": "Soo Celinta",
+    "landingCms": "Maamulka Bogga Hore",
+    "viewLandingPage": "Bogga Dadweynaha"
+  },
+  "auth": {
+    "signIn": {
+      "title": "ClassBank",
+      "subtitle": "Ku soo gal Student ID iyo Password",
+      "studentId": "Student ID",
+      "studentIdPlaceholder": "Geli Student ID",
+      "password": "Password",
+      "passwordPlaceholder": "Geli password-kaaga",
+      "signIn": "Gal"
+    },
+    "changePassword": {
+      "title": "Beddel Password",
+      "currentPassword": "Password-kii hore",
+      "newPassword": "Password cusub",
+      "incorrect": "Password-kii hore waa khalad",
+      "success": "Password si guul leh ayaa loo beddelay",
+      "submit": "Cusbooneysii"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Ku soo dhawoow ClassBank",
+    "totalContributions": "Wadarta Kaalmooyinka",
+    "totalExpenses": "Wadarta Kharashaadka",
+    "remainingBalance": "Hadhaaga",
+    "students": "Ardayda",
+    "paymentStatus": "Xaaladda Bixinta",
+    "paid": "Bixiyay",
+    "partial": "Qayb ahaan",
+    "unpaid": "Lama bixin",
+    "noClassAssigned": "Fasal laguma xirin",
+    "myContributions": "Kaalmooyinkayga",
+    "myStatus": "Xaaladdayda",
+    "myTarget": "Bartilmaameed Arday Kasta",
+    "contributionHistory": "Taariikhda Kaalmooyinkayga",
+    "loading": "Soo raraya...",
+    "superAdmin": {
+      "title": "Super Admin Dashboard",
+      "noAdmins": "Ma jiraan admins",
+      "adminId": "Admin ID",
+      "name": "Magac",
+      "assignedClasses": "Fasalada loo xilsaaray"
+    }
+  },
+  "students": {
+    "title": "Ardayda",
+    "importCsv": "CSV soo geli",
+    "addStudent": "Ku dar arday",
+    "selectClass": "Dooro fasal",
+    "searchPlaceholder": "Raadi arday...",
+    "loading": "Soo raraya...",
+    "noResults": "Natiijo lama helin",
+    "noStudents": "Arday lama helin",
+    "columns": {
+      "studentId": "Student ID",
+      "name": "Magac",
+      "phone": "Telefon",
+      "status": "Xaalad",
+      "totalContributed": "Wadarta la bixiyey",
+      "actions": "Ficil"
+    },
+    "active": "Firfircoon",
+    "status": {
+      "paid": "Bixiyay",
+      "partial": "Qayb ahaan",
+      "unpaid": "Lama bixin"
+    },
+    "filter": {
+      "all": "Dhammaan",
+      "paid": "Bixiyay",
+      "partial": "Qayb ahaan",
+      "unpaid": "Lama bixin"
+    },
+    "count": "{{count}} arday",
+    "count_plural": "{{count}} arday",
+    "modal": {
+      "edit": "Wax ka beddel",
+      "new": "Arday cusub",
+      "delete": "Tirtir",
+      "deleteConfirm": "Ma hubtaa inaad tirtirto?",
+      "cancel": "Jooji",
+      "update": "Cusbooneysii",
+      "create": "Abuur"
+    },
+    "form": {
+      "studentId": "Student ID",
+      "studentIdPlaceholder": "Geli Student ID",
+      "name": "Magac",
+      "namePlaceholder": "Geli magaca ardayga",
+      "phone": "Telefon lambarka",
+      "phonePlaceholder": "e.g. +63 912 345 6789",
+      "class": "Fasal",
+      "password": "Password",
+      "passwordPlaceholder": "Geli password",
+      "validation": {
+        "required": "Looma baahna in la banneeyo",
+        "passwordRequired": "Password waa loo baahan yahay",
+        "classRequired": "Fasal waa loo baahan yahay"
+      }
+    }
+  },
+  "contributions": {
+    "title": "Kaalmooyinka",
+    "totalCollected": "Wadarta la ururiyey",
+    "record": "Diiwaan geli",
+    "loading": "Soo raraya...",
+    "none": "Wax diiwaan ah ma jiro",
+    "columns": {
+      "student": "Arday",
+      "id": "ID",
+      "amount": "Lacag",
+      "date": "Taariikh",
+      "action": "Ficil"
+    },
+    "modal": {
+      "title": "Diiwaangeli kaalmo",
+      "editTitle": "Wax ka beddel kaalmo",
+      "student": "Arday",
+      "selectStudent": "Dooro arday",
+      "searchStudent": "Raadi arday...",
+      "amount": "Lacag",
+      "amountPlaceholder": "Geli lacagta",
+      "date": "Taariikh",
+      "cancel": "Jooji",
+      "save": "Kaydi",
+      "update": "Cusbooneysii"
+    },
+    "validation": {
+      "required": "Looma baahna in la banneeyo"
+    },
+    "clearAll": "Tirtir Dhammaan",
+    "clearConfirm": {
+      "title": "Tirtir Dhammaan Kaalmooyinka",
+      "message": "Tani waxay tirtiri doontaa dhammaan {{count}} kaalmooyinka fasalkan. Waxaad dib u CELIN kartaa iyaga.",
+      "instruction": "Qor CLEAR si aad u xaqiijiso",
+      "cancel": "Jooji",
+      "delete": "Tirtir Dhammaan"
+    }
+  },
+  "expenses": {
+    "title": "Kharashaadka",
+    "totalSpent": "Wadarta la bixiyey",
+    "record": "Diiwaan geli",
+    "loading": "Soo raraya...",
+    "none": "Wax kharash ah ma jiro",
+    "columns": {
+      "description": "Sharaxaad",
+      "amount": "Lacag",
+      "date": "Taariikh",
+      "action": "Ficil"
+    },
+    "modal": {
+      "title": "Diiwaangeli kharash",
+      "description": "Sharaxaad",
+      "descriptionPlaceholder": "Geli sharaxaadda",
+      "amount": "Lacag",
+      "amountPlaceholder": "Geli lacagta",
+      "date": "Taariikh",
+      "cancel": "Jooji",
+      "save": "Kaydi"
+    },
+    "validation": {
+      "required": "Looma baahna in la banneeyo"
+    }
+  },
+  "classes": {
+    "admin": {
+      "title": "Fasalada la maamulo",
+      "loading": "Soo raraya...",
+      "none": "Fasal lama helin",
+      "columns": {
+        "className": "Magaca fasalka",
+        "target": "Bartilmaameed",
+        "created": "La sameeyey"
+      }
+    },
+    "superAdmin": {
+      "title": "Maamulka Fasalada",
+      "new": "Fasal cusub",
+      "loading": "Soo raraya...",
+      "none": "Fasal lama helin",
+      "columns": {
+        "name": "Magac",
+        "created": "La sameeyey",
+        "actions": "Ficil"
+      }
+    },
+    "modal": {
+      "edit": "Wax ka beddel",
+      "new": "Cusub",
+      "delete": "Tirtir",
+      "deleteConfirm": "Ma hubtaa?",
+      "cancel": "Jooji"
+    },
+    "form": {
+      "className": "Magaca fasalka",
+      "classNamePlaceholder": "Geli magaca fasalka",
+      "target": "Bartilmaameed",
+      "targetPlaceholder": "Geli bartilmaameedka",
+      "cancel": "Jooji",
+      "update": "Cusbooneysii",
+      "create": "Abuur",
+      "validation": {
+        "nameRequired": "Magac waa loo baahan yahay"
+      }
+    },
+    "assignAdmins": {
+      "title": "U xilsaar Admins",
+      "currentAdmins": "Admins hadda",
+      "loading": "Soo raraya...",
+      "noAdmins": "Admin lama helin",
+      "availableAdmins": "Admins diyaar ah",
+      "remove": "Ka saar",
+      "assign": "U xilsaar"
+    }
+  },
+  "aiChat": {
+    "title": "Kaaliyaha AI",
+    "placeholder": "Kaalmooyinka wax waydii...",
+    "thinking": "Waxaan ka fekerayaa...",
+    "error": "Waan qalday, fadlan isku day mar kale."
+  },
+  "reports": {
+    "title": "Warbixinno",
+    "subtitle": "Warbixinta dhaqaale ee fasalka",
+    "contributions": "Kaalmooyinka",
+    "expenses": "Kharashaadka",
+    "studentStatus": "Xaaladda Ardayda",
+    "download": "Soo dejiso PDF",
+    "total": "Wadar",
+    "remaining": "Hadhaaga"
+  },
+  "settings": {
+    "title": "Settings",
+    "createAdmin": "Abuur Admin",
+    "adminId": "Admin ID",
+    "name": "Magac",
+    "password": "Password",
+    "submit": "Gudbi",
+    "success": "Si guul leh ayaa loo sameeyey",
+    "language": "Luqad",
+    "languageLabel": "Dooro luqad"
+  },
+  "admins": {
+    "title": "Maamulka Maamulayaasha",
+    "subtitle": "Maamul akoonadda maamulayaasha iyo fasallada loo xilsaaray",
+    "loading": "Soo raraya...",
+    "none": "Ma jiraan maamulayaal",
+    "noClasses": "Fasal lama xilsaarin",
+    "created": "Maamul si guul leh ayaa loo sameeyey",
+    "columns": {
+      "id": "Admin ID",
+      "name": "Magac",
+      "classes": "Fasalada la xilsaaray",
+      "actions": "Ficil"
+    },
+    "createAdmin": "Abuur maamul cusub",
+    "form": {
+      "adminId": "Admin ID",
+      "name": "Magac",
+      "password": "Password",
+      "submit": "Abuur"
+    },
+    "delete": {
+      "title": "Tirtir maamul",
+      "confirm": "Ma hubtaa inaad tirtirto {{name}}?",
+      "cancel": "Jooji",
+      "delete": "Tirtir"
+    },
+    "assignClasses": {
+      "title": "U xilsaar fasallo — {{name}}",
+      "currentClasses": "Fasalada hadda",
+      "availableClasses": "Fasalada diyaarka ah",
+      "loading": "Soo raraya...",
+      "noClasses": "Fasal lama xilsaarin",
+      "assign": "U xilsaar",
+      "remove": "Ka saar",
+      "assigned": "Fasal la xilsaaray",
+      "removed": "Fasal laga saaray"
+    }
+  },
+  "error": {
+    "title": "Qalad ayaa dhacay",
+    "retry": "Isku day mar kale"
+  },
+  "recycleBin": {
+    "title": "Soo Celinta",
+    "subtitle": "Kaalmooyinka la tirtiray",
+    "empty": "Soo celinta waa madhan tahay",
+    "columns": {
+      "student": "Arday",
+      "id": "ID",
+      "amount": "Lacag",
+      "deletedAt": "La tirtiray",
+      "actions": "Ficil"
+    },
+    "confirmRestore": {
+      "title": "Soo Celin Kaalmo",
+      "message": "Soo celin kaalmooyinkan ku celiso diiwaanka firfircoon?",
+      "cancel": "Jooji",
+      "restore": "Soo Celi"
+    },
+    "confirmPermanentDelete": {
+      "title": "Tirtir Si Joogta Ah",
+      "message": "Tani waxay si joogta ah u tirtiri doontaa kaalmooyinkan. Falalkan dib looma celin karo.",
+      "instruction": "Qor DELETE si aad u xaqiijiso",
+      "cancel": "Jooji",
+      "delete": "Tirtir Si Joogta Ah"
+    }
+  },
+  "import": {
+    "template": "Template",
+    "importCsv": "CSV soo geli",
+    "loading": "Soo raraya..."
+  },
+  "pdf": {
+    "contributionsReport": "Warbixinta Kaalmooyinka",
+    "expensesReport": "Warbixinta Kharashaadka",
+    "studentStatus": "Xaaladda Ardayda",
+    "generated": "La sameeyey",
+    "totalContributions": "Wadarta Kaalmooyinka",
+    "totalExpenses": "Wadarta Kharashaadka",
+    "targetPerStudent": "Bartilmaameed arday kasta",
+    "columns": {
+      "studentId": "Student ID",
+      "name": "Magac",
+      "amount": "Lacag",
+      "date": "Taariikh",
+      "description": "Sharaxaad",
+      "totalPaid": "Wadarta la bixiyey",
+      "status": "Xaalad"
+    },
+    "status": {
+      "paid": "Bixiyay",
+      "partial": "Qayb ahaan",
+      "unpaid": "Lama bixin"
+    }
+  }
+}
