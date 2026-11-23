@@ -80,7 +80,7 @@ export function LandingHero({ settings }: LandingHeroProps) {
       {/* Adaptive Theme Overlay for Readability */}
       {hasBgImage && (
         <div
-          className="absolute inset-0 bg-bg-main transition-opacity duration-300 backdrop-blur-[2px]"
+          className="absolute inset-0 bg-gradient-to-b lg:bg-gradient-to-r from-bg-main/95 via-bg-main/75 to-bg-main/30 dark:from-bg-main/95 dark:via-bg-main/80 dark:to-bg-main/40 transition-opacity duration-300"
           style={{ opacity: overlayOpacity }}
         />
       )}
