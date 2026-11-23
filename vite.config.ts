@@ -14,6 +14,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png'],
       workbox: {
+        importScripts: ['/custom-sw.js'],
         globPatterns: ['**/*.{js,css,html,svg,png,ico,json,woff2}'],
         runtimeCaching: [
           {

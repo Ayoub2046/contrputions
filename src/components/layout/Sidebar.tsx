@@ -20,6 +20,7 @@ import {
 import { cn } from '../../lib/utils'
 import { useTheme } from '../../hooks/useTheme'
 import { PwaInstallButton } from '../pwa/PwaInstallButton'
+import { NotificationBell } from '../../features/notifications/NotificationBell'
 import type { UserRole } from '../../lib/types'
 
 interface SidebarProps {
@@ -71,9 +72,12 @@ export function Sidebar({ role, onSignOut }: SidebarProps) {
 
   return (
     <aside className="hidden lg:flex fixed left-0 top-0 z-40 h-screen w-64 bg-bg-sidebar text-text flex-col border-r border-border">
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
-        <img src="/classBankLogo.png" alt={t('app.name')} className="h-8 w-auto" />
-        <span className="text-lg font-semibold text-text">{t('app.name')}</span>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="flex items-center gap-2.5">
+          <img src="/classBankLogo.png" alt={t('app.name')} className="h-8 w-auto" />
+          <span className="text-base font-semibold text-text">{t('app.name')}</span>
+        </div>
+        <NotificationBell />
       </div>
 
       {adminClasses.length > 0 && (

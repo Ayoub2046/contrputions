@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './features/auth/AuthContext'
+import { NotificationProvider } from './features/notifications/NotificationContext'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { LoginPage } from './features/auth/LoginPage'
 import { AppShell } from './components/layout/AppShell'
@@ -48,18 +49,20 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public Landing Page accessible to all visitors */}
-          <Route path="/" element={<LandingPage />} />
+        <NotificationProvider>
+          <Routes>
+            {/* Public Landing Page accessible to all visitors */}
+            <Route path="/" element={<LandingPage />} />
 
-          {/* Authentication Page */}
-          <Route path="/login" element={<LoginPage />} />
+            {/* Authentication Page */}
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Protected Application Routes */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="/*" element={<AppLayout />} />
-          </Route>
-        </Routes>
+            {/* Protected Application Routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/*" element={<AppLayout />} />
+            </Route>
+          </Routes>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   )

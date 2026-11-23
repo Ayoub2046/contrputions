@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
 import { PwaInstallButton } from '../pwa/PwaInstallButton'
+import { WhatsAppNotificationBanner } from '../../features/notifications/WhatsAppNotificationBanner'
+import { NotificationPermissionBanner } from '../../features/notifications/NotificationPermissionBanner'
+import { NotificationBell } from '../../features/notifications/NotificationBell'
 import type { UserRole } from '../../lib/types'
 
 interface AppShellProps {
@@ -141,12 +144,13 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
         <span className="font-semibold text-text truncate">{t('app.name')}</span>
       </div>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <PwaInstallButton size="sm" />
         {adminClasses.length > 0 && (
           <select
             value={activeClassId ?? ''}
             onChange={(e) => setActiveClassId(e.target.value || null)}
-            className="rounded-btn border border-border bg-bg-card px-2.5 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30 max-w-[140px]"
+            className="rounded-btn border border-border bg-bg-card px-2.5 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30 max-w-[120px]"
           >
             {adminClasses.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
@@ -168,9 +172,11 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
 export function AppShell({ role, onSignOut, children }: AppShellProps) {
   return (
     <div className="min-h-screen bg-bg-main">
+      <WhatsAppNotificationBanner />
       <Sidebar role={role} onSignOut={onSignOut} />
       <MobileTopBar onSignOut={onSignOut} />
       <main className="lg:ml-64 p-4 lg:p-8 pb-20 lg:pb-8">
+        <NotificationPermissionBanner />
         {children}
       </main>
       <BottomNav role={role} onSignOut={onSignOut} />

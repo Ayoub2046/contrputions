@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
+import { broadcastPushNotification } from '../notifications/notificationService'
 import type { ClassComment } from '../../lib/types'
 
 const LOCAL_STORAGE_KEY_PREFIX = 'classbank_comments_'
@@ -114,6 +115,18 @@ export function useClassComments(classId: string | null) {
           localStorage.setItem(cacheKey, JSON.stringify(current))
         } catch {}
       }
+
+      // Broadcast WhatsApp-style popup notification to all students and admins in class
+      broadcastPushNotification({
+        id: newComment.id,
+        title: `💬 New message from ${user.name}`,
+        body: content.trim(),
+        category: 'news',
+        senderName: user.name,
+        senderRole: user.role,
+        classId: classId,
+        createdAt: newComment.created_at,
+      }).catch(() => {})
 
       setSubmitting(false)
       if (err) {

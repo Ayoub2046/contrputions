@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
+import { broadcastPushNotification } from '../notifications/notificationService'
 import type { Expense } from '../../lib/types'
 
 export function useExpenses(classId?: string | null) {
@@ -27,7 +28,17 @@ export function useExpenses(classId?: string | null) {
       date,
       added_by: uid,
     } as never)
-    if (!error) fetch()
+    if (!error) {
+      fetch()
+      broadcastPushNotification({
+        id: `expense_${Date.now()}`,
+        title: '🧾 New Class Expense',
+        body: `An expense of $${amount} was recorded: ${description}`,
+        category: 'expense',
+        classId: classId || null,
+        createdAt: new Date().toISOString(),
+      }).catch(() => {})
+    }
     return error?.message ?? null
   }
 

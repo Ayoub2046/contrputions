@@ -3,14 +3,16 @@ import { useTranslation } from 'react-i18next'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
+import { Button } from '../../components/ui/Button'
 import { Table, TBody, Td, Th, THead } from '../../components/ui/Table'
 import { Badge } from '../../components/ui/Badge'
 import { useDashboard } from './useDashboard'
 import { useStudentDashboard } from './useStudentDashboard'
 import { cn, formatCurrency, formatDate } from '../../lib/utils'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { PiggyBank, Shield } from 'lucide-react'
+import { PiggyBank, Shield, Send } from 'lucide-react'
 import { ClassCommentsSection } from './ClassCommentsSection'
+import { BroadcastNotificationModal } from '../notifications/BroadcastNotificationModal'
 import type { Profile } from '../../lib/types'
 
 function StudentDashboard({ userId, classId }: { userId: string; classId: string | null }) {
@@ -156,6 +158,14 @@ export function DashboardPage() {
   const { t } = useTranslation()
   const { user, activeClassId } = useAuth()
   const classId = activeClassId
+  const [showBroadcast, setShowBroadcast] = useState(false)
+  const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    supabase.from('classes').select('id, name').order('name').then(({ data }) => {
+      if (data) setAvailableClasses(data)
+    })
+  }, [])
 
   if (user?.role === 'student') {
     return <StudentDashboard userId={user.id} classId={classId} />
@@ -273,9 +283,17 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-5 max-w-lg mx-auto lg:max-w-none">
-      <div>
-        <h1 className="text-xl font-bold text-text">{t('dashboard.title')}</h1>
-        <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name })}</p>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-text">{t('dashboard.title')}</h1>
+          <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name })}</p>
+        </div>
+        <Button
+          onClick={() => setShowBroadcast(true)}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs sm:text-sm shadow-sm"
+        >
+          <Send size={15} /> 📢 Broadcast Notification
+        </Button>
       </div>
 
       <Card className="border-none bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden shadow-sm">
@@ -319,6 +337,11 @@ export function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+      <BroadcastNotificationModal
+        open={showBroadcast}
+        onClose={() => setShowBroadcast(false)}
+        availableClasses={availableClasses}
+      />
     </div>
   )
 }
