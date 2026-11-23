@@ -19,15 +19,23 @@ CREATE INDEX IF NOT EXISTS idx_recycle_bin_item_type ON public.recycle_bin(item_
 ALTER TABLE public.recycle_bin ENABLE ROW LEVEL SECURITY;
 
 -- Super admin: full access
+DROP POLICY IF EXISTS "super_admin_all_recycle_bin" ON public.recycle_bin;
 CREATE POLICY "super_admin_all_recycle_bin"
   ON public.recycle_bin FOR ALL TO authenticated
   USING (EXISTS (
     SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'super_admin'
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'super_admin'
   ));
 
 -- Class admin: access to their class only
+DROP POLICY IF EXISTS "admin_class_recycle_bin" ON public.recycle_bin;
 CREATE POLICY "admin_class_recycle_bin"
   ON public.recycle_bin FOR ALL TO authenticated
   USING (class_id IN (
+    SELECT class_id FROM public.class_admins WHERE admin_id = auth.uid()
+  ))
+  WITH CHECK (class_id IN (
     SELECT class_id FROM public.class_admins WHERE admin_id = auth.uid()
   ));
