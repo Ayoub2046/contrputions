@@ -13,14 +13,8 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { user, signIn } = useAuth()
+  const { user, signIn, signOut } = useAuth()
   const navigate = useNavigate()
-
-  useEffect(() => {
-    if (user) {
-      navigate('/dashboard', { replace: true })
-    }
-  }, [user, navigate])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,7 +30,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-bg-main p-4">
       <Card className="w-full max-w-sm border-0 shadow-none sm:border sm:shadow-sm">
         <CardContent className="px-6 py-10 sm:px-8">
-          <div className="flex flex-col items-center gap-4 mb-8">
+          <div className="flex flex-col items-center gap-4 mb-6">
             <Link to="/" className="group" title="Back to Home">
               <img src="/classBankLogo.png" alt={t('app.name')} className="h-10 w-auto transition-transform group-hover:scale-105" />
             </Link>
@@ -45,6 +39,34 @@ export function LoginPage() {
               <p className="text-sm text-muted mt-1">{t('auth.signIn.subtitle')}</p>
             </div>
           </div>
+
+          {/* Active Session Notice if already logged in */}
+          {user && (
+            <div className="mb-6 rounded-card border border-brand-600/30 bg-brand-50/70 dark:bg-brand-900/25 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-secondary font-medium">Active Session:</span>
+                <span className="font-bold text-brand-600 dark:text-brand-900 capitalize">{user.role}</span>
+              </div>
+              <p className="text-sm font-semibold text-text truncate">{user.name}</p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  className="flex-1 rounded-btn bg-brand-600 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-600/90 transition-all cursor-pointer"
+                >
+                  Go to Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="px-3 rounded-btn border border-error/30 text-xs font-semibold text-error hover:bg-error/10 transition-all cursor-pointer"
+                >
+                  Log Out
+                </button>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <Input
               id="studentId"

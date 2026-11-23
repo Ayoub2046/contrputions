@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../../hooks/useTheme'
-import { Sun, Moon, Globe, Menu, X, ArrowRight, ShieldCheck } from 'lucide-react'
+import { Sun, Moon, Globe, Menu, X, ArrowRight, ShieldCheck, LogOut, HeartHandshake } from 'lucide-react'
 
 export function LandingNavbar() {
   const { t, i18n } = useTranslation()
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -28,9 +28,11 @@ export function LandingNavbar() {
         {/* Desktop Nav Links */}
         <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-secondary">
           <a href="#features" className="hover:text-text transition-colors">Features</a>
+          <a href="#charity-pledge" className="flex items-center gap-1.5 hover:text-text transition-colors text-brand-600 dark:text-brand-900 font-semibold">
+            <HeartHandshake size={15} /> Student Mercy Pledge
+          </a>
           <a href="#how-it-works" className="hover:text-text transition-colors">How It Works</a>
-          <a href="#transparency" className="hover:text-text transition-colors">Transparency Model</a>
-          <a href="#security" className="hover:text-text transition-colors">Security</a>
+          <a href="#transparency" className="hover:text-text transition-colors">Transparency</a>
         </nav>
 
         {/* Right side controls */}
@@ -55,12 +57,21 @@ export function LandingNavbar() {
 
           {/* Auth Button */}
           {user ? (
-            <Link
-              to="/dashboard"
-              className="flex items-center gap-1.5 rounded-btn bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-600/90 active:scale-95 transition-all"
-            >
-              Dashboard <ArrowRight size={15} />
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/dashboard"
+                className="flex items-center gap-1.5 rounded-btn bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-600/90 active:scale-95 transition-all"
+              >
+                Dashboard <ArrowRight size={14} />
+              </Link>
+              <button
+                onClick={signOut}
+                title="Sign out of current account"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-btn border border-border text-xs font-semibold text-secondary hover:text-error hover:border-error/30 hover:bg-error/5 transition-all cursor-pointer"
+              >
+                <LogOut size={14} /> Sign Out
+              </button>
+            </div>
           ) : (
             <Link
               to="/login"
@@ -101,6 +112,13 @@ export function LandingNavbar() {
               Features
             </a>
             <a
+              href="#charity-pledge"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-2 py-1.5 rounded-btn hover:bg-bg-elevated text-brand-600 font-semibold"
+            >
+              Student Mercy Pledge
+            </a>
+            <a
               href="#how-it-works"
               onClick={() => setMobileMenuOpen(false)}
               className="px-2 py-1.5 rounded-btn hover:bg-bg-elevated hover:text-text"
@@ -112,14 +130,7 @@ export function LandingNavbar() {
               onClick={() => setMobileMenuOpen(false)}
               className="px-2 py-1.5 rounded-btn hover:bg-bg-elevated hover:text-text"
             >
-              Transparency Model
-            </a>
-            <a
-              href="#security"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-2 py-1.5 rounded-btn hover:bg-bg-elevated hover:text-text"
-            >
-              Security
+              Transparency
             </a>
           </div>
 
@@ -131,13 +142,21 @@ export function LandingNavbar() {
               <Globe size={15} /> Language: <span className="uppercase font-bold text-text">{i18n.language}</span>
             </button>
             {user ? (
-              <Link
-                to="/dashboard"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-1.5 rounded-btn bg-brand-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Dashboard <ArrowRight size={15} />
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-1.5 rounded-btn bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  Dashboard <ArrowRight size={14} />
+                </Link>
+                <button
+                  onClick={() => { setMobileMenuOpen(false); signOut() }}
+                  className="px-2.5 py-1.5 rounded-btn border border-error/30 text-xs font-semibold text-error"
+                >
+                  Sign Out
+                </button>
+              </div>
             ) : (
               <Link
                 to="/login"

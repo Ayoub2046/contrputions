@@ -114,10 +114,13 @@ function BottomNav({ role, onSignOut }: { role: UserRole; onSignOut: () => void 
             </button>
             <button
               onClick={() => { setShowMore(false); onSignOut() }}
-              className="flex w-full items-center gap-3 rounded-btn px-3 py-2.5 text-sm font-medium text-secondary hover:bg-bg-elevated hover:text-text transition-colors cursor-pointer"
+              className="flex w-full items-center justify-between rounded-btn border border-error/30 bg-error/5 px-3 py-2.5 text-sm font-semibold text-error hover:bg-error hover:text-white transition-all cursor-pointer"
             >
-              <LogOut size={18} />
-              {t('nav.signOut')}
+              <span className="flex items-center gap-2.5">
+                <LogOut size={18} />
+                {t('nav.signOut')}
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider">Exit</span>
             </button>
           </div>
         </div>
@@ -150,10 +153,10 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
         )}
         <button
           onClick={onSignOut}
-          className="flex items-center justify-center size-9 rounded-btn text-secondary hover:bg-bg-elevated hover:text-text transition-colors cursor-pointer"
+          className="flex items-center justify-center size-9 rounded-btn border border-error/30 text-error hover:bg-error hover:text-white transition-colors cursor-pointer"
           title={t('nav.signOut')}
         >
-          <LogOut size={18} />
+          <LogOut size={17} />
         </button>
       </div>
     </div>

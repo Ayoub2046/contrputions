@@ -3,6 +3,7 @@ import { useLandingSettings } from './useLandingSettings'
 import { LandingNavbar } from './LandingNavbar'
 import { LandingHero } from './LandingHero'
 import { LandingStats } from './LandingStats'
+import { LandingMercySection } from './LandingMercySection'
 import { LandingFeatures } from './LandingFeatures'
 import { LandingHowItWorks } from './LandingHowItWorks'
 import { LandingFooter } from './LandingFooter'
@@ -36,16 +37,19 @@ export function LandingPage() {
       <LandingNavbar />
 
       <main>
-        {/* Hero Section */}
+        {/* 3D Animated Hero Section */}
         <LandingHero settings={settings} />
 
-        {/* Stats Section */}
+        {/* Stats Bar */}
         <LandingStats stats={settings.stats_data} />
+
+        {/* Powerful Student Solidarity, Mercy & Guilt-to-Charity Quote Section */}
+        <LandingMercySection />
 
         {/* Features Section */}
         <LandingFeatures features={settings.features_data} />
 
-        {/* How It Works & Transparency */}
+        {/* How It Works & Transparency Model */}
         <LandingHowItWorks />
 
         {/* Call to Action Section */}
@@ -68,6 +72,14 @@ export function LandingPage() {
               </Link>
             </div>
           </div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <LandingFooter />
+    </div>
+  )
+}
         </section>
       </main>
 

@@ -145,10 +145,13 @@ export function Sidebar({ role, onSignOut }: SidebarProps) {
         </button>
         <button
           onClick={onSignOut}
-          className="flex w-full items-center gap-3 rounded-btn px-3 py-2 text-sm font-medium text-secondary hover:bg-bg-elevated hover:text-text transition-colors cursor-pointer"
+          className="flex w-full items-center justify-between rounded-btn border border-error/30 bg-error/5 px-3 py-2.5 text-sm font-semibold text-error hover:bg-error hover:text-white transition-all cursor-pointer shadow-xs active:scale-98"
         >
-          <LogOut size={18} />
-          {t('nav.signOut')}
+          <span className="flex items-center gap-2.5">
+            <LogOut size={17} />
+            {t('nav.signOut')}
+          </span>
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">Exit</span>
         </button>
       </div>
     </aside>

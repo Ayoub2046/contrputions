@@ -94,11 +94,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
-    setUser(null)
-    setActiveClassId(null)
-    setAdminClassIds([])
-    setAdminClasses([])
+    try {
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.warn('Sign out warning:', err)
+    } finally {
+      setUser(null)
+      setActiveClassId(null)
+      setAdminClassIds([])
+      setAdminClasses([])
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i)
+          if (key && (key.startsWith('sb-') || key.includes('supabase.auth.token'))) {
+            localStorage.removeItem(key)
+          }
+        }
+      } catch {}
+      window.location.href = '/login'
+    }
   }
 
   return (
