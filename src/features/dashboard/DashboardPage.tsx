@@ -131,16 +131,11 @@ export function DashboardPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">
                 {user?.role === 'finance_manager'
-                  ? 'Finance Manager Dashboard'
+                  ? 'Finance Dashboard'
                   : user?.role === 'super_admin'
                   ? 'Executive Dashboard'
                   : t('dashboard.title')}
               </h1>
-              {user?.role === 'finance_manager' && (
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-500/20">
-                  💼 Global Finance Auditing (Read-Only)
-                </span>
-              )}
             </div>
             <p className="text-xs text-[#9FBBDE] mt-0.5">
               {selectedClassId

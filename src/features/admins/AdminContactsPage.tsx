@@ -25,6 +25,14 @@ export function AdminContactsPage() {
   const { adminsList, messages, loading, submitting, postMessage, deleteMessage } =
     useAdminCommunications()
 
+  // Hide Super Admin from Class Admins and Finance Manager
+  const visibleAdmins = adminsList.filter((admin) => {
+    if (user?.role !== 'super_admin' && admin.role === 'super_admin') {
+      return false
+    }
+    return true
+  })
+
   const [activeTab, setActiveTab] = useState<'directory' | 'messages'>('directory')
   const [content, setContent] = useState('')
   const [category, setCategory] = useState<'general' | 'announcement' | 'urgent' | 'query'>(
@@ -108,7 +116,7 @@ export function AdminContactsPage() {
                 : 'text-secondary hover:text-text'
             }`}
           >
-            <Users size={14} /> Admin Directory ({adminsList.length})
+            <Users size={14} /> Admin Directory ({visibleAdmins.length})
           </button>
           <button
             onClick={() => setActiveTab('messages')}
@@ -127,7 +135,7 @@ export function AdminContactsPage() {
       {activeTab === 'directory' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {adminsList.map((admin) => {
+            {visibleAdmins.map((admin) => {
               const isSuper = admin.role === 'super_admin'
               const isFinanceMgr = admin.role === 'finance_manager'
               const cleanPhone = admin.phone ? admin.phone.replace(/[^0-9+]/g, '') : ''
@@ -178,7 +186,7 @@ export function AdminContactsPage() {
                         </span>
                       ) : isFinanceMgr ? (
                         <span className="inline-block text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded">
-                          Global Financial Auditing (All Classes · Read-Only)
+                          All Classes
                         </span>
                       ) : admin.assignedClasses && admin.assignedClasses.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">

@@ -174,7 +174,7 @@ export function AdminsPage() {
                   <td className="px-4 py-3">
                     {a.role === 'finance_manager' ? (
                       <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                        🌐 All Classes (Global Finance)
+                        🌐 All Classes
                       </span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
@@ -271,7 +271,7 @@ export function AdminsPage() {
                     <div className="flex flex-wrap gap-1 pt-1">
                       {a.role === 'finance_manager' ? (
                         <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                          🌐 All Classes (Global Finance)
+                          🌐 All Classes
                         </span>
                       ) : (adminClasses[a.id] ?? []).length === 0 ? (
                         <span className="text-xs text-muted">{t('admins.noClasses')}</span>
@@ -319,13 +319,13 @@ export function AdminsPage() {
                     onChange={(e) => setRole(e.target.value as 'admin' | 'finance_manager')}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-bg-card text-xs font-semibold text-text focus:outline-hidden focus:border-brand-600 cursor-pointer"
                   >
-                    <option value="admin">🛡️ Class Administrator (Manage assigned classes & calling)</option>
-                    <option value="finance_manager">💼 Finance Manager (Global read-only finance & reports)</option>
+                    <option value="admin">🛡️ Class Administrator</option>
+                    <option value="finance_manager">💼 Finance Manager</option>
                   </select>
                   <p className="text-[10px] text-muted">
                     {role === 'finance_manager'
-                      ? 'Finance Managers can view all classes income, reports, and unpaid lists in read-only mode.'
-                      : 'Class Administrators record contributions and call unpaid students for their assigned classes.'}
+                      ? 'Finance Managers manage class income, reports, and payments across all classes.'
+                      : 'Class Administrators record contributions and manage assigned classes.'}
                   </p>
                 </div>
 
@@ -397,7 +397,7 @@ export function AdminsPage() {
                 className="w-full px-3 py-2 rounded-xl border border-border bg-bg-card text-xs font-semibold text-text focus:outline-hidden focus:border-brand-600 cursor-pointer"
               >
                 <option value="admin">🛡️ Class Administrator</option>
-                <option value="finance_manager">💼 Finance Manager (Global Read-Only Finance)</option>
+                <option value="finance_manager">💼 Finance Manager</option>
               </select>
             </div>
 

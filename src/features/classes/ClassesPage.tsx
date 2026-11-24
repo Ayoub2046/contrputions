@@ -277,16 +277,11 @@ export function ClassesPage() {
               </h1>
               <p className="text-xs text-[#9FBBDE]">
                 {isFinanceManager
-                  ? 'Select any class to inspect students who paid and pending dues (Read-Only)'
+                  ? 'Select any class to inspect students who paid and pending dues'
                   : 'Classes assigned to your admin account'}
               </p>
             </div>
           </div>
-          {isFinanceManager && (
-            <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-500/20">
-              💼 Finance Manager · Read-Only Auditing
-            </span>
-          )}
         </div>
         <AdminClassesView
           classes={classes}

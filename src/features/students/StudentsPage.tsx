@@ -166,13 +166,7 @@ export function StudentsPage() {
               <span>{t('students.addStudent')}</span>
             </button>
           </div>
-        ) : isFinanceManager ? (
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-500/20">
-              💼 Finance Manager · Read-Only Auditing
-            </span>
-          </div>
-        ) : (
+        ) : isFinanceManager ? null : (
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-500/20">
               <PhoneCall size={13} className="text-emerald-600" />

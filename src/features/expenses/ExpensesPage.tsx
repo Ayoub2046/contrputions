@@ -81,11 +81,7 @@ export function ExpensesPage() {
               </select>
             </div>
           )}
-          {isFinanceManager ? (
-            <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-500/20">
-              💼 Finance Manager · Read-Only Auditing
-            </span>
-          ) : (
+          {!isFinanceManager && (
             <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto justify-center">
               <Plus size={16} /> {t('expenses.record')}
             </Button>
