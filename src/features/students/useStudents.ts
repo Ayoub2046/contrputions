@@ -32,6 +32,21 @@ export function useStudents(classId?: string | null) {
     updates: { student_id?: string; name?: string; phone?: string | null; class_id?: string | null },
     newPassword?: string
   ) {
+    // Instant optimistic UI update
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              name: updates.name ?? s.name,
+              phone: updates.phone !== undefined ? updates.phone ?? undefined : s.phone,
+              student_id: updates.student_id ?? s.student_id,
+              class_id: updates.class_id ?? s.class_id,
+            }
+          : s,
+      ),
+    )
+
     const { error } = await supabase.from('profiles').update(updates as never).eq('id', id)
     if (updates.student_id || newPassword) {
       await adminUpdateUser(id, {
@@ -47,15 +62,17 @@ export function useStudents(classId?: string | null) {
   }
 
   async function remove(id: string) {
-    // Capture student details before deleting for recycle bin
-    const student = students.find(s => s.id === id)
+    // Instant optimistic deletion from UI (0ms delay)
+    const student = students.find((s) => s.id === id)
+    setStudents((prev) => prev.filter((s) => s.id !== id))
+
     if (student) {
       await moveToRecycleBin(
         'student',
         id,
         student.name,
         { student_id: student.student_id, name: student.name, phone: student.phone, role: student.role },
-        student.class_id ?? null
+        student.class_id ?? null,
       )
     }
     const { error } = await supabase.from('profiles').delete().eq('id', id)

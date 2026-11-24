@@ -37,11 +37,11 @@ export function WhatsAppNotificationBanner() {
         className="rounded-2xl bg-white dark:bg-slate-900 border border-emerald-500/30 shadow-2xl overflow-hidden backdrop-blur-md cursor-pointer transition-transform hover:scale-[1.01]"
         onClick={dismissBanner}
       >
-        {/* WhatsApp-style top header bar */}
+        {/* Professional top header bar */}
         <div className="bg-emerald-600 px-3.5 py-1.5 flex items-center justify-between text-white text-xs font-semibold">
           <div className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-emerald-300 animate-pulse" />
-            <span className="tracking-wide">CLASSBANK &middot; WHATSAPP ALERT</span>
+            <span className="tracking-wide">CLASSBANK &middot; LIVE NOTIFICATION</span>
           </div>
           <span className="text-[10px] text-emerald-100 font-normal">Just now</span>
         </div>

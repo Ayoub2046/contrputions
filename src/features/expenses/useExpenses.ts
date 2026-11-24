@@ -43,14 +43,17 @@ export function useExpenses(classId?: string | null) {
   }
 
   async function remove(id: string) {
+    // Instant optimistic removal from UI
     const item = expenses.find((e) => e.id === id)
+    setExpenses((prev) => prev.filter((e) => e.id !== id))
+
     if (item) {
       await moveToRecycleBin(
         'expense',
         id,
         item.description,
         { ...item },
-        item.class_id
+        item.class_id,
       )
     }
     const { error } = await supabase.from('expenses').delete().eq('id', id)

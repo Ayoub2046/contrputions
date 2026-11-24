@@ -111,14 +111,7 @@ export function useClassComments(classId: string | null) {
     }
 
     try {
-      const { error: err } = await supabase.from('class_comments').insert({
-        id: newComment.id,
-        class_id: finalClassId,
-        user_id: user.id,
-        content: content.trim(),
-      } as never)
-
-      // Optimistically update state and cache
+      // Optimistically update state and cache immediately
       setComments((prev) => [newComment, ...prev])
       if (cacheKey) {
         try {
@@ -127,17 +120,24 @@ export function useClassComments(classId: string | null) {
         } catch { }
       }
 
-      // Broadcast WhatsApp-style popup notification to all students and admins in class
+      // Broadcast live popup notification to all students and admins
       broadcastPushNotification({
         id: newComment.id,
-        title: `💬 New message from ${user.name}`,
+        title: `💬 ${user.name} commented in class`,
         body: content.trim(),
         category: 'news',
         senderName: user.name,
         senderRole: user.role,
-        classId: classId,
+        classId: finalClassId,
         createdAt: newComment.created_at,
       }).catch(() => { })
+
+      const { error: err } = await supabase.from('class_comments').insert({
+        id: newComment.id,
+        class_id: finalClassId,
+        user_id: user.id,
+        content: content.trim(),
+      } as never)
 
       setSubmitting(false)
       if (err) {
@@ -152,15 +152,17 @@ export function useClassComments(classId: string | null) {
   }
 
   const deleteComment = async (id: string): Promise<string | null> => {
+    // Instant optimistic deletion from UI (0ms delay)
+    setComments((prev) => prev.filter((c) => c.id !== id))
+    if (cacheKey) {
+      try {
+        const updated = comments.filter((c) => c.id !== id)
+        localStorage.setItem(cacheKey, JSON.stringify(updated))
+      } catch { }
+    }
+
     try {
       await supabase.from('class_comments').delete().eq('id', id)
-      setComments((prev) => prev.filter((c) => c.id !== id))
-      if (cacheKey) {
-        try {
-          const updated = comments.filter((c) => c.id !== id)
-          localStorage.setItem(cacheKey, JSON.stringify(updated))
-        } catch { }
-      }
       return null
     } catch (e: any) {
       return e.message || 'Failed to delete comment'

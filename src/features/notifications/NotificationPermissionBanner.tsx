@@ -40,7 +40,7 @@ export function NotificationPermissionBanner() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Sparkles size={11} /> WhatsApp-Style Alerts
+                <Sparkles size={11} /> Live Push Alerts
               </span>
             </div>
             <h3 className="text-sm sm:text-base font-bold">

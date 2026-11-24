@@ -51,20 +51,25 @@ export function useContributions(classId?: string | null) {
   }
 
   async function update(id: string, amount: number, date: string) {
+    // Instant optimistic update
+    setContributions((prev) => prev.map((c) => (c.id === id ? { ...c, amount, date } : c)))
     const { error } = await supabase.from('contributions').update({ amount, date } as never).eq('id', id)
     if (!error) fetch()
     return error?.message ?? null
   }
 
   async function remove(id: string) {
+    // Instant optimistic removal from UI
     const item = contributions.find((c) => c.id === id)
+    setContributions((prev) => prev.filter((c) => c.id !== id))
+
     if (item) {
       await moveToRecycleBin(
         'contribution',
         id,
         `${item.profiles?.name || 'Student'} ($${item.amount})`,
         { ...item },
-        item.class_id
+        item.class_id,
       )
     }
     const { error } = await supabase.from('contributions').update({ deleted_at: new Date().toISOString() } as never).eq('id', id)

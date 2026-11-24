@@ -59,7 +59,7 @@ export function BroadcastNotificationModal({ open, onClose, availableClasses = [
           </div>
           <h3 className="text-base font-bold text-text">Notification Sent Successfully!</h3>
           <p className="text-xs text-muted">
-            All users with notifications enabled will receive this alert as a popup on their screen like WhatsApp.
+            All users with notifications enabled will receive this alert as a push popup on their screen.
           </p>
         </div>
       ) : (
@@ -125,21 +125,21 @@ export function BroadcastNotificationModal({ open, onClose, availableClasses = [
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Write the message that will pop up on students' screens like WhatsApp..."
+              placeholder="Write the message that will pop up on students' screens..."
               rows={3}
               required
               className="w-full rounded-btn border border-border-hover bg-bg-card p-3 text-sm text-text placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand-600/30"
             />
           </div>
 
-          {/* WhatsApp Notification Live Preview */}
+          {/* Notification Live Preview */}
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 p-3">
             <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block mb-1.5">
-              Live WhatsApp Popup Preview
+              Live Notification Popup Preview
             </span>
             <div className="rounded-lg bg-white dark:bg-slate-900 border border-border p-2.5 shadow-sm">
               <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mb-1">
-                <span>ClassBank &middot; WhatsApp Notification</span>
+                <span>ClassBank &middot; Push Notification</span>
                 <span className="text-[10px] text-muted">Just now</span>
               </div>
               <p className="text-xs font-bold text-text truncate">{title || 'Your Notification Title'}</p>

@@ -136,7 +136,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200/50 dark:border-amber-900/50 flex items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
                 <ShieldAlert size={16} className="shrink-0 text-amber-600" />
-                <span>Allow push alerts to get notifications like WhatsApp</span>
+                <span>Enable notifications for instant real-time class alerts</span>
               </div>
               <button
                 onClick={requestPermission}
@@ -147,17 +147,17 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             </div>
           )}
 
-          {/* Quick Action Bar */}
-          <div className="px-3 py-2 bg-bg-card border-b border-border/50 flex items-center justify-between gap-2">
-            <button
-              onClick={testNotification}
-              className="flex items-center gap-1.5 text-xs text-secondary hover:text-text px-2 py-1 rounded-btn hover:bg-bg-elevated transition-colors cursor-pointer"
-            >
-              <Volume2 size={13} className="text-emerald-500" />
-              <span>Test Alert</span>
-            </button>
+          {/* Quick Action Bar — Admin Only */}
+          {isAdmin && (
+            <div className="px-3 py-2 bg-bg-card border-b border-border/50 flex items-center justify-between gap-2">
+              <button
+                onClick={testNotification}
+                className="flex items-center gap-1.5 text-xs text-secondary hover:text-text px-2 py-1 rounded-btn hover:bg-bg-elevated transition-colors cursor-pointer"
+              >
+                <Volume2 size={13} className="text-emerald-500" />
+                <span>Test Alert</span>
+              </button>
 
-            {isAdmin && (
               <button
                 onClick={() => {
                   setOpen(false)
@@ -168,8 +168,8 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
                 <Send size={12} />
                 <span>Send Push Alert</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Notification Items List */}
           <div className="max-h-96 overflow-y-auto divide-y divide-border/40">

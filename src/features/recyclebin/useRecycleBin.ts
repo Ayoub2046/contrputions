@@ -17,14 +17,18 @@ export function useRecycleBin() {
   }, [activeClassId, user?.role])
 
   const restoreItem = useCallback(async (item: RecycleBinItem): Promise<string | null> => {
+    // Instant optimistic removal from recycle bin list
+    setDeleted((prev) => prev.filter((d) => d.id !== item.id))
     const err = await restoreRecycleItem(item)
-    if (!err) await refetch()
+    if (err) await refetch()
     return err
   }, [refetch])
 
   const permanentDeleteItem = useCallback(async (item: RecycleBinItem): Promise<string | null> => {
+    // Instant optimistic removal from recycle bin list
+    setDeleted((prev) => prev.filter((d) => d.id !== item.id))
     const err = await permanentDeleteRecycleItem(item)
-    if (!err) await refetch()
+    if (err) await refetch()
     return err
   }, [refetch])
 
