@@ -17,7 +17,7 @@ import { PwaInstallButton } from '../pwa/PwaInstallButton'
 import { WhatsAppNotificationBanner } from '../../features/notifications/WhatsAppNotificationBanner'
 import { NotificationPermissionBanner } from '../../features/notifications/NotificationPermissionBanner'
 import { NotificationBell } from '../../features/notifications/NotificationBell'
-import { AppLogo } from '../../hooks/useAppLogo'
+import { AppLogo, useAppName } from '../../hooks/useAppLogo'
 import type { UserRole } from '../../lib/types'
 
 interface AppShellProps {
@@ -143,12 +143,13 @@ function BottomNav({ role, onSignOut }: { role: UserRole; onSignOut: () => void 
 function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
   const { t } = useTranslation()
   const { adminClasses, activeClassId, setActiveClassId } = useAuth()
+  const appName = useAppName()
 
   return (
     <div className="lg:hidden flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3 bg-bg-card/95 backdrop-blur-md border-b border-border sticky top-0 z-40 shadow-xs">
       <div className="flex items-center gap-2 min-w-0 shrink">
-        <AppLogo className="h-6 sm:h-7 w-auto shrink-0" alt={t('app.name')} />
-        <span className="font-bold text-text truncate text-xs sm:text-base">{t('app.name')}</span>
+        <AppLogo className="h-6 sm:h-7 w-auto shrink-0" alt={appName} />
+        <span className="font-bold text-text truncate text-xs sm:text-base">{appName}</span>
       </div>
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         <NotificationBell />

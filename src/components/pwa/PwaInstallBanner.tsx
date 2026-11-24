@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Smartphone, Download, X, Share2 } from 'lucide-react'
+import { Download, X, Share2 } from 'lucide-react'
 import { usePwaInstall } from '../../hooks/usePwaInstall'
+import { useAppName, AppLogo } from '../../hooks/useAppLogo'
 
 export function PwaInstallBanner() {
   const { isInstalled, isIos, promptInstall } = usePwaInstall()
+  const appName = useAppName()
   const [dismissed, setDismissed] = useState(false)
   const [showIosGuide, setShowIosGuide] = useState(false)
 
@@ -32,17 +34,17 @@ export function PwaInstallBanner() {
 
   return (
     <aside
-      aria-label="Install ClassBank App"
+      aria-label={`Install ${appName} App`}
       className="relative z-40 bg-gradient-to-r from-brand-900 via-brand-800 to-slate-900 text-white px-4 py-3 shadow-md border-b border-brand-700/50"
     >
       <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm">
         <div className="flex items-center gap-3">
-          <div className="size-8 rounded-lg bg-brand-600/50 flex items-center justify-center shrink-0 border border-brand-400/30">
-            <Smartphone size={18} className="text-white" />
+          <div className="size-10 rounded-xl bg-white p-1.5 flex items-center justify-center shrink-0 border border-white/20 shadow-sm">
+            <AppLogo className="size-full object-contain" alt={appName} />
           </div>
           <div>
             <p className="font-semibold text-white">
-              Install ClassBank PWA App on your phone
+              Install {appName} PWA App on your phone
             </p>
             <p className="text-slate-300 text-xs hidden sm:block">
               Fast offline access, real-time contribution tracking, and live class ledger updates.

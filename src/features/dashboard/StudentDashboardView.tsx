@@ -9,6 +9,9 @@ import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Modal } from '../../components/ui/Modal'
 import { ClassCommentsSection } from './ClassCommentsSection'
+import { useAppName, AppLogo } from '../../hooks/useAppLogo'
+import { usePwaInstall } from '../../hooks/usePwaInstall'
+import { PwaInstallButton } from '../../components/pwa/PwaInstallButton'
 import {
   CheckCircle2,
   Clock,
@@ -35,6 +38,8 @@ interface StudentDashboardViewProps {
 export function StudentDashboardView({ userId, classId }: StudentDashboardViewProps) {
   const { t } = useTranslation()
   const { user, signOut } = useAuth()
+  const appName = useAppName()
+  const { isInstalled } = usePwaInstall()
   const { data, loading } = useStudentDashboard(userId, classId)
   const { notifications, markAsRead } = useNotifications()
 
@@ -70,7 +75,10 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
     return (
       <div className="space-y-6 w-full max-w-4xl mx-auto">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+          <div className="flex items-center gap-3">
+            <AppLogo className="size-10 rounded-xl object-contain p-1 bg-white dark:bg-slate-800 border border-border shadow-xs" alt={appName} />
+            <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+          </div>
           <Button
             variant="secondary"
             size="sm"
@@ -88,7 +96,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
             </div>
             <h2 className="text-lg font-bold text-text">{t('dashboard.noClassAssigned')}</h2>
             <p className="text-xs text-muted max-w-md mx-auto leading-relaxed">
-              You are currently registered in ClassBank, but your account has not been assigned to a specific batch or class group. Contact your class administrator to assign you.
+              You are currently registered in {appName}, but your account has not been assigned to a specific batch or class group. Contact your class administrator to assign you.
             </p>
           </CardContent>
         </Card>
@@ -108,18 +116,23 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
 
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto">
-      {/* 1. Header Welcome Bar & Direct Logout */}
+      {/* 1. Header Welcome Bar with Official App Logo & Direct Logout */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/20">
-              Student Portal
-            </span>
-            <span className="text-xs text-muted font-medium">📚 {data.className}</span>
+        <div className="flex items-center gap-3.5">
+          <div className="size-12 rounded-2xl bg-white dark:bg-slate-800 p-2 border border-border shadow-xs flex items-center justify-center shrink-0">
+            <AppLogo className="size-full object-contain" alt={appName} />
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text tracking-tight">
-            {t('dashboard.welcome', { name: user?.name || 'Student' })}
-          </h1>
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                {appName} Student Portal
+              </span>
+              <span className="text-xs text-muted font-medium">📚 {data.className}</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-text tracking-tight">
+              {t('dashboard.welcome', { name: user?.name || 'Student' })}
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -147,7 +160,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         </div>
       </div>
 
-      {/* 2. THE CLASSBANK STUDENT DIGITAL CONTRIBUTION PASS (Fintech Card) */}
+      {/* 2. THE STUDENT DIGITAL CONTRIBUTION PASS (Fintech Card with Logo & Dynamic Name) */}
       <div className="relative group perspective-[1200px]">
         {/* Ambient Glow behind card */}
         <div className="absolute -inset-1 rounded-[2.5rem] bg-gradient-to-r from-emerald-600/30 via-brand-600/20 to-teal-600/30 blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
@@ -157,14 +170,20 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           <div className="absolute top-0 right-0 w-80 h-80 bg-radial from-emerald-500/15 via-transparent to-transparent pointer-events-none" />
           <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-radial from-teal-500/10 via-transparent to-transparent pointer-events-none" />
 
-          {/* Top Row: Chip, Card Brand & Status Badge */}
+          {/* Top Row: Chip, Official App Logo & Status Badge */}
           <div className="flex items-start justify-between gap-3 relative z-10">
             <div className="flex items-center gap-3">
               {/* Smart Card Chip Visual */}
-              <div className="size-10 rounded-lg bg-gradient-to-br from-amber-200 via-amber-300 to-amber-500 p-1 shadow-md border border-amber-400/60 flex items-center justify-center">
+              <div className="size-10 rounded-lg bg-gradient-to-br from-amber-200 via-amber-300 to-amber-500 p-1 shadow-md border border-amber-400/60 flex items-center justify-center shrink-0">
                 <Cpu size={22} className="text-amber-900/80" />
               </div>
-              <Radio size={20} className="text-white/40 rotate-90" />
+              <div className="flex items-center gap-2 pl-2 border-l border-white/20">
+                <div className="size-8 rounded-lg bg-white/10 p-1 flex items-center justify-center backdrop-blur-xs">
+                  <AppLogo className="size-full object-contain" alt={appName} />
+                </div>
+                <span className="text-sm font-bold tracking-wider text-white font-serif">{appName}</span>
+              </div>
+              <Radio size={18} className="text-white/40 rotate-90 hidden sm:block" />
             </div>
 
             {/* Dynamic Status Badge */}
@@ -205,7 +224,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end relative z-10">
             <div>
               <span className="text-[11px] uppercase tracking-widest text-emerald-400/80 font-semibold block mb-0.5">
-                ClassBank Member Pass
+                {appName} Member Pass
               </span>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white truncate">
                 {user?.name}
@@ -275,6 +294,34 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           </div>
         </div>
       </div>
+
+      {/* 2.5. STUDENT 1-CLICK PWA INSTALL WIDGET (Prominently showing App Logo) */}
+      {!isInstalled && (
+        <div className="rounded-3xl border border-brand-500/30 bg-gradient-to-r from-brand-50/90 via-sky-50/50 to-white dark:from-brand-950/40 dark:via-slate-900 dark:to-bg-card p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="size-14 sm:size-16 rounded-2xl bg-white dark:bg-slate-800 p-2.5 shadow-md border border-brand-200 dark:border-brand-800/60 flex items-center justify-center shrink-0">
+              <AppLogo className="size-full object-contain" alt={appName} />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700 dark:text-brand-300 bg-brand-100 dark:bg-brand-900/60 px-2 py-0.5 rounded-full">
+                  Install Application
+                </span>
+                <span className="text-xs text-muted font-medium">1-Tap Fast Access</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-bold text-text">
+                Install {appName} on your mobile phone
+              </h3>
+              <p className="text-xs text-secondary leading-relaxed">
+                Add {appName} to your home screen with its official logo for instant offline access and real-time updates.
+              </p>
+            </div>
+          </div>
+          <div className="w-full sm:w-auto shrink-0 flex justify-end">
+            <PwaInstallButton className="w-full sm:w-auto justify-center" size="md" />
+          </div>
+        </div>
+      )}
 
       {/* 3. PROFESSIONAL CLASS ANNOUNCEMENTS BULLETIN */}
       <div className="space-y-3">
@@ -474,8 +521,11 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           {/* Printable Ticket Pass Box */}
           <div className="p-6 rounded-2xl bg-gradient-to-br from-bg-card to-bg-elevated border-2 border-emerald-500/30 shadow-xl space-y-5 text-center relative overflow-hidden">
             <div className="space-y-1">
-              <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">
-                ClassBank Transparency Network
+              <div className="size-12 rounded-2xl bg-white dark:bg-slate-800 p-2 shadow-xs border border-border mx-auto mb-2 flex items-center justify-center">
+                <AppLogo className="size-full object-contain" alt={appName} />
+              </div>
+              <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold block">
+                {appName} Transparency Network
               </span>
               <h3 className="text-xl font-bold text-text">Student Contribution Clearance</h3>
               <p className="text-xs text-muted">Batch: {data.className}</p>
@@ -510,7 +560,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
 
             <div className="flex items-center justify-center gap-2 text-xs text-muted">
               <CheckCircle2 size={16} className="text-emerald-600" />
-              <span>Verified against ClassBank PostgreSQL Ledger</span>
+              <span>Verified against {appName} PostgreSQL Ledger</span>
             </div>
           </div>
 

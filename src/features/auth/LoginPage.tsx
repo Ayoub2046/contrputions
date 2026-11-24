@@ -6,10 +6,11 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Card, CardContent } from '../../components/ui/Card'
 import { useAuth } from './AuthContext'
-import { AppLogo } from '../../hooks/useAppLogo'
+import { AppLogo, useAppName } from '../../hooks/useAppLogo'
 
 export function LoginPage() {
   const { t } = useTranslation()
+  const appName = useAppName()
   const [studentId, setStudentId] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -33,10 +34,10 @@ export function LoginPage() {
         <CardContent className="px-6 py-10 sm:px-8">
           <div className="flex flex-col items-center gap-4 mb-6">
             <Link to="/" className="group" title="Back to Home">
-              <AppLogo className="h-10 w-auto transition-transform group-hover:scale-105" alt={t('app.name')} />
+              <AppLogo className="h-10 w-auto transition-transform group-hover:scale-105" alt={appName} />
             </Link>
             <div className="text-center">
-              <h1 className="text-3xl font-serif font-bold text-text">{t('auth.signIn.title')}</h1>
+              <h1 className="text-3xl font-serif font-bold text-text">{appName}</h1>
               <p className="text-sm text-muted mt-1">{t('auth.signIn.subtitle')}</p>
             </div>
           </div>

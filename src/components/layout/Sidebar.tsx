@@ -21,7 +21,7 @@ import { cn } from '../../lib/utils'
 import { useTheme } from '../../hooks/useTheme'
 import { PwaInstallButton } from '../pwa/PwaInstallButton'
 import { NotificationBell } from '../../features/notifications/NotificationBell'
-import { AppLogo } from '../../hooks/useAppLogo'
+import { AppLogo, useAppName } from '../../hooks/useAppLogo'
 import type { UserRole } from '../../lib/types'
 
 interface SidebarProps {
@@ -64,6 +64,7 @@ export function Sidebar({ role, onSignOut }: SidebarProps) {
   const { t, i18n } = useTranslation()
   const { adminClasses, activeClassId, setActiveClassId } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const appName = useAppName()
   const items = navItems[role]
 
   const languages = [
@@ -74,9 +75,9 @@ export function Sidebar({ role, onSignOut }: SidebarProps) {
   return (
     <aside className="hidden lg:flex fixed left-0 top-0 z-50 h-screen w-64 bg-bg-sidebar text-text flex-col border-r border-border">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <AppLogo className="h-8 w-auto" alt={t('app.name')} />
-          <span className="text-base font-semibold text-text">{t('app.name')}</span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <AppLogo className="h-8 w-auto shrink-0" alt={appName} />
+          <span className="text-base font-semibold text-text truncate">{appName}</span>
         </div>
         <NotificationBell placement="sidebar" />
       </div>

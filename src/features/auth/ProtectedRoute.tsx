@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Navigate, Outlet, Link } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import { AppLogo, useAppName } from '../../hooks/useAppLogo'
 import type { UserRole } from '../../lib/types'
 
 interface ProtectedRouteProps {
@@ -9,6 +10,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ roles }: ProtectedRouteProps) {
   const { user, loading } = useAuth()
+  const appName = useAppName()
   const [tookTooLong, setTookTooLong] = useState(false)
 
   useEffect(() => {
@@ -21,8 +23,9 @@ export function ProtectedRoute({ roles }: ProtectedRouteProps) {
   if (loading) {
     return (
       <div className="flex flex-col h-screen items-center justify-center bg-bg-main p-4 text-center">
-        <div className="size-9 animate-spin rounded-full border-4 border-border border-t-brand-600 mb-4" />
-        <p className="text-sm font-medium text-text">Loading ClassBank...</p>
+        <AppLogo className="size-12 object-contain mb-3 animate-pulse" alt={appName} />
+        <div className="size-7 animate-spin rounded-full border-3 border-border border-t-brand-600 mb-3" />
+        <p className="text-sm font-medium text-text">Loading {appName}...</p>
         {tookTooLong && (
           <div className="mt-4 animate-in fade-in space-y-2">
             <p className="text-xs text-muted">Connecting to your account is taking longer than usual.</p>

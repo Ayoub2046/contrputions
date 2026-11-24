@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
 import { ShieldCheck, Smartphone } from 'lucide-react'
-import { AppLogo } from '../../hooks/useAppLogo'
+import { AppLogo, useAppName } from '../../hooks/useAppLogo'
 
 export function LandingFooter() {
   const currentYear = new Date().getFullYear()
+  const appName = useAppName()
 
   return (
     <footer id="security" className="bg-bg-card border-t border-border pt-16 pb-12">
@@ -12,8 +13,8 @@ export function LandingFooter() {
           {/* Brand Col */}
           <div className="md:col-span-5 space-y-4">
             <div className="flex items-center gap-2.5">
-              <AppLogo className="h-8 w-auto object-contain" alt="ClassBank" />
-              <span className="font-serif text-2xl font-bold tracking-tight text-text">ClassBank</span>
+              <AppLogo className="h-8 w-auto object-contain" alt={appName} />
+              <span className="font-serif text-2xl font-bold tracking-tight text-text">{appName}</span>
             </div>
             <p className="text-sm text-secondary max-w-sm leading-relaxed">
               The modern Progressive Web App (PWA) delivering total financial transparency for university classes,

@@ -6,7 +6,8 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { adminCreateUser } from '../../lib/admin-api'
 import { supabase } from '../../lib/supabase'
-import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2 } from 'lucide-react'
+import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2, Type, Sparkles } from 'lucide-react'
+import { DEFAULT_APP_NAME, DEFAULT_LOGO } from '../../hooks/useAppLogo'
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation()
@@ -25,23 +26,68 @@ export function SettingsPage() {
   const [pwError, setPwError] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
 
-  // Logo upload state (super_admin only)
-  const [currentLogo, setCurrentLogo] = useState<string>('/classBankLogo.png')
+  // App Identity & Branding state (super_admin only)
+  const [appNameInput, setAppNameInput] = useState<string>(() => {
+    return localStorage.getItem('cb_app_name') || DEFAULT_APP_NAME
+  })
+  const [appNameSaving, setAppNameSaving] = useState(false)
+  const [appNameMsg, setAppNameMsg] = useState('')
+
+  const [currentLogo, setCurrentLogo] = useState<string>(() => {
+    return localStorage.getItem('cb_app_logo') || DEFAULT_LOGO
+  })
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoMsg, setLogoMsg] = useState('')
   const logoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    // Load current logo URL from app_settings
+    // Load current app name and logo URL from app_settings
     supabase
       .from('app_settings')
-      .select('value')
-      .eq('key', 'app_logo_url')
-      .single()
+      .select('key, value')
+      .in('key', ['app_logo_url', 'app_name'])
       .then(({ data }) => {
-        if (data?.value) setCurrentLogo(data.value)
+        if (data) {
+          data.forEach((row) => {
+            if (row.key === 'app_logo_url' && row.value) {
+              setCurrentLogo(row.value)
+              localStorage.setItem('cb_app_logo', row.value)
+            }
+            if (row.key === 'app_name' && row.value) {
+              setAppNameInput(row.value)
+              localStorage.setItem('cb_app_name', row.value)
+            }
+          })
+        }
       })
   }, [])
+
+  async function handleSaveAppName(e: React.FormEvent) {
+    e.preventDefault()
+    if (!appNameInput.trim()) return
+    setAppNameSaving(true)
+    setAppNameMsg('')
+
+    const val = appNameInput.trim()
+    const { error: settingsError } = await supabase
+      .from('app_settings')
+      .upsert(
+        { key: 'app_name', value: val, updated_by: user?.id, updated_at: new Date().toISOString() } as never,
+        { onConflict: 'key' }
+      )
+
+    if (!settingsError) {
+      localStorage.setItem('cb_app_name', val)
+      document.title = val
+      const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+      if (meta) meta.setAttribute('content', val)
+      setAppNameMsg(`✓ Application name updated to "${val}"!`)
+      window.dispatchEvent(new Event('storage'))
+    } else {
+      setAppNameMsg('Failed to update name: ' + settingsError.message)
+    }
+    setAppNameSaving(false)
+  }
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -69,6 +115,8 @@ export function SettingsPage() {
           .upsert({ key: 'app_logo_url', value: dataUrl, updated_by: user?.id, updated_at: new Date().toISOString() } as never, { onConflict: 'key' })
         if (!settingsError) {
           setCurrentLogo(dataUrl)
+          localStorage.setItem('cb_app_logo', dataUrl)
+          window.dispatchEvent(new Event('storage'))
           setLogoMsg('✓ Logo updated successfully.')
         } else {
           setLogoMsg('Failed to save logo: ' + settingsError.message)
@@ -89,7 +137,9 @@ export function SettingsPage() {
 
     if (!settingsError) {
       setCurrentLogo(publicUrl)
-      setLogoMsg('✓ Logo updated successfully! Reload the app to see the new logo.')
+      localStorage.setItem('cb_app_logo', publicUrl)
+      window.dispatchEvent(new Event('storage'))
+      setLogoMsg('✓ Logo updated successfully across all dashboards and student install screens!')
     } else {
       setLogoMsg('Failed to save logo URL: ' + settingsError.message)
     }
@@ -168,54 +218,122 @@ export function SettingsPage() {
           </div>
         </CardContent>
 
-        {/* Logo Upload — SUPER ADMIN ONLY */}
+        {/* Application Identity & Branding — SUPER ADMIN ONLY */}
         {isSuperAdmin && (
           <div className="border-t border-[#ECECEC] dark:border-[#1e3550]">
-            <CardContent className="p-5">
+            <CardContent className="p-5 space-y-6">
+              {/* Header */}
               <div className="flex items-start gap-4">
                 <div className="size-9 rounded-lg bg-[#EAF4FB] dark:bg-[#0d2a40] flex items-center justify-center shrink-0 mt-0.5">
-                  <ImageIcon size={18} className="text-[#1176BC]" />
+                  <Sparkles size={18} className="text-[#1176BC]" />
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8] mb-1">Application Logo</h2>
-                  <p className="text-xs text-[#9FBBDE] mb-4">
-                    Upload a custom logo for the ClassBank application. Only super admins can change the logo.
-                    Max size: 2 MB · Recommended: PNG or SVG, square format.
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8]">
+                      Application Identity & Branding
+                    </h2>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                      Super Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#9FBBDE] mt-0.5">
+                    Configure the platform title and logo. These appear on the header, login page, student digital pass, and home screen install prompts.
                   </p>
+                </div>
+              </div>
 
-                  <div className="flex items-center gap-4 flex-wrap">
-                    {/* Current logo preview */}
-                    <div className="size-16 rounded-xl border-2 border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] flex items-center justify-center overflow-hidden p-1 shadow-sm">
-                      <img src={currentLogo} alt="Current Logo" className="max-h-full max-w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/classBankLogo.png' }} />
-                    </div>
-
-                    <div className="space-y-2">
+              {/* 1. Application Name Configuration */}
+              <div className="pl-0 sm:pl-13 space-y-3">
+                <form onSubmit={handleSaveAppName} className="space-y-3 max-w-lg">
+                  <div className="space-y-1.5">
+                    <label htmlFor="app-name-input" className="block text-xs font-semibold text-text flex items-center gap-1.5">
+                      <Type size={13} className="text-[#1176BC]" /> Application Name
+                    </label>
+                    <div className="flex gap-2">
                       <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleLogoUpload}
+                        id="app-name-input"
+                        type="text"
+                        value={appNameInput}
+                        onChange={(e) => setAppNameInput(e.target.value)}
+                        placeholder="e.g. ClassBank or University Batch 4"
+                        required
+                        className="flex-1 rounded-xl border border-border bg-bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30 font-medium"
                       />
                       <button
-                        onClick={() => logoInputRef.current?.click()}
-                        disabled={logoUploading}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1176BC] text-white text-sm font-semibold hover:bg-[#0D5A8A] transition-colors cursor-pointer disabled:opacity-60"
+                        type="submit"
+                        disabled={appNameSaving || !appNameInput.trim()}
+                        className="px-4 py-2 rounded-xl bg-[#1176BC] text-white text-xs sm:text-sm font-semibold hover:bg-[#0D5A8A] transition-colors cursor-pointer disabled:opacity-60 shrink-0"
                       >
-                        {logoUploading ? (
-                          <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                        ) : (
-                          <Upload size={15} />
-                        )}
-                        {logoUploading ? 'Uploading…' : 'Upload New Logo'}
+                        {appNameSaving ? 'Saving…' : 'Save Name'}
                       </button>
-                      {logoMsg && (
-                        <p className={`text-xs font-medium flex items-center gap-1 ${logoMsg.startsWith('✓') ? 'text-[#0C9B5E]' : 'text-red-500'}`}>
-                          {logoMsg.startsWith('✓') && <CheckCircle2 size={12} />}
-                          {logoMsg}
-                        </p>
-                      )}
                     </div>
+                    <p className="text-[11px] text-muted">
+                      Changes the site title, PWA header, and student portal title dynamically.
+                    </p>
+                  </div>
+                  {appNameMsg && (
+                    <p className={`text-xs font-medium flex items-center gap-1.5 p-2 rounded-xl border ${
+                      appNameMsg.startsWith('✓')
+                        ? 'text-[#0C9B5E] bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+                        : 'text-red-500 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+                    }`}>
+                      {appNameMsg.startsWith('✓') && <CheckCircle2 size={13} />}
+                      {appNameMsg}
+                    </p>
+                  )}
+                </form>
+              </div>
+
+              {/* 2. Application Logo Configuration */}
+              <div className="pl-0 sm:pl-13 pt-4 border-t border-[#ECECEC] dark:border-[#1e3550] space-y-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-text flex items-center gap-1.5">
+                    <ImageIcon size={13} className="text-[#1176BC]" /> Application Logo
+                  </label>
+                  <p className="text-xs text-secondary">
+                    Shown to all students, administrators, and when installing the app on mobile devices.
+                    Max size: 2 MB · PNG or SVG recommended.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap">
+                  {/* Current logo preview */}
+                  <div className="size-16 rounded-2xl border-2 border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] flex items-center justify-center overflow-hidden p-2 shadow-sm">
+                    <img
+                      src={currentLogo}
+                      alt="Current Logo"
+                      className="max-h-full max-w-full object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/classBankLogo.png' }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLogoUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={logoUploading}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1176BC] text-white text-xs sm:text-sm font-semibold hover:bg-[#0D5A8A] transition-colors cursor-pointer disabled:opacity-60"
+                    >
+                      {logoUploading ? (
+                        <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      ) : (
+                        <Upload size={15} />
+                      )}
+                      {logoUploading ? 'Uploading…' : 'Upload New Logo'}
+                    </button>
+                    {logoMsg && (
+                      <p className={`text-xs font-medium flex items-center gap-1 ${logoMsg.startsWith('✓') ? 'text-[#0C9B5E]' : 'text-red-500'}`}>
+                        {logoMsg.startsWith('✓') && <CheckCircle2 size={12} />}
+                        {logoMsg}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
