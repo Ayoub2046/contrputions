@@ -68,11 +68,9 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
-  // Desktop positioning classes
-  const desktopPositionClasses =
-    placement === 'sidebar'
-      ? 'hidden sm:flex flex-col absolute z-50 lg:top-0 lg:left-full lg:right-auto lg:ml-3 lg:mt-0 right-0 top-full mt-2 w-96 md:w-[420px] max-h-[80vh] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
-      : 'hidden sm:flex flex-col absolute z-50 right-0 top-full mt-2 w-96 md:w-[420px] max-h-[80vh] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+  // Desktop flyout for sidebar placement (>= lg)
+  const sidebarFlyoutClasses =
+    'hidden lg:flex flex-col absolute z-50 top-0 left-full ml-3 w-96 md:w-[420px] max-h-[85vh] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
 
   const drawerContent = (
     <>
@@ -229,25 +227,26 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
         )}
       </button>
 
-      {/* 1. Desktop Anchored Flyout (>= sm) */}
-      {open && (
-        <div className={desktopPositionClasses}>
+      {/* 1. Desktop Sidebar Anchored Flyout */}
+      {open && placement === 'sidebar' && (
+        <div className={sidebarFlyoutClasses}>
           {drawerContent}
         </div>
       )}
 
-      {/* 2. Mobile Full-Screen Portal Centered Overlay (< sm) */}
+      {/* 2. Mobile & Header Centered Overlay (via Body Portal to eliminate any layout clipping) */}
       {open &&
+        placement !== 'sidebar' &&
         typeof document !== 'undefined' &&
         createPortal(
-          <div className="sm:hidden fixed inset-0 z-50 flex items-start justify-center pt-14 px-3 pointer-events-auto animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-14 sm:pt-16 px-3 pointer-events-auto animate-in fade-in duration-200">
             {/* Dimmed Backdrop */}
             <div
               className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
               onClick={() => setOpen(false)}
             />
 
-            {/* Mobile Centered Floating Modal Drawer */}
+            {/* Perfectly Centered Floating Modal Drawer */}
             <div className="relative w-full max-w-md max-h-[82vh] rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 z-10">
               {drawerContent}
             </div>

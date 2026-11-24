@@ -7,174 +7,13 @@ import { Button } from '../../components/ui/Button'
 import { Table, TBody, Td, Th, THead } from '../../components/ui/Table'
 import { Badge } from '../../components/ui/Badge'
 import { useDashboard } from './useDashboard'
-import { useStudentDashboard } from './useStudentDashboard'
-import { cn, formatCurrency, formatDate } from '../../lib/utils'
+import { StudentDashboardView } from './StudentDashboardView'
+import { cn, formatCurrency } from '../../lib/utils'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { PiggyBank, Shield, Send, LogOut } from 'lucide-react'
+import { Shield, Send } from 'lucide-react'
 import { ClassCommentsSection } from './ClassCommentsSection'
 import { BroadcastNotificationModal } from '../notifications/BroadcastNotificationModal'
 import type { Profile } from '../../lib/types'
-
-function StudentDashboard({ userId, classId }: { userId: string; classId: string | null }) {
-  const { t } = useTranslation()
-  const { user, signOut } = useAuth()
-  const { data, loading } = useStudentDashboard(userId, classId)
-
-  if (loading) {
-    return (
-      <div className="space-y-5 w-full max-w-4xl mx-auto">
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-44 w-full rounded-xl" />
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-6 w-36" />
-        <Skeleton className="h-32 w-full rounded-xl" />
-      </div>
-    )
-  }
-
-  if (!data) {
-    return (
-      <div className="space-y-6 w-full max-w-4xl mx-auto">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={signOut}
-            className="flex items-center gap-1.5 border-error/30 text-error hover:bg-error hover:text-white transition-all shadow-xs"
-          >
-            <LogOut size={15} />
-            <span>{t('nav.signOut')}</span>
-          </Button>
-        </div>
-        <Card>
-          <CardContent className="py-12 text-center text-muted">
-            {t('dashboard.noClassAssigned')}
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  const badgeVariant = data.status === 'paid' ? 'success' : data.status === 'partial' ? 'warning' : 'danger'
-  const isPositive = data.remainingBalance >= 0
-  const progressPct = data.target ? Math.min(100, (data.personalTotal / data.target) * 100) : 0
-
-  return (
-    <div className="space-y-5 w-full max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text">{t('dashboard.title')}</h1>
-          <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name || '' })}</p>
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={signOut}
-          className="flex items-center gap-1.5 border-error/30 text-error hover:bg-error hover:text-white transition-all shadow-xs"
-        >
-          <LogOut size={15} />
-          <span>{t('nav.signOut')}</span>
-        </Button>
-      </div>
-
-      <Card className="border-none bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden shadow-sm">
-        <CardContent className="p-6 space-y-5">
-          <div className="flex items-start justify-between">
-            <div className="space-y-0.5">
-              <span className="text-[11px] uppercase tracking-widest text-white/40 font-semibold">{t('dashboard.myStatus')}</span>
-            </div>
-            <Badge variant={badgeVariant} className="capitalize bg-white/10 text-white border border-white/20 text-[11px] px-2.5 py-0.5">
-              {t(`dashboard.${data.status}`)}
-            </Badge>
-          </div>
-
-          <div>
-            <span className="text-[11px] text-white/40 font-medium block mb-1">{t('dashboard.myContributions')}</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-white tabular-nums">
-                {formatCurrency(data.personalTotal)}
-              </span>
-              <span className="text-sm text-white/30">/ {formatCurrency(data.target)}</span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-white transition-all duration-700 rounded-full"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[11px] text-white/30">
-              <span>{Math.round(progressPct)}%</span>
-              <span>{formatCurrency(data.personalTotal)} / {formatCurrency(data.target)}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-0">
-          <div className="grid grid-cols-3 divide-x divide-border/40 text-center py-3.5 sm:py-4">
-            <div className="px-1 sm:px-2 space-y-0.5 min-w-0">
-              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted font-medium block truncate">{t('dashboard.totalContributions')}</span>
-              <span className="text-sm sm:text-base font-bold text-text tabular-nums block truncate">{formatCurrency(data.classTotal)}</span>
-            </div>
-            <div className="px-1 sm:px-2 space-y-0.5 min-w-0">
-              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted font-medium block truncate">{t('dashboard.totalExpenses')}</span>
-              <span className="text-sm sm:text-base font-bold text-text tabular-nums block truncate">{formatCurrency(data.expenseTotal)}</span>
-            </div>
-            <div className="px-1 sm:px-2 space-y-0.5 min-w-0">
-              <span className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted font-medium block truncate">{t('dashboard.remainingBalance')}</span>
-              <span className={cn('text-sm sm:text-base font-bold tabular-nums block truncate', isPositive ? 'text-success' : 'text-error')}>
-                {formatCurrency(data.remainingBalance)}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-0.5">
-          <h2 className="text-sm font-semibold text-secondary">{t('dashboard.contributionHistory')}</h2>
-          <span className="text-[11px] text-muted">{data.contributions.length}</span>
-        </div>
-        {data.contributions.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center text-muted text-sm">
-              {t('contributions.none')}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="p-0 divide-y divide-border/40">
-              {data.contributions.map((c) => (
-                <div key={c.id} className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-8 rounded-full bg-success/10 flex items-center justify-center shrink-0">
-                      <PiggyBank size={15} className="text-success" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-text truncate">{t('contributions.title')}</p>
-                      <p className="text-xs text-muted">{formatDate(c.date)}</p>
-                    </div>
-                  </div>
-                  <span className="text-sm font-bold text-success tabular-nums shrink-0 ml-3">
-                    +{formatCurrency(Number(c.amount))}
-                  </span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Class Student Comments & Discussion Section */}
-      <ClassCommentsSection classId={classId} />
-    </div>
-  )
-}
 
 export function DashboardPage() {
   const { t } = useTranslation()
@@ -190,7 +29,7 @@ export function DashboardPage() {
   }, [])
 
   if (user?.role === 'student') {
-    return <StudentDashboard userId={user.id} classId={classId} />
+    return <StudentDashboardView userId={user.id} classId={classId} />
   }
 
   const { data, loading } = useDashboard(classId)

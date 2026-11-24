@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
-interface ContributionRow {
+export interface ContributionRow {
   id: string
   amount: number
   date: string
 }
 
-interface StudentDashboardData {
+export interface StudentDashboardData {
   personalTotal: number
   classTotal: number
   expenseTotal: number
@@ -15,6 +15,9 @@ interface StudentDashboardData {
   target: number
   status: 'paid' | 'partial' | 'unpaid'
   contributions: ContributionRow[]
+  className: string
+  totalStudents: number
+  totalPaidStudents: number
 }
 
 export function useStudentDashboard(userId?: string | null, classId?: string | null) {
@@ -53,7 +56,7 @@ export function useStudentDashboard(userId?: string | null, classId?: string | n
         .eq('class_id', classId),
       supabase
         .from('classes')
-        .select('contribution_target')
+        .select('name, contribution_target')
         .eq('id', classId)
         .single(),
     ])
@@ -64,13 +67,15 @@ export function useStudentDashboard(userId?: string | null, classId?: string | n
         const contributions = (myContribRes?.data ?? []) as ContributionRow[]
         const studentStatuses = (statusRes?.data ?? []) as { student_id: string; total: number }[]
         const expenses = (expenseRes?.data ?? []) as { amount: number }[]
-        const classData = classRes?.data as { contribution_target: number } | null
+        const classData = classRes?.data as { name: string; contribution_target: number } | null
 
+        const target = classData?.contribution_target ?? 0
         const personalTotal = contributions.reduce((s: number, c) => s + Number(c.amount), 0)
         const classTotal = studentStatuses.reduce((s: number, st) => s + Number(st.total), 0)
         const expenseTotal = expenses.reduce((s: number, e: { amount: number }) => s + Number(e.amount), 0)
-        const target = classData?.contribution_target ?? 0
-        const status = personalTotal >= target ? 'paid' : personalTotal > 0 ? 'partial' : 'unpaid'
+        const status = target > 0 && personalTotal >= target ? 'paid' : personalTotal > 0 ? 'partial' : 'unpaid'
+        const totalStudents = studentStatuses.length
+        const totalPaidStudents = studentStatuses.filter((st) => target > 0 && Number(st.total) >= target).length
 
         setData({
           personalTotal,
@@ -80,6 +85,9 @@ export function useStudentDashboard(userId?: string | null, classId?: string | n
           target,
           status,
           contributions,
+          className: classData?.name || 'Class',
+          totalStudents,
+          totalPaidStudents,
         })
         setLoading(false)
       })
