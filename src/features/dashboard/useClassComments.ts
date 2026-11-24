@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { broadcastPushNotification } from '../notifications/notificationService'
+import { getValidAuthToken } from '../../lib/admin-api'
 import type { ClassComment } from '../../lib/types'
 
 const LOCAL_STORAGE_KEY_PREFIX = 'classbank_comments_'
@@ -27,6 +28,33 @@ export function useClassComments(classId: string | null) {
     setError(null)
 
     try {
+      // 1. Try fetching via dedicated /api/comments endpoint (which uses service role to bypass RLS profile blocks)
+      const token = await getValidAuthToken()
+      if (token) {
+        try {
+          const apiParam = classId && classId !== 'all' ? `?class_id=${encodeURIComponent(classId)}` : '?class_id=all'
+          const res = await fetch(`/api/comments${apiParam}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+          if (res.ok) {
+            const apiData: ClassComment[] = await res.json()
+            if (Array.isArray(apiData)) {
+              setComments(apiData)
+              if (cacheKey) {
+                try {
+                  localStorage.setItem(cacheKey, JSON.stringify(apiData))
+                } catch {}
+              }
+              setLoading(false)
+              return
+            }
+          }
+        } catch {}
+      }
+
+      // 2. Direct Supabase Query Fallback
       let query = supabase
         .from('class_comments')
         .select(`
@@ -53,12 +81,12 @@ export function useClassComments(classId: string | null) {
       const { data, error: err } = await query
 
       if (err) {
-        // Fallback to local cache if table not ready or offline
+        // 3. Fallback to local cache if offline
         if (cacheKey) {
           try {
             const cached = localStorage.getItem(cacheKey)
             if (cached) setComments(JSON.parse(cached))
-          } catch { }
+          } catch {}
         }
       } else if (data) {
         const mapped: ClassComment[] = data.map((item: any) => ({
@@ -68,15 +96,15 @@ export function useClassComments(classId: string | null) {
           user_id: item.user_id,
           content: item.content,
           created_at: item.created_at,
-          author_name: item.profiles?.name ?? 'Anonymous Student',
-          author_role: item.profiles?.role ?? 'student',
-          author_student_id: item.profiles?.student_id ?? '',
+          author_name: item.profiles?.name ?? (user && item.user_id === user.id ? user.name : 'Class Member'),
+          author_role: item.profiles?.role ?? (user && item.user_id === user.id ? user.role : 'student'),
+          author_student_id: item.profiles?.student_id ?? (user && item.user_id === user.id ? user.student_id : ''),
         }))
         setComments(mapped)
         if (cacheKey) {
           try {
             localStorage.setItem(cacheKey, JSON.stringify(mapped))
-          } catch { }
+          } catch {}
         }
       }
     } catch (e: any) {
@@ -84,11 +112,32 @@ export function useClassComments(classId: string | null) {
     } finally {
       setLoading(false)
     }
-  }, [classId, cacheKey, isSuperAdmin])
+  }, [classId, cacheKey, isSuperAdmin, user])
 
+  // Initial load and Realtime sync
   useEffect(() => {
     fetchComments()
-  }, [fetchComments])
+
+    // Subscribe to live comment additions & deletions across the class
+    const channel = supabase
+      .channel(`class_comments_realtime_${classId || 'all'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'class_comments',
+        },
+        () => {
+          fetchComments()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchComments, classId])
 
   const addComment = async (content: string, targetClassId?: string): Promise<string | null> => {
     const finalClassId = targetClassId || classId
@@ -111,13 +160,13 @@ export function useClassComments(classId: string | null) {
     }
 
     try {
-      // Optimistically update state and cache immediately
+      // Optimistically update state and cache immediately (0ms delay)
       setComments((prev) => [newComment, ...prev])
       if (cacheKey) {
         try {
           const current = [newComment, ...comments]
           localStorage.setItem(cacheKey, JSON.stringify(current))
-        } catch { }
+        } catch {}
       }
 
       // Broadcast live popup notification to all students and admins
@@ -130,8 +179,32 @@ export function useClassComments(classId: string | null) {
         senderRole: user.role,
         classId: finalClassId,
         createdAt: newComment.created_at,
-      }).catch(() => { })
+      }).catch(() => {})
 
+      // 1. Post via /api/comments
+      const token = await getValidAuthToken()
+      if (token) {
+        try {
+          const res = await fetch('/api/comments', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              content: content.trim(),
+              class_id: finalClassId,
+            }),
+          })
+          if (res.ok) {
+            setSubmitting(false)
+            fetchComments()
+            return null
+          }
+        } catch {}
+      }
+
+      // 2. Direct Supabase insert fallback
       const { error: err } = await supabase.from('class_comments').insert({
         id: newComment.id,
         class_id: finalClassId,
@@ -141,7 +214,7 @@ export function useClassComments(classId: string | null) {
 
       setSubmitting(false)
       if (err) {
-        // If DB table isn't created yet in SQL editor, still kept in local cache
+        // Still kept in local cache
         return null
       }
       return null
@@ -158,10 +231,23 @@ export function useClassComments(classId: string | null) {
       try {
         const updated = comments.filter((c) => c.id !== id)
         localStorage.setItem(cacheKey, JSON.stringify(updated))
-      } catch { }
+      } catch {}
     }
 
     try {
+      const token = await getValidAuthToken()
+      if (token) {
+        try {
+          const res = await fetch(`/api/comments?id=${id}`, {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+          if (res.ok) return null
+        } catch {}
+      }
+
       await supabase.from('class_comments').delete().eq('id', id)
       return null
     } catch (e: any) {

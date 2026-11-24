@@ -2,6 +2,7 @@ import { createServer } from 'http'
 import { existsSync, readFileSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import commentsHandler from '../api/comments.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = resolve(__dirname, '..', '.env')
@@ -125,6 +126,9 @@ const server = createServer(async (req, res) => {
             const results = []
             const errors = []
             const targetClassId = parsed.class_id || auth.caller.class_id || null
+            if (!targetClassId) {
+              return json(res, 400, { error: 'Target class_id is required. Please select a class before importing students.' })
+            }
 
             for (let i = 0; i < parsed.students.length; i++) {
               const item = parsed.students[i]
@@ -243,6 +247,33 @@ const server = createServer(async (req, res) => {
       } else {
         json(res, 405, { error: 'Method not allowed' })
       }
+    } else if (path.startsWith('/api/comments')) {
+      let body = ''
+      req.on('data', (c) => (body += c))
+      req.on('end', async () => {
+        if (body) {
+          try {
+            req.body = JSON.parse(body)
+          } catch {
+            req.body = {}
+          }
+        } else {
+          req.body = {}
+        }
+
+        const enhancedRes = Object.assign(res, {
+          status(code) {
+            res.statusCode = code
+            return this
+          },
+          json(data) {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(data))
+          },
+        })
+
+        await commentsHandler(req, enhancedRes)
+      })
     } else if (req.method === 'POST' && path === '/api/chat') {
       let body = ''
       req.on('data', (c) => (body += c))

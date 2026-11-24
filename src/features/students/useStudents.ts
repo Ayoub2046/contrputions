@@ -86,6 +86,9 @@ export function useStudents(classId?: string | null) {
 
   async function importCSV(parsedRows: ParsedStudentRow[], importClassId?: string): Promise<string[]> {
     const targetClass = importClassId ?? classId ?? null
+    if (!targetClass) {
+      return ['Please select a target class first before importing students to assign them properly.']
+    }
     const { successCount, errors } = await adminImportStudentsBatch(parsedRows, targetClass)
     if (successCount > 0) {
       await fetch()

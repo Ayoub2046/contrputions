@@ -78,6 +78,9 @@ export default async function handler(req, res) {
         const results = []
         const errors = []
         const targetClassId = body.class_id || auth.caller.class_id || null
+        if (!targetClassId) {
+          return res.status(400).json({ error: 'Target class_id is required. Please select a class before importing students.' })
+        }
 
         for (let i = 0; i < body.students.length; i++) {
           const item = body.students[i]

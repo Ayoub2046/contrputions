@@ -24,11 +24,16 @@ export function StudentsPage() {
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
-    if (!isSuperAdmin) return
+    if (!isAdmin) return
     supabase.from('classes').select('id, name').order('name').then(({ data }) => {
-      if (data) setAvailableClasses(data)
+      if (data) {
+        setAvailableClasses(data)
+        if (!importClassId) {
+          setImportClassId(activeClassId || (data.length > 0 ? data[0].id : ''))
+        }
+      }
     })
-  }, [isSuperAdmin])
+  }, [isAdmin, activeClassId])
 
   const [showForm, setShowForm] = useState(false)
   const [editStudent, setEditStudent] = useState<{ id: string; student_id: string; name: string; phone?: string; class_id?: string } | null>(null)
@@ -98,20 +103,13 @@ export function StudentsPage() {
 
       {showImport && (
         <Card>
-          <CardContent className="space-y-3">
-            {isSuperAdmin && availableClasses.length > 0 && (
-              <select
-                value={importClassId}
-                onChange={(e) => setImportClassId(e.target.value)}
-                className={`w-full ${selectClass}`}
-              >
-                <option value="">{t('students.selectClass')}</option>
-                {availableClasses.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            )}
-            <StudentImport onImport={(lines) => importCSV(lines, importClassId || undefined)} />
+          <CardContent className="p-4 sm:p-5">
+            <StudentImport
+              availableClasses={availableClasses}
+              selectedClassId={importClassId}
+              onSelectClassId={(id) => setImportClassId(id)}
+              onImport={(rows, targetClassId) => importCSV(rows, targetClassId)}
+            />
           </CardContent>
         </Card>
       )}

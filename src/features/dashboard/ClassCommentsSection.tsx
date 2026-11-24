@@ -22,6 +22,12 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
+    if (classId) {
+      setSelectedFilterClass(classId)
+    }
+  }, [classId])
+
+  useEffect(() => {
     if (isAdmin) {
       supabase.from('classes').select('id, name').order('name').then(({ data }) => {
         if (data && data.length > 0) {
