@@ -217,6 +217,26 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: errJson.message || 'Failed to create profile' })
       }
 
+      // Store in admin_passwords vault if administrative role
+      if (targetRole === 'admin' || targetRole === 'finance_manager' || targetRole === 'super_admin') {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/admin_passwords`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              apikey: SERVICE_ROLE_KEY,
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify({
+              user_id: authData.id,
+              plain_password: rawPassword,
+              updated_at: new Date().toISOString(),
+            }),
+          })
+        } catch {}
+      }
+
       return res.status(201).json({ id: authData.id })
     }
 
@@ -258,6 +278,25 @@ export default async function handler(req, res) {
         if (!authRes.ok) {
           const errData = await authRes.json().catch(() => ({}))
           return res.status(400).json({ error: errData.msg || errData.message || 'Failed to update auth credentials' })
+        }
+
+        if (password) {
+          try {
+            await fetch(`${SUPABASE_URL}/rest/v1/admin_passwords`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+                apikey: SERVICE_ROLE_KEY,
+                'Content-Type': 'application/json',
+                Prefer: 'resolution=merge-duplicates',
+              },
+              body: JSON.stringify({
+                user_id: id,
+                plain_password: password.trim(),
+                updated_at: new Date().toISOString(),
+              }),
+            })
+          } catch {}
         }
       }
 

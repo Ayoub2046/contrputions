@@ -13,17 +13,28 @@ import { adminCreateUser, adminDeleteUser, adminUpdateUser } from '../../lib/adm
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { ROLES } from '../../lib/constants'
-import { Shield, UserPlus, Trash2, BookOpen, Pencil } from 'lucide-react'
+import { normalizeAuthPassword } from '../../lib/utils'
+import { Shield, UserPlus, Trash2, BookOpen, Pencil, Eye, EyeOff } from 'lucide-react'
 import type { Profile } from '../../lib/types'
 
 export function AdminsPage() {
   const { t } = useTranslation()
   const { user } = useAuth()
-  const { admins, adminClasses, loading, refetch } = useAdmins()
+  const { admins, adminClasses, adminPasswords, loading, refetch } = useAdmins()
 
   if (user?.role !== ROLES.SUPER_ADMIN) return <Navigate to="/dashboard" replace />
   const [assignTarget, setAssignTarget] = useState<Profile | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null)
+
+  // Password reveal state
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
+  function togglePassword(id: string) {
+    setVisiblePasswords((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   // Edit Admin state
   const [editAdmin, setEditAdmin] = useState<Profile | null>(null)
@@ -133,6 +144,7 @@ export function AdminsPage() {
                 <Th>Role</Th>
                 <Th>Phone</Th>
                 <Th>{t('admins.columns.classes')}</Th>
+                <Th>🔑 Password</Th>
                 <Th className="text-right">{t('admins.columns.actions')}</Th>
               </tr>
             </THead>
@@ -176,6 +188,23 @@ export function AdminsPage() {
                       </div>
                     )}
                   </td>
+                  <Td>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-semibold px-2 py-1 rounded bg-[#ECECEC]/70 dark:bg-[#1a2d42] text-text min-w-[70px] select-all">
+                        {visiblePasswords.has(a.id)
+                          ? (adminPasswords[a.id] || normalizeAuthPassword(a.student_id))
+                          : '••••••••'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => togglePassword(a.id)}
+                        className="p-1 rounded-lg hover:bg-bg-elevated text-muted hover:text-text transition-colors cursor-pointer"
+                        title={visiblePasswords.has(a.id) ? "Hide Password" : "Show Password"}
+                      >
+                        {visiblePasswords.has(a.id) ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </Td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => handleStartEdit(a)} title="Edit Admin">
@@ -223,6 +252,22 @@ export function AdminsPage() {
                       </span>
                     </div>
                     <p className="text-xs font-mono text-muted">{a.student_id}</p>
+                    <div className="flex items-center gap-2 pt-1 text-xs">
+                      <span className="text-[11px] text-muted">Password:</span>
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[#ECECEC]/70 dark:bg-[#1a2d42] text-text select-all">
+                        {visiblePasswords.has(a.id)
+                          ? (adminPasswords[a.id] || normalizeAuthPassword(a.student_id))
+                          : '••••••••'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => togglePassword(a.id)}
+                        className="p-1 rounded-lg text-muted hover:text-text cursor-pointer"
+                        title={visiblePasswords.has(a.id) ? "Hide Password" : "Show Password"}
+                      >
+                        {visiblePasswords.has(a.id) ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
                     <div className="flex flex-wrap gap-1 pt-1">
                       {a.role === 'finance_manager' ? (
                         <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
@@ -364,6 +409,17 @@ export function AdminsPage() {
               onChange={(e) => setEditPhone(e.target.value)}
               placeholder="e.g. +252 61 5000000"
             />
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-text block">Current Stored Password</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={adminPasswords[editAdmin.id] || normalizeAuthPassword(editAdmin.student_id)}
+                  className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-border bg-bg-elevated/40 text-text select-all cursor-text font-semibold"
+                />
+              </div>
+            </div>
             <Input
               id="edit-admin-pwd"
               label="New Password (optional)"

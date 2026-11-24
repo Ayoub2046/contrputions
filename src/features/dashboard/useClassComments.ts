@@ -15,10 +15,11 @@ export function useClassComments(classId: string | null) {
   const [error, setError] = useState<string | null>(null)
 
   const isSuperAdmin = user?.role === 'super_admin'
+  const canViewAll = isSuperAdmin || user?.role === 'finance_manager'
   const cacheKey = classId ? `${LOCAL_STORAGE_KEY_PREFIX}${classId}` : `${LOCAL_STORAGE_KEY_PREFIX}all`
 
   const fetchComments = useCallback(async () => {
-    if (!classId && !isSuperAdmin) {
+    if (!classId && !canViewAll) {
       setComments([])
       setLoading(false)
       return
@@ -85,10 +86,13 @@ export function useClassComments(classId: string | null) {
         if (cacheKey) {
           try {
             const cached = localStorage.getItem(cacheKey)
-            if (cached) setComments(JSON.parse(cached))
+            if (cached) {
+              const parsed = JSON.parse(cached)
+              if (Array.isArray(parsed)) setComments(parsed)
+            }
           } catch {}
         }
-      } else if (data) {
+      } else if (Array.isArray(data)) {
         const mapped: ClassComment[] = data.map((item: any) => ({
           id: item.id,
           class_id: item.class_id,

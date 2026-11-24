@@ -74,7 +74,7 @@ export function Sidebar({ role, onSignOut }: SidebarProps) {
   const { adminClasses, activeClassId, setActiveClassId } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const appName = useAppName()
-  const items = navItems[role]
+  const items = navItems[role] ?? navItems.student ?? []
 
   const languages = [
     { code: 'en', label: 'English' },

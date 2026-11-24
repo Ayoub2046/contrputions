@@ -6,6 +6,7 @@ export function useAdmins() {
   const [admins, setAdmins] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [adminClasses, setAdminClasses] = useState<Record<string, string[]>>({})
+  const [adminPasswords, setAdminPasswords] = useState<Record<string, string>>({})
 
   async function fetch() {
     setLoading(true)
@@ -26,6 +27,20 @@ export function useAdmins() {
           }
           setAdminClasses(map)
         }
+
+        try {
+          const { data: pwds } = await supabase
+            .from('admin_passwords')
+            .select('user_id, plain_password')
+            .in('user_id', ids)
+          if (pwds && Array.isArray(pwds)) {
+            const pwdMap: Record<string, string> = {}
+            for (const p of pwds) {
+              pwdMap[p.user_id] = p.plain_password
+            }
+            setAdminPasswords(pwdMap)
+          }
+        } catch {}
       }
     }
     setLoading(false)
@@ -33,5 +48,5 @@ export function useAdmins() {
 
   useEffect(() => { fetch() }, [])
 
-  return { admins, adminClasses, loading, refetch: fetch }
+  return { admins, adminClasses, adminPasswords, loading, refetch: fetch }
 }
