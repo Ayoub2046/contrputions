@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useNotifications } from '../notifications/NotificationContext'
@@ -12,6 +12,7 @@ import { ClassCommentsSection } from './ClassCommentsSection'
 import { useAppName, AppLogo } from '../../hooks/useAppLogo'
 import { usePwaInstall } from '../../hooks/usePwaInstall'
 import { PwaInstallButton } from '../../components/pwa/PwaInstallButton'
+import { supabase } from '../../lib/supabase'
 import {
   CheckCircle2,
   Clock,
@@ -28,6 +29,9 @@ import {
   Receipt,
   Users,
   AlertTriangle,
+  Phone,
+  PhoneCall,
+  MessageSquare,
 } from 'lucide-react'
 
 interface StudentDashboardViewProps {
@@ -45,6 +49,35 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
 
   const [copiedId, setCopiedId] = useState(false)
   const [showClearanceModal, setShowClearanceModal] = useState(false)
+
+  // Class leaders (admins/super_admins) for this student's class
+  const [classLeaders, setClassLeaders] = useState<{ id: string; name: string; phone: string | null; role: string }[]>([])
+
+  useEffect(() => {
+    if (!classId) return
+    // 1. First try secure RPC function
+    supabase
+      .rpc('get_class_leaders_for_student', { p_class_id: classId })
+      .then(({ data: rpcData, error }) => {
+        if (!error && rpcData && rpcData.length > 0) {
+          setClassLeaders(rpcData)
+        } else {
+          // Fallback to direct relational query
+          supabase
+            .from('class_admins')
+            .select('admin:profiles!class_admins_admin_id_fkey(id, name, phone, role)')
+            .eq('class_id', classId)
+            .then(({ data: rows }) => {
+              if (rows) {
+                const leaders = rows
+                  .map((r: any) => r.admin)
+                  .filter(Boolean) as { id: string; name: string; phone: string | null; role: string }[]
+                setClassLeaders(leaders)
+              }
+            })
+        }
+      })
+  }, [classId])
 
   const copyStudentId = () => {
     if (!user?.student_id) return
@@ -507,6 +540,72 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           </Card>
         )}
       </div>
+
+      {/* 5.5. CONTACT YOUR CLASS LEADERS */}
+      {classLeaders.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <div className="size-6 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-600 dark:text-brand-400">
+                <PhoneCall size={14} />
+              </div>
+              <h2 className="text-base font-bold text-text">Contact Your Class Leaders</h2>
+            </div>
+            <span className="text-xs text-muted font-medium">{classLeaders.length} {classLeaders.length === 1 ? 'leader' : 'leaders'}</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {classLeaders.map((leader) => (
+              <Card key={leader.id} className="rounded-2xl border-border/80 hover:border-border-hover transition-colors">
+                <CardContent className="p-4 flex items-center gap-4">
+                  {/* Avatar */}
+                  <div className="size-12 rounded-2xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shrink-0 text-white font-bold text-lg shadow-sm">
+                    {leader.name.charAt(0).toUpperCase()}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-text truncate">{leader.name}</p>
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border mt-0.5 ${
+                      leader.role === 'super_admin'
+                        ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-500/20'
+                        : 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border-brand-500/20'
+                    }`}>
+                      {leader.role === 'super_admin' ? '👑 Super Admin' : '🛡️ Class Admin'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    {leader.phone ? (
+                      <>
+                        <a
+                          href={`tel:${leader.phone}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold transition-colors shadow-xs"
+                          title={`Call ${leader.name}`}
+                        >
+                          <Phone size={12} />
+                          <span>Call</span>
+                        </a>
+                        <a
+                          href={`https://wa.me/${leader.phone.replace(/\D/g, '')}?text=Asc ${encodeURIComponent(leader.name)}, waxaan ahay ${encodeURIComponent(user?.name || 'student')} (${user?.student_id || ''}). Waxaan rabnaa in aan kula xiriirno arrimaha fasalka.`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#1ebe57] text-white text-xs font-semibold transition-colors shadow-xs"
+                          title={`WhatsApp ${leader.name}`}
+                        >
+                          <MessageSquare size={12} />
+                          <span>WA</span>
+                        </a>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-muted italic">No phone</span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 6. CLASS DISCUSSION & STUDENT FEEDBACK */}
       <ClassCommentsSection classId={classId} />

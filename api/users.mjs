@@ -69,6 +69,15 @@ export default async function handler(req, res) {
     return res.status(auth.status).json({ error: auth.error })
   }
 
+  // Security Access Control: Class Administrators are restricted to recording contributions,
+  // calling students who have not paid, sending announcements, and viewing discussions.
+  // ONLY Super Administrators are permitted to create, batch import, edit, or delete student accounts.
+  if (auth.caller.role !== 'super_admin') {
+    return res.status(403).json({
+      error: 'Access Denied: Only Super Administrators have permission to add, edit, or delete student accounts. Class Administrators have read, contribution recording, and calling permissions only.',
+    })
+  }
+
   try {
     if (req.method === 'POST') {
       const body = req.body || {}

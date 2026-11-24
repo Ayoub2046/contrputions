@@ -16,6 +16,7 @@ export function SettingsPage() {
 
   const [sid, setSid] = useState('')
   const [name, setName] = useState('')
+  const [adminPhone, setAdminPhone] = useState('')
   const [pwd, setPwd] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -156,9 +157,9 @@ export function SettingsPage() {
     if (!sid.trim() || !name.trim() || !pwd.trim()) return
     setLoading(true)
     setMsg('')
-    const { error } = await adminCreateUser(sid.trim(), name.trim(), pwd.trim(), null, 'admin')
+    const { error } = await adminCreateUser(sid.trim(), name.trim(), pwd.trim(), null, 'admin', adminPhone.trim() || null)
     setMsg(error || t('settings.success'))
-    if (!error) { setSid(''); setName(''); setPwd('') }
+    if (!error) { setSid(''); setName(''); setAdminPhone(''); setPwd('') }
     setLoading(false)
   }
 
@@ -354,6 +355,7 @@ export function SettingsPage() {
                   <form onSubmit={handleCreateAdmin} className="space-y-3 max-w-md">
                     <Input id="admin-sid" label={t('settings.adminId')} value={sid} onChange={(e) => setSid(e.target.value)} required />
                     <Input id="admin-name" label={t('settings.name')} value={name} onChange={(e) => setName(e.target.value)} required />
+                    <Input id="admin-phone" label="Phone Number (For Students to Call)" type="tel" value={adminPhone} onChange={(e) => setAdminPhone(e.target.value)} placeholder="e.g. +252 61 5000000" />
                     <Input id="admin-pwd" label={t('settings.password')} type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} required />
                     <Button type="submit" loading={loading}>{t('settings.submit')}</Button>
                     {msg && <p className={`text-sm ${msg.includes('error') || msg.includes('Error') ? 'text-red-500' : 'text-[#0C9B5E]'}`}>{msg}</p>}

@@ -38,8 +38,8 @@ function ClassCard({
   onEdit?: () => void
   onAssign?: () => void
   onDelete?: () => void
-  onImportStudents: () => void
-  onAddStudent: () => void
+  onImportStudents?: () => void
+  onAddStudent?: () => void
   onSelectClass: () => void
 }) {
   const target = c.contribution_target || 0
@@ -153,31 +153,35 @@ function ClassCard({
 
         {/* Direct Action Buttons on Card */}
         <div className="pt-2 border-t border-[#ECECEC] dark:border-[#1e3550] flex items-center justify-between gap-2 mt-auto">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={onImportStudents}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#EAF4FB] dark:bg-[#0d2a40] hover:bg-[#1176BC] hover:text-white text-xs font-semibold text-[#1176BC] transition-all cursor-pointer shadow-2xs"
-              title="Import CSV students directly into this class"
-            >
-              <Upload size={12} />
-              <span>Import CSV</span>
-            </button>
-            <button
-              onClick={onAddStudent}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] border border-[#ECECEC] dark:border-[#1e3550] text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] transition-all cursor-pointer shadow-2xs"
-              title="Add individual student to this class"
-            >
-              <Plus size={12} />
-              <span>Add Student</span>
-            </button>
-          </div>
+          {onImportStudents && onAddStudent ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={onImportStudents}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#EAF4FB] dark:bg-[#0d2a40] hover:bg-[#1176BC] hover:text-white text-xs font-semibold text-[#1176BC] transition-all cursor-pointer shadow-2xs"
+                title="Import CSV students directly into this class (Super Admin only)"
+              >
+                <Upload size={12} />
+                <span>Import CSV</span>
+              </button>
+              <button
+                onClick={onAddStudent}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] border border-[#ECECEC] dark:border-[#1e3550] text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] transition-all cursor-pointer shadow-2xs"
+                title="Add individual student to this class (Super Admin only)"
+              >
+                <Plus size={12} />
+                <span>Add Student</span>
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs text-[#9FBBDE] font-medium">Assigned Class View</span>
+          )}
 
           <button
             onClick={onSelectClass}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#1176BC] hover:underline transition-colors cursor-pointer ml-auto"
             title="View students in this class"
           >
-            <span>View</span>
+            <span>View Students</span>
             <ChevronRight size={13} />
           </button>
         </div>
@@ -189,14 +193,10 @@ function ClassCard({
 function AdminClassesView({
   classes,
   loading,
-  onImportStudents,
-  onAddStudent,
   onSelectClass,
 }: {
   classes: ClassWithMetrics[]
   loading: boolean
-  onImportStudents: (cls: ClassWithMetrics) => void
-  onAddStudent: (cls: ClassWithMetrics) => void
   onSelectClass: (cls: ClassWithMetrics) => void
 }) {
   if (loading) {
@@ -230,8 +230,6 @@ function AdminClassesView({
           key={c.id}
           c={c}
           canEdit={false}
-          onImportStudents={() => onImportStudents(c)}
-          onAddStudent={() => onAddStudent(c)}
           onSelectClass={() => onSelectClass(c)}
         />
       ))}
@@ -279,8 +277,6 @@ export function ClassesPage() {
         <AdminClassesView
           classes={classes}
           loading={loading}
-          onImportStudents={(c) => setTargetClassForImport(c)}
-          onAddStudent={(c) => setTargetClassForAdd(c)}
           onSelectClass={handleSelectClass}
         />
 

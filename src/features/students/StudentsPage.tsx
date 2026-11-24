@@ -13,7 +13,20 @@ import { StudentImport } from './StudentImport'
 import { useStudents } from './useStudents'
 import { formatCurrency, normalizeAuthPassword } from '../../lib/utils'
 import { SkeletonTable } from '../../components/ui/Skeleton'
-import { Search, Plus, Pencil, Trash2, Wallet, Eye, EyeOff, Upload, Target } from 'lucide-react'
+import {
+  Search,
+  Plus,
+  Pencil,
+  Trash2,
+  Wallet,
+  Eye,
+  EyeOff,
+  Upload,
+  Target,
+  Phone,
+  PhoneCall,
+  MessageSquare,
+} from 'lucide-react'
 
 export function StudentsPage() {
   const { t } = useTranslation()
@@ -111,24 +124,33 @@ export function StudentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#ECECEC] dark:border-[#1e3550] pb-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-text">{t('students.title')}</h1>
-          <p className="text-xs text-[#9FBBDE]">Directory of all enrolled students and contribution clearance</p>
+          <p className="text-xs text-[#9FBBDE]">Directory of all enrolled students, contribution status, and contact actions</p>
         </div>
-        <div className="flex gap-2 flex-wrap items-center">
-          <button
-            onClick={() => setShowImport(!showImport)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-xs font-semibold text-[#1176BC] transition-all cursor-pointer shadow-2xs"
-          >
-            <Upload size={14} />
-            <span>{showImport ? 'Hide Import' : t('students.importCsv')}</span>
-          </button>
-          <button
-            onClick={() => { setEditStudent(null); setShowForm(true) }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-xs font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95"
-          >
-            <Plus size={14} />
-            <span>{t('students.addStudent')}</span>
-          </button>
-        </div>
+        {isSuperAdmin ? (
+          <div className="flex gap-2 flex-wrap items-center">
+            <button
+              onClick={() => setShowImport(!showImport)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-xs font-semibold text-[#1176BC] transition-all cursor-pointer shadow-2xs"
+            >
+              <Upload size={14} />
+              <span>{showImport ? 'Hide Import' : t('students.importCsv')}</span>
+            </button>
+            <button
+              onClick={() => { setEditStudent(null); setShowForm(true) }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-xs font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95"
+            >
+              <Plus size={14} />
+              <span>{t('students.addStudent')}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-500/20">
+              <PhoneCall size={13} className="text-emerald-600" />
+              <span>Class Admin Access · Calling & Reminders Active</span>
+            </span>
+          </div>
+        )}
       </div>
 
       {showImport && (
@@ -224,11 +246,30 @@ export function StudentsPage() {
                 <TBody>
                   {displayStudents.map((s, i) => {
                     const assignedTarget = studentTargets[s.id] ?? classTargets[s.class_id || ''] ?? 0
+                    const pStatus = (paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status
+                    const isUnpaid = pStatus !== 'paid'
+                    const cleanPhone = s.phone ? s.phone.replace(/[^0-9+]/g, '') : ''
+                    const waPhone = s.phone ? s.phone.replace(/[^0-9]/g, '') : ''
+                    const reminderMsg = `Asc ${s.name}, waxaan kaa soo xiriiraynaa maamulka fasalka. Fadlan waxaan ku xusuusinaynaa bixinta lacagta qaadhaanka ee kugu hadhay. Mahadsanid!`
+
                     return (
-                      <tr key={s.id}>
+                      <tr key={s.id} className="hover:bg-bg-elevated/40 transition-colors">
                         <td className="px-4 py-3 text-xs text-muted text-center">{i + 1}</td>
                         <Td className="font-mono text-sm text-brand-600 font-semibold">{s.student_id}</Td>
-                        <Td className="text-sm text-muted">{s.phone || '—'}</Td>
+                        <Td>
+                          {s.phone ? (
+                            <a
+                              href={`tel:${cleanPhone}`}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-text hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                              title={`Click to call ${s.name}`}
+                            >
+                              <Phone size={12} className="text-emerald-600 shrink-0" />
+                              <span className="font-mono">{s.phone}</span>
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted/60 italic">No phone</span>
+                          )}
+                        </Td>
                         <Td className="font-medium text-text">{s.name}</Td>
                         {isAdmin && (
                           <Td>
@@ -240,7 +281,7 @@ export function StudentsPage() {
                               </span>
                               <button
                                 onClick={() => togglePassword(s.id)}
-                                className="text-muted hover:text-text transition-colors p-0.5"
+                                className="text-muted hover:text-text transition-colors p-0.5 cursor-pointer"
                                 title={visiblePasswords.has(s.id) ? 'Hide password' : 'Show password'}
                               >
                                 {visiblePasswords.has(s.id)
@@ -256,7 +297,7 @@ export function StudentsPage() {
                             {formatCurrency(assignedTarget)}
                           </span>
                         </Td>
-                        <Td><Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge></Td>
+                        <Td><Badge variant={badgeVariant(pStatus)}>{t(`students.status.${pStatus}`)}</Badge></Td>
                         <Td className="text-right font-semibold tabular-nums text-text">
                           <span className="inline-flex items-center gap-1">
                             <Wallet size={14} className="text-muted" />
@@ -264,13 +305,67 @@ export function StudentsPage() {
                           </span>
                         </Td>
                         <Td>
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => { setEditStudent({ id: s.id, student_id: s.student_id, name: s.name, phone: s.phone, class_id: s.class_id ?? undefined }); setShowForm(true) }}>
-                              <Pencil size={16} />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(s.id)}>
-                              <Trash2 size={16} className="text-error" />
-                            </Button>
+                          <div className="flex justify-end items-center gap-1.5">
+                            {/* Calling Actions for Unpaid / Paid Students */}
+                            {s.phone && (
+                              <>
+                                <a
+                                  href={`tel:${cleanPhone}`}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer ${
+                                    isUnpaid
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                      : 'bg-bg-elevated hover:bg-border text-secondary hover:text-text border border-border'
+                                  }`}
+                                  title={`Call ${s.name} directly`}
+                                >
+                                  <PhoneCall size={12} />
+                                  <span>{isUnpaid ? 'Call' : 'Call'}</span>
+                                </a>
+                                {isUnpaid && (
+                                  <a
+                                    href={`https://wa.me/${waPhone}?text=${encodeURIComponent(reminderMsg)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20ba5a] text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+                                    title={`Send WhatsApp reminder to ${s.name}`}
+                                  >
+                                    <MessageSquare size={12} />
+                                    <span>WA</span>
+                                  </a>
+                                )}
+                              </>
+                            )}
+
+                            {/* Super Admin Only: Edit and Delete buttons */}
+                            {isSuperAdmin && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditStudent({
+                                      id: s.id,
+                                      student_id: s.student_id,
+                                      name: s.name,
+                                      phone: s.phone,
+                                      class_id: s.class_id ?? undefined,
+                                    })
+                                    setShowForm(true)
+                                  }}
+                                  title="Edit student (Super Admin)"
+                                >
+                                  <Pencil size={15} />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setConfirmDelete(s.id)}
+                                  title="Delete student (Super Admin)"
+                                >
+                                  <Trash2 size={15} className="text-error" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </Td>
                       </tr>
@@ -281,47 +376,127 @@ export function StudentsPage() {
             </div>
             {/* Mobile */}
             <div className="lg:hidden divide-y divide-border/40">
-              {displayStudents.map((s, i) => (
-                <div key={s.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-bg-elevated/40 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted font-mono mb-0.5">#{i + 1} &middot; <span className="text-brand-600 font-semibold">{s.student_id}</span></p>
-                    <p className="text-sm font-medium text-text truncate">{s.name}</p>
-                    {s.phone && <p className="text-xs text-muted">{s.phone}</p>}
-                    {isAdmin && (
-                      <div className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-md bg-bg-elevated border border-border">
-                        <span className="text-[11px] text-muted">Pass:</span>
-                        <span className="text-xs font-mono font-semibold text-text">
-                          {visiblePasswords.has(s.id) ? normalizeAuthPassword(s.student_id) : '••••••'}
+              {displayStudents.map((s, i) => {
+                const pStatus = (paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status
+                const isUnpaid = pStatus !== 'paid'
+                const cleanPhone = s.phone ? s.phone.replace(/[^0-9+]/g, '') : ''
+                const waPhone = s.phone ? s.phone.replace(/[^0-9]/g, '') : ''
+                const reminderMsg = `Asc ${s.name}, waxaan kaa soo xiriiraynaa maamulka fasalka. Fadlan waxaan ku xusuusinaynaa bixinta lacagta qaadhaanka ee kugu hadhay. Mahadsanid!`
+
+                return (
+                  <div key={s.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 hover:bg-bg-elevated/40 transition-colors">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-xs text-muted font-mono">
+                        #{i + 1} &middot; <span className="text-brand-600 font-semibold">{s.student_id}</span>
+                      </p>
+                      <p className="text-sm font-semibold text-text truncate">{s.name}</p>
+
+                      {s.phone ? (
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"
+                          >
+                            <Phone size={12} />
+                            <span className="font-mono">{s.phone}</span>
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted/60 italic">No phone added</p>
+                      )}
+
+                      {isAdmin && (
+                        <div className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-md bg-bg-elevated border border-border">
+                          <span className="text-[11px] text-muted">Pass:</span>
+                          <span className="text-xs font-mono font-semibold text-text">
+                            {visiblePasswords.has(s.id) ? normalizeAuthPassword(s.student_id) : '••••••'}
+                          </span>
+                          <button
+                            onClick={() => togglePassword(s.id)}
+                            className="text-muted hover:text-text transition-colors p-0.5 cursor-pointer"
+                            title={visiblePasswords.has(s.id) ? 'Hide password' : 'Show password'}
+                          >
+                            {visiblePasswords.has(s.id) ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <Badge variant={badgeVariant(pStatus)}>{t(`students.status.${pStatus}`)}</Badge>
+                        <span className="text-xs text-[#9FBBDE]">
+                          Target: {formatCurrency(studentTargets[s.id] ?? classTargets[s.class_id || ''] ?? 0)}
                         </span>
-                        <button
-                          onClick={() => togglePassword(s.id)}
-                          className="text-muted hover:text-text transition-colors p-0.5"
-                          title={visiblePasswords.has(s.id) ? 'Hide password' : 'Show password'}
-                        >
-                          {visiblePasswords.has(s.id) ? <EyeOff size={12} /> : <Eye size={12} />}
-                        </button>
+                        <span className="text-xs font-semibold tabular-nums text-text">
+                          Paid: {formatCurrency((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).total)}
+                        </span>
                       </div>
-                    )}
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge>
-                      <span className="text-xs text-[#9FBBDE]">
-                        Target: {formatCurrency(studentTargets[s.id] ?? classTargets[s.class_id || ''] ?? 0)}
-                      </span>
-                      <span className="text-xs font-semibold tabular-nums text-text">
-                        Paid: {formatCurrency((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).total)}
-                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40 justify-end">
+                      {/* Calling & Reminding Buttons */}
+                      {s.phone && (
+                        <div className="flex items-center gap-1.5">
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer ${
+                              isUnpaid
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                : 'bg-bg-elevated hover:bg-border text-secondary border border-border'
+                            }`}
+                            title={`Call ${s.name}`}
+                          >
+                            <PhoneCall size={12} />
+                            <span>Call</span>
+                          </a>
+                          {isUnpaid && (
+                            <a
+                              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(reminderMsg)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+                              title={`WhatsApp reminder to ${s.name}`}
+                            >
+                              <MessageSquare size={12} />
+                              <span>WA</span>
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Super Admin Only: Edit and Delete buttons */}
+                      {isSuperAdmin && (
+                        <div className="flex items-center gap-1 border-l border-border/50 pl-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditStudent({
+                                id: s.id,
+                                student_id: s.student_id,
+                                name: s.name,
+                                phone: s.phone,
+                                class_id: s.class_id ?? undefined,
+                              })
+                              setShowForm(true)
+                            }}
+                            title="Edit student"
+                          >
+                            <Pencil size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmDelete(s.id)}
+                            title="Delete student"
+                          >
+                            <Trash2 size={15} className="text-error" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0 ml-2">
-                    <Button variant="ghost" size="sm" onClick={() => { setEditStudent({ id: s.id, student_id: s.student_id, name: s.name, phone: s.phone, class_id: s.class_id ?? undefined }); setShowForm(true) }}>
-                      <Pencil size={16} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(s.id)}>
-                      <Trash2 size={16} className="text-error" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}

@@ -27,6 +27,7 @@ export function AdminsPage() {
 
   const [sid, setSid] = useState('')
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [pwd, setPwd] = useState('')
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -36,11 +37,11 @@ export function AdminsPage() {
     if (!sid.trim() || !name.trim() || !pwd.trim()) return
     setCreating(true)
     setMsg('')
-    const { error } = await adminCreateUser(sid.trim(), name.trim(), pwd.trim(), null, 'admin')
+    const { error } = await adminCreateUser(sid.trim(), name.trim(), pwd.trim(), null, 'admin', phone.trim() || null)
     if (error) setMsg(error)
     else {
       setMsg(t('admins.created'))
-      setSid(''); setName(''); setPwd('')
+      setSid(''); setName(''); setPhone(''); setPwd('')
       refetch()
     }
     setCreating(false)
@@ -79,6 +80,7 @@ export function AdminsPage() {
               <tr>
                 <Th>{t('admins.columns.id')}</Th>
                 <Th>{t('admins.columns.name')}</Th>
+                <Th>Phone</Th>
                 <Th>{t('admins.columns.classes')}</Th>
                 <Th className="text-right">{t('admins.columns.actions')}</Th>
               </tr>
@@ -88,6 +90,15 @@ export function AdminsPage() {
                 <tr key={a.id}>
                   <Td className="font-mono text-sm text-muted">{a.student_id}</Td>
                   <Td className="font-medium text-text">{a.name}</Td>
+                  <Td className="text-xs font-mono font-medium text-emerald-600">
+                    {a.phone ? (
+                      <a href={`tel:${a.phone}`} className="hover:underline">
+                        📞 {a.phone}
+                      </a>
+                    ) : (
+                      <span className="text-muted/60 italic">No phone</span>
+                    )}
+                  </Td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {(adminClasses[a.id] ?? []).length === 0 ? (
@@ -164,6 +175,7 @@ export function AdminsPage() {
               <form onSubmit={handleCreate} className="space-y-3 max-w-md">
                 <Input id="admin-sid" label={t('admins.form.adminId')} value={sid} onChange={(e) => setSid(e.target.value)} required />
                 <Input id="admin-name" label={t('admins.form.name')} value={name} onChange={(e) => setName(e.target.value)} required />
+                <Input id="admin-phone" label="Contact Phone Number (For Student Calling)" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +252 61 5000000" />
                 <Input id="admin-pwd" label={t('admins.form.password')} type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} required />
                 <Button type="submit" loading={creating}>{t('admins.form.submit')}</Button>
                 {msg && <p className="text-sm text-secondary">{msg}</p>}
