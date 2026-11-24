@@ -2,18 +2,38 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
-import { Card, CardContent } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Table, TBody, Td, Th, THead } from '../../components/ui/Table'
-import { Badge } from '../../components/ui/Badge'
 import { useDashboard } from './useDashboard'
 import { StudentDashboardView } from './StudentDashboardView'
 import { cn, formatCurrency } from '../../lib/utils'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { Shield, Send } from 'lucide-react'
+import {
+  Shield, Send, TrendingUp, Users, DollarSign, Wallet,
+  LogIn, LogOut, Activity, GraduationCap, AlertCircle, CheckCircle2,
+  Clock, BarChart2
+} from 'lucide-react'
 import { ClassCommentsSection } from './ClassCommentsSection'
 import { BroadcastNotificationModal } from '../notifications/BroadcastNotificationModal'
 import type { Profile } from '../../lib/types'
+
+interface ActivityLogEntry {
+  id: string
+  user_id: string
+  action: string
+  event_type: string
+  timestamp: string
+  profiles?: { name: string; student_id: string; role: string }
+}
+
+function MiniBar({ pct, color }: { pct: number; color: string }) {
+  return (
+    <div className="h-2 w-full bg-[#ECECEC] dark:bg-[#1e3550] rounded-full overflow-hidden">
+      <div
+        className="h-full rounded-full transition-all duration-700"
+        style={{ width: `${Math.min(100, Math.max(0, pct))}%`, backgroundColor: color }}
+      />
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const { t } = useTranslation()
@@ -21,12 +41,29 @@ export function DashboardPage() {
   const classId = activeClassId
   const [showBroadcast, setShowBroadcast] = useState(false)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([])
+  const [logLoading, setLogLoading] = useState(false)
 
   useEffect(() => {
     supabase.from('classes').select('id, name').order('name').then(({ data }) => {
       if (data) setAvailableClasses(data)
     })
   }, [])
+
+  // Fetch recent activity log (login/logout events)
+  useEffect(() => {
+    if (user?.role !== 'super_admin' && user?.role !== 'admin') return
+    setLogLoading(true)
+    supabase
+      .from('activity_logs')
+      .select('*, profiles!activity_logs_user_id_fkey(name, student_id, role)')
+      .order('timestamp', { ascending: false })
+      .limit(15)
+      .then(({ data }) => {
+        if (data) setActivityLog(data as ActivityLogEntry[])
+        setLogLoading(false)
+      })
+  }, [user?.role])
 
   if (user?.role === 'student') {
     return <StudentDashboardView userId={user.id} classId={classId} />
@@ -65,8 +102,10 @@ export function DashboardPage() {
     return (
       <div className="space-y-5 w-full max-w-6xl mx-auto">
         <Skeleton className="h-6 w-40" />
-        <Skeleton className="h-48 w-full rounded-xl" />
-        <Skeleton className="h-32 w-full rounded-xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+        </div>
+        <Skeleton className="h-48 w-full rounded-2xl" />
       </div>
     )
   }
@@ -74,68 +113,44 @@ export function DashboardPage() {
   if (!data) {
     return (
       <div className="space-y-6 w-full max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center">
+            <BarChart2 size={20} className="text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">{t('dashboard.title')}</h1>
+        </div>
+
         {user?.role === 'super_admin' ? (
-          <Card>
-            <CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Shield size={20} className="text-brand-600" />
-                <h2 className="text-lg font-semibold text-text">{t('dashboard.superAdmin.title')}</h2>
+          <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Shield size={18} className="text-[#1176BC]" />
+              <h2 className="text-base font-bold text-[#1a2332] dark:text-[#e8f0f8]">{t('dashboard.superAdmin.title')}</h2>
+            </div>
+            {admins.length === 0 ? (
+              <p className="text-sm text-[#9FBBDE]">{t('dashboard.superAdmin.noAdmins')}</p>
+            ) : (
+              <div className="space-y-2">
+                {admins.map((a) => (
+                  <div key={a.id} className="flex items-center gap-3 p-3 rounded-xl bg-[#EAF4FB]/40 dark:bg-[#0d2a40]/40">
+                    <div className="size-8 rounded-full bg-[#1176BC] text-white text-xs font-bold flex items-center justify-center shrink-0">
+                      {a.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8]">{a.name}</p>
+                      <p className="text-xs text-[#9FBBDE]">{(adminClasses[a.id] ?? ['—']).join(', ')}</p>
+                    </div>
+                    <span className="text-xs font-mono text-[#9FBBDE]">{a.student_id}</span>
+                  </div>
+                ))}
               </div>
-              {admins.length === 0 ? (
-                <p className="text-sm text-muted">{t('dashboard.superAdmin.noAdmins')}</p>
-              ) : (
-                <>
-                  {/* Desktop */}
-                  <div className="hidden lg:block">
-                    <Table>
-                      <THead>
-                        <tr>
-                          <Th>{t('dashboard.superAdmin.adminId')}</Th>
-                          <Th>{t('dashboard.superAdmin.name')}</Th>
-                          <Th>{t('dashboard.superAdmin.assignedClasses')}</Th>
-                        </tr>
-                      </THead>
-                      <TBody>
-                        {admins.map((a) => (
-                          <tr key={a.id}>
-                            <Td className="font-mono text-sm text-muted">{a.student_id}</Td>
-                            <Td className="font-medium text-text">{a.name}</Td>
-                            <Td className="text-secondary">{(adminClasses[a.id] ?? ['—']).join(', ')}</Td>
-                          </tr>
-                        ))}
-                      </TBody>
-                    </Table>
-                  </div>
-                  {/* Mobile */}
-                  <div className="lg:hidden divide-y divide-border/40">
-                    {admins.map((a) => (
-                      <div key={a.id} className="py-3 first:pt-0 last:pb-0">
-                        <div className="flex items-start justify-between mb-1.5">
-                          <p className="text-sm font-semibold text-text">{a.name}</p>
-                          <span className="text-xs font-mono text-muted">{a.student_id}</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {(adminClasses[a.id] ?? []).map((cn, i) => (
-                            <Badge key={i} variant="default" className="text-[10px] px-2 py-0.5">{cn}</Badge>
-                          ))}
-                          {!(adminClasses[a.id]?.length) && <span className="text-xs text-muted">—</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              {/* Class Student Comments & Discussion Section for Super Admin */}
-              <ClassCommentsSection classId={classId} />
-            </CardContent>
-          </Card>
+            )}
+            <ClassCommentsSection classId={classId} />
+          </div>
         ) : (
-          <Card>
-            <CardContent className="py-12 text-center text-muted">
-              {t('dashboard.noClassAssigned')}
-            </CardContent>
-          </Card>
+          <div className="rounded-2xl border border-dashed border-[#9FBBDE]/40 bg-white dark:bg-[#132033] py-16 text-center text-[#9FBBDE]">
+            <GraduationCap size={44} className="mx-auto opacity-30 mb-3" />
+            <p className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8]">{t('dashboard.noClassAssigned')}</p>
+          </div>
         )}
       </div>
     )
@@ -143,64 +158,217 @@ export function DashboardPage() {
 
   const isPositive = data.remainingBalance >= 0
   const totalS = data.totalStudents || 1
+  const paidPct = (data.paidCount / totalS) * 100
+  const partialPct = (data.partialCount / totalS) * 100
+  const unpaidPct = (data.unpaidCount / totalS) * 100
 
   return (
-    <div className="space-y-5 w-full max-w-6xl mx-auto">
+    <div className="space-y-6 w-full max-w-6xl mx-auto">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text">{t('dashboard.title')}</h1>
-          <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name })}</p>
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm">
+            <BarChart2 size={20} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">{t('dashboard.title')}</h1>
+            <p className="text-xs text-[#9FBBDE]">{t('dashboard.welcome', { name: user?.name })}</p>
+          </div>
         </div>
-        <Button
+        <button
           onClick={() => setShowBroadcast(true)}
-          className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs sm:text-sm shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-sm font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95 w-full sm:w-auto justify-center"
         >
-          <Send size={15} /> 📢 Broadcast Notification
-        </Button>
+          <Send size={15} />
+          Broadcast Notification
+        </button>
       </div>
 
-      <Card className="border-none bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden shadow-sm">
-        <CardContent className="p-6 space-y-5">
-          <div>
-            <span className="text-[11px] uppercase tracking-widest text-white/40 font-semibold">
-              {t('dashboard.remainingBalance')}
-            </span>
-            <p className={cn('text-4xl font-serif font-bold tracking-tight tabular-nums mt-1', isPositive ? 'text-white' : 'text-error')}>
-              {formatCurrency(data.remainingBalance)}
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-4 border-t border-white/10">
-            <div>
-              <span className="text-[11px] text-white/40 font-medium block mb-0.5">{t('dashboard.totalContributions')}</span>
-              <p className="text-lg font-bold tabular-nums">{formatCurrency(data.totalContributions)}</p>
+      {/* Key Metrics — 4 cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          {
+            label: t('dashboard.totalContributions'),
+            value: formatCurrency(data.totalContributions),
+            icon: DollarSign,
+            color: '#1176BC',
+            bg: '#EAF4FB',
+            trend: '+' + data.totalStudents + ' contributors',
+          },
+          {
+            label: t('dashboard.totalExpenses'),
+            value: formatCurrency(data.totalExpenses),
+            icon: Wallet,
+            color: '#d97706',
+            bg: '#fffbeb',
+            trend: 'Total spent',
+          },
+          {
+            label: t('dashboard.remainingBalance'),
+            value: formatCurrency(data.remainingBalance),
+            icon: TrendingUp,
+            color: isPositive ? '#0C9B5E' : '#DC2626',
+            bg: isPositive ? '#f0fdf4' : '#fef2f2',
+            trend: isPositive ? 'Surplus' : 'Deficit',
+          },
+          {
+            label: t('dashboard.students'),
+            value: String(data.totalStudents),
+            icon: Users,
+            color: '#25A8E0',
+            bg: '#EAF4FB',
+            trend: `${data.paidCount} fully paid`,
+          },
+        ].map((m) => (
+          <div
+            key={m.label}
+            className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-4 flex flex-col gap-2"
+          >
+            <div className="flex items-center justify-between">
+              <div className="size-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: m.bg }}>
+                <m.icon size={18} style={{ color: m.color }} />
+              </div>
             </div>
             <div>
-              <span className="text-[11px] text-white/40 font-medium block mb-0.5">{t('dashboard.totalExpenses')}</span>
-              <p className="text-lg font-bold tabular-nums">{formatCurrency(data.totalExpenses)}</p>
+              <p className="text-xs text-[#9FBBDE] font-medium">{m.label}</p>
+              <p className="text-lg font-bold text-[#1a2332] dark:text-[#e8f0f8] tabular-nums mt-0.5">{m.value}</p>
+              <p className="text-[10px] text-[#9FBBDE] mt-0.5">{m.trend}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
 
-      <Card>
-        <CardContent className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-secondary">{t('dashboard.paymentStatus')}</h3>
-            <span className="text-xs text-muted font-medium">{data.totalStudents} {t('dashboard.students').toLowerCase()}</span>
+      {/* Payment Status Chart */}
+      <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-5 space-y-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BarChart2 size={16} className="text-[#1176BC]" />
+            <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">{t('dashboard.paymentStatus')}</h3>
           </div>
-          <div className="h-2 w-full bg-bg-elevated rounded-full flex overflow-hidden">
-            <div className="h-full bg-success transition-all duration-500" style={{ width: `${(data.paidCount / totalS) * 100}%` }} />
-            <div className="h-full bg-warning transition-all duration-500" style={{ width: `${(data.partialCount / totalS) * 100}%` }} />
-            <div className="h-full bg-error transition-all duration-500" style={{ width: `${(data.unpaidCount / totalS) * 100}%` }} />
+          <span className="text-xs text-[#9FBBDE] font-medium">{data.totalStudents} students</span>
+        </div>
+
+        {/* Stacked bar */}
+        <div className="h-3 w-full rounded-full flex overflow-hidden gap-0.5">
+          <div className="h-full bg-[#1176BC] transition-all duration-700 rounded-l-full" style={{ width: `${paidPct}%` }} />
+          <div className="h-full bg-[#f59e0b] transition-all duration-700" style={{ width: `${partialPct}%` }} />
+          <div className="h-full bg-[#ef4444] transition-all duration-700 rounded-r-full" style={{ width: `${unpaidPct}%` }} />
+        </div>
+
+        {/* Detailed rows */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { label: t('dashboard.paid'), count: data.paidCount, pct: paidPct, color: '#1176BC', icon: CheckCircle2 },
+            { label: t('dashboard.partial'), count: data.partialCount, pct: partialPct, color: '#f59e0b', icon: Clock },
+            { label: t('dashboard.unpaid'), count: data.unpaidCount, pct: unpaidPct, color: '#ef4444', icon: AlertCircle },
+          ].map((row) => (
+            <div key={row.label} className="rounded-xl bg-[#ECECEC]/40 dark:bg-[#1a2d42]/60 p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <row.icon size={13} style={{ color: row.color }} />
+                <span className="text-xs font-semibold text-[#4a5a72] dark:text-[#9FBBDE]">{row.label}</span>
+              </div>
+              <p className="text-xl font-bold" style={{ color: row.color }}>{row.count}</p>
+              <MiniBar pct={row.pct} color={row.color} />
+              <p className="text-[10px] text-[#9FBBDE]">{Math.round(row.pct)}% of class</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Admin List (super admin) */}
+      {user?.role === 'super_admin' && admins.length > 0 && (
+        <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Shield size={16} className="text-[#1176BC]" />
+            <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">{t('dashboard.superAdmin.title')}</h3>
           </div>
-          <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2 text-xs">
-            <div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-success" /><span className="text-secondary font-medium">{data.paidCount} {t('dashboard.paid')}</span></div>
-            <div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-warning" /><span className="text-secondary font-medium">{data.partialCount} {t('dashboard.partial')}</span></div>
-            <div className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-error" /><span className="text-secondary font-medium">{data.unpaidCount} {t('dashboard.unpaid')}</span></div>
+          <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
+            {admins.map((a) => (
+              <div key={a.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <div className="size-9 rounded-full bg-gradient-to-br from-[#1176BC] to-[#25A8E0] text-white text-sm font-bold flex items-center justify-center shrink-0">
+                  {a.name[0]?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">{a.name}</p>
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {(adminClasses[a.id] ?? []).map((cn, i) => (
+                      <span key={i} className="text-[10px] font-semibold bg-[#EAF4FB] dark:bg-[#0d2a40] text-[#1176BC] px-2 py-0.5 rounded-full border border-[#9FBBDE]/30">
+                        {cn}
+                      </span>
+                    ))}
+                    {!(adminClasses[a.id]?.length) && <span className="text-xs text-[#9FBBDE]">No classes</span>}
+                  </div>
+                </div>
+                <span className="text-xs font-mono text-[#9FBBDE]">{a.student_id}</span>
+              </div>
+            ))}
           </div>
-        </CardContent>
-      </Card>
-      {/* Class Student Comments & Discussion Section */}
+        </div>
+      )}
+
+      {/* Activity Log */}
+      <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity size={16} className="text-[#25A8E0]" />
+            <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">Recent Activity</h3>
+          </div>
+          <span className="text-xs text-[#9FBBDE]">Last 15 events</span>
+        </div>
+        {logLoading ? (
+          <div className="space-y-2">
+            {[1,2,3].map(i => (
+              <div key={i} className="flex items-center gap-3 animate-pulse">
+                <div className="size-7 rounded-full bg-[#ECECEC] dark:bg-[#1e3550]" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-3 w-32 bg-[#ECECEC] dark:bg-[#1e3550] rounded" />
+                  <div className="h-2.5 w-20 bg-[#ECECEC] dark:bg-[#1e3550] rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : activityLog.length === 0 ? (
+          <p className="text-xs text-[#9FBBDE] py-4 text-center">No activity logged yet. Login/logout events will appear here.</p>
+        ) : (
+          <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
+            {activityLog.map((log) => {
+              const isLogin = log.action?.toLowerCase().includes('login') || log.event_type === 'login'
+              const isLogout = log.action?.toLowerCase().includes('logout') || log.event_type === 'logout'
+              return (
+                <div key={log.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className={cn(
+                    'size-7 rounded-full flex items-center justify-center shrink-0',
+                    isLogin ? 'bg-[#EAF4FB] dark:bg-[#0d2a40]' : isLogout ? 'bg-red-50 dark:bg-red-950/30' : 'bg-[#ECECEC] dark:bg-[#1a2d42]'
+                  )}>
+                    {isLogin ? <LogIn size={13} className="text-[#1176BC]" /> : isLogout ? <LogOut size={13} className="text-red-500" /> : <Activity size={13} className="text-[#9FBBDE]" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">
+                      {log.profiles?.name || 'Unknown User'}
+                      <span className="font-normal text-[#9FBBDE] ml-1">· {log.action}</span>
+                    </p>
+                    <p className="text-[10px] text-[#9FBBDE]">{new Date(log.timestamp).toLocaleString()}</p>
+                  </div>
+                  {log.profiles?.role && (
+                    <span className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0',
+                      log.profiles.role === 'super_admin'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400'
+                        : log.profiles.role === 'admin'
+                        ? 'bg-[#EAF4FB] text-[#1176BC] border-[#9FBBDE]/30'
+                        : 'bg-[#ECECEC] text-[#9FBBDE] border-[#C6CACB]/30'
+                    )}>
+                      {log.profiles.role}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Class Discussion */}
       <ClassCommentsSection classId={classId} />
 
       <BroadcastNotificationModal

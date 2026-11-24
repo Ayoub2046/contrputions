@@ -6,4 +6,12 @@ const supabaseAnonKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   import.meta.env.SUPABASE_PUBLISHABLE_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Keep the session alive in localStorage so new tabs pick it up automatically
+    persistSession: true,
+    storageKey: 'classbank_auth',
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+  },
+})

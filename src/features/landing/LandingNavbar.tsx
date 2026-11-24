@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../../hooks/useTheme'
 import { Sun, Moon, Globe, Menu, X, ArrowRight, LogOut, HeartHandshake } from 'lucide-react'
 import { PwaInstallButton } from '../../components/pwa/PwaInstallButton'
+import { AppLogo } from '../../hooks/useAppLogo'
 
 export function LandingNavbar() {
   const { i18n } = useTranslation()
@@ -22,7 +23,7 @@ export function LandingNavbar() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand */}
         <Link to="/" className="flex items-center gap-2.5 group">
-          <img src="/classBankLogo.png" alt="ClassBank" className="h-9 w-auto object-contain transition-transform group-hover:scale-105" />
+          <AppLogo className="h-9 w-auto object-contain transition-transform group-hover:scale-105" alt="ClassBank" />
           <span className="font-serif text-2xl font-bold tracking-tight text-text">ClassBank</span>
         </Link>
 

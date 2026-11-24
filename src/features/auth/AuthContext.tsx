@@ -92,13 +92,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return
+      // INITIAL_SESSION fires when a new tab opens and finds an existing session.
+      // We must NOT clear the user on this event — just load the profile.
       if (session?.user) {
         fetchProfile(session.user.id)
-      } else {
+      } else if (_event !== 'INITIAL_SESSION') {
+        // Only clear user on actual sign-out events, not on page load with no session
         setUser(null)
         setActiveClassId(null)
         setAdminClassIds([])
         setAdminClasses([])
+        setLoading(false)
+      } else {
+        // No session on INITIAL_SESSION (truly not logged in)
         setLoading(false)
       }
     })
@@ -122,6 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profile) {
         setUser(profile)
         await fetchAdminClasses(profile)
+        // Log login event
+        supabase.from('activity_logs').insert({
+          user_id: data.user.id,
+          action: 'login',
+          event_type: 'login',
+        } as never).then(() => {}, () => {})
       }
     }
     setLoading(false)
@@ -130,6 +142,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     try {
+      // Log logout event before clearing session
+      const uid = (await supabase.auth.getUser()).data.user?.id
+      if (uid) {
+        await supabase.from('activity_logs').insert({
+          user_id: uid,
+          action: 'logout',
+          event_type: 'logout',
+        } as never).then(() => {}, () => {})
+      }
       await supabase.auth.signOut()
     } catch (err) {
       console.warn('Sign out warning:', err)
@@ -141,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         for (let i = localStorage.length - 1; i >= 0; i--) {
           const key = localStorage.key(i)
-          if (key && (key.startsWith('sb-') || key.includes('supabase.auth.token'))) {
+          if (key && (key.startsWith('classbank_auth') || key.includes('supabase.auth.token'))) {
             localStorage.removeItem(key)
           }
         }

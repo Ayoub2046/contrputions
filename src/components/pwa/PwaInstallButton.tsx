@@ -43,7 +43,7 @@ export function PwaInstallButton({ className = '', size = 'md' }: PwaInstallButt
     <>
       <button
         onClick={handleClick}
-        className={`inline-flex items-center gap-2 rounded-btn font-semibold transition-all shadow-sm cursor-pointer bg-brand-600 text-white hover:bg-brand-600/90 active:scale-95 ${sizeClasses} ${className}`}
+        className={`inline-flex items-center gap-2 rounded-xl font-semibold transition-all shadow-sm cursor-pointer bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white hover:opacity-95 active:scale-95 ${sizeClasses} ${className}`}
         title="Install ClassBank PWA App on your device"
       >
         <Smartphone size={size === 'sm' ? 14 : 16} className="text-white" />

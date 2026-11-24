@@ -19,6 +19,10 @@
           document.documentElement.classList.add('dark');
           document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0F172A');
         }
+        window.addEventListener('beforeinstallprompt', function(e) {
+          e.preventDefault();
+          window.__deferredPwaPrompt = e;
+        });
       })();
     </script>
   </head>

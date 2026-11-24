@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ShieldCheck, Smartphone } from 'lucide-react'
+import { AppLogo } from '../../hooks/useAppLogo'
 
 export function LandingFooter() {
   const currentYear = new Date().getFullYear()
@@ -11,7 +12,7 @@ export function LandingFooter() {
           {/* Brand Col */}
           <div className="md:col-span-5 space-y-4">
             <div className="flex items-center gap-2.5">
-              <img src="/classBankLogo.png" alt="ClassBank" className="h-8 w-auto object-contain" />
+              <AppLogo className="h-8 w-auto object-contain" alt="ClassBank" />
               <span className="font-serif text-2xl font-bold tracking-tight text-text">ClassBank</span>
             </div>
             <p className="text-sm text-secondary max-w-sm leading-relaxed">

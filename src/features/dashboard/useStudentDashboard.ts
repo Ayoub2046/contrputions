@@ -59,8 +59,14 @@ export function useStudentDashboard(userId?: string | null, classId?: string | n
         .select('name, contribution_target')
         .eq('id', classId)
         .single(),
+      supabase
+        .from('student_contribution_targets')
+        .select('target_amount')
+        .eq('student_id', userId)
+        .eq('class_id', classId)
+        .maybeSingle(),
     ])
-      .then(([myContribRes, statusRes, expenseRes, classRes]) => {
+      .then(([myContribRes, statusRes, expenseRes, classRes, customTargetRes]) => {
         if (!active) return
         clearTimeout(timeout)
 
@@ -68,8 +74,10 @@ export function useStudentDashboard(userId?: string | null, classId?: string | n
         const studentStatuses = (statusRes?.data ?? []) as { student_id: string; total: number }[]
         const expenses = (expenseRes?.data ?? []) as { amount: number }[]
         const classData = classRes?.data as { name: string; contribution_target: number } | null
+        const customTarget = (customTargetRes?.data as any)?.target_amount
 
-        const target = classData?.contribution_target ?? 0
+        // Use custom per-student target if assigned, otherwise fallback to class default
+        const target = customTarget != null ? Number(customTarget) : (classData?.contribution_target ?? 0)
         const personalTotal = contributions.reduce((s: number, c) => s + Number(c.amount), 0)
         const classTotal = studentStatuses.reduce((s: number, st) => s + Number(st.total), 0)
         const expenseTotal = expenses.reduce((s: number, e: { amount: number }) => s + Number(e.amount), 0)

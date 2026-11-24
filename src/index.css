@@ -1,65 +1,82 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: 'Instrument Sans', sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-serif: 'Instrument Serif', serif;
 
+  /* ClassBank Blue Palette */
   --color-bg-main: #F4F6FA;
   --color-bg-card: #FFFFFF;
   --color-bg-sidebar: #FFFFFF;
-  --color-bg-elevated: #F1F3F6;
+  --color-bg-elevated: #ECECEC;
 
-  --color-brand-900: #1B3A5C;
-  --color-brand-600: #2D6BFF;
-  --color-brand-50: #EEF3FF;
+  --color-brand-900: #0D5A8A;
+  --color-brand-600: #1176BC;
+  --color-brand-500: #25A8E0;
+  --color-brand-50:  #EAF4FB;
 
-  --color-text: #0F172A;
-  --color-secondary: #5A6A7E;
-  --color-muted: #94A3B8;
+  --color-text: #1a2332;
+  --color-secondary: #4a5a72;
+  --color-muted: #9FBBDE;
 
-  --color-border: #E8ECF0;
-  --color-border-hover: #D0D6DD;
+  --color-border: #ECECEC;
+  --color-border-hover: #C6CACB;
 
   --color-success: #0C9B5E;
   --color-warning: #DC8900;
   --color-error: #DC2626;
-  --color-info: #2D6BFF;
+  --color-info: #25A8E0;
 
   --radius-card: 12px;
   --radius-btn: 8px;
 }
 
 .dark {
-  --color-bg-main: #0F172A;
-  --color-bg-card: #1E293B;
-  --color-bg-sidebar: #1E293B;
-  --color-bg-elevated: #334155;
+  --color-bg-main: #0d1824;
+  --color-bg-card: #132033;
+  --color-bg-sidebar: #132033;
+  --color-bg-elevated: #1a2d42;
 
-  --color-brand-900: #60A5FA;
-  --color-brand-600: #3B82F6;
-  --color-brand-50: #1E3A5F;
+  --color-brand-900: #9FBBDE;
+  --color-brand-600: #25A8E0;
+  --color-brand-500: #25A8E0;
+  --color-brand-50:  #0d2a40;
 
-  --color-text: #F1F5F9;
-  --color-secondary: #94A3B8;
-  --color-muted: #64748B;
+  --color-text: #e8f0f8;
+  --color-secondary: #9FBBDE;
+  --color-muted: #C6CACB;
 
-  --color-border: #334155;
-  --color-border-hover: #475569;
+  --color-border: #1e3550;
+  --color-border-hover: #2a4a6a;
 
   --color-success: #22C55E;
   --color-warning: #EAB308;
   --color-error: #EF4444;
-  --color-info: #3B82F6;
+  --color-info: #25A8E0;
 }
 
 @layer base {
   body {
     @apply bg-bg-main text-text antialiased font-sans;
+    font-feature-settings: "cv11", "ss01";
   }
   select {
     @apply appearance-none;
+  }
+  /* Ensure text is always visible in both light and dark modes */
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-text font-semibold;
+  }
+  p {
+    @apply text-secondary;
+  }
+  /* Smooth color transitions for theme switching */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
   }
 }
