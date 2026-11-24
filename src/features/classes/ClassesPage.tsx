@@ -262,17 +262,31 @@ export function ClassesPage() {
   const availableClassesForImport = classes.map((c) => ({ id: c.id, name: c.name }))
 
   if (user?.role !== ROLES.SUPER_ADMIN) {
+    const isFinanceManager = user?.role === ROLES.FINANCE_MANAGER
     return (
       <div className="space-y-6 w-full max-w-7xl mx-auto">
         {/* Page header */}
-        <div className="flex items-center gap-3">
-          <div className="size-10 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm">
-            <School size={20} className="text-white" />
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm">
+              <School size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">
+                {isFinanceManager ? 'All Classes Financial Overview' : 'My Classes'}
+              </h1>
+              <p className="text-xs text-[#9FBBDE]">
+                {isFinanceManager
+                  ? 'Select any class to inspect students who paid and pending dues (Read-Only)'
+                  : 'Classes assigned to your admin account'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">My Classes</h1>
-            <p className="text-xs text-[#9FBBDE]">Classes assigned to your admin account</p>
-          </div>
+          {isFinanceManager && (
+            <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+              💼 Finance Manager · Read-Only Auditing
+            </span>
+          )}
         </div>
         <AdminClassesView
           classes={classes}

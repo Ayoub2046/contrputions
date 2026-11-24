@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
+import { supabase } from '../../lib/supabase'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -9,14 +10,30 @@ import { Modal } from '../../components/ui/Modal'
 import { useExpenses, useExpenseTotal } from './useExpenses'
 import { formatCurrency, formatDate } from '../../lib/utils'
 import { SkeletonTable } from '../../components/ui/Skeleton'
-import { Plus, Trash2, Receipt } from 'lucide-react'
+import { Plus, Trash2, Receipt, Filter } from 'lucide-react'
 
 export function ExpensesPage() {
   const { t } = useTranslation()
-  const { activeClassId } = useAuth()
-  const classId = activeClassId
+  const { user, activeClassId, setActiveClassId } = useAuth()
+  const isFinanceManager = user?.role === 'finance_manager'
+  const canViewAllClasses = user?.role === 'super_admin' || isFinanceManager
+  const [selectedClass, setSelectedClass] = useState<string>(activeClassId || '')
+  const [classes, setClasses] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    if (!canViewAllClasses) return
+    supabase.from('classes').select('id, name').order('name').then(({ data }) => {
+      if (data) setClasses(data)
+    })
+  }, [canViewAllClasses])
+
+  useEffect(() => {
+    setSelectedClass(activeClassId || '')
+  }, [activeClassId])
+
+  const classId = canViewAllClasses ? (selectedClass || null) : activeClassId
   const { expenses, loading, create, remove } = useExpenses(classId)
-  const { total } = useExpenseTotal(classId)
+  const { total } = useExpenseTotal(classId, canViewAllClasses)
 
   const [showForm, setShowForm] = useState(false)
   const [description, setDescription] = useState('')
@@ -42,9 +59,38 @@ export function ExpensesPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-text">{t('expenses.title')}</h1>
           <p className="text-2xl sm:text-3xl font-serif font-bold text-error tabular-nums mt-1">{formatCurrency(total)}</p>
         </div>
-        <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto justify-center">
-          <Plus size={16} /> {t('expenses.record')}
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {canViewAllClasses && classes.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-bg-card">
+              <Filter size={14} className="text-brand-600" />
+              <select
+                value={selectedClass}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setSelectedClass(val)
+                  setActiveClassId(val || null)
+                }}
+                className="text-xs font-semibold text-text bg-transparent focus:outline-none cursor-pointer"
+              >
+                <option value="">🌐 All Classes</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    📚 {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {isFinanceManager ? (
+            <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+              💼 Finance Manager · Read-Only Auditing
+            </span>
+          ) : (
+            <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto justify-center">
+              <Plus size={16} /> {t('expenses.record')}
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -77,11 +123,13 @@ export function ExpensesPage() {
                       <Td className="font-semibold text-error tabular-nums">{formatCurrency(Number(e.amount))}</Td>
                       <Td className="text-secondary">{formatDate(e.date)}</Td>
                       <Td>
-                        <div className="flex justify-end">
-                          <Button variant="ghost" size="sm" onClick={() => remove(e.id)}>
-                            <Trash2 size={16} className="text-error" />
-                          </Button>
-                        </div>
+                        {!isFinanceManager && (
+                          <div className="flex justify-end">
+                            <Button variant="ghost" size="sm" onClick={() => remove(e.id)}>
+                              <Trash2 size={16} className="text-error" />
+                            </Button>
+                          </div>
+                        )}
                       </Td>
                     </tr>
                   ))}
@@ -103,9 +151,11 @@ export function ExpensesPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-2">
                     <span className="text-base font-bold text-error tabular-nums">-{formatCurrency(Number(e.amount))}</span>
-                    <Button variant="ghost" size="sm" onClick={() => remove(e.id)}>
-                      <Trash2 size={15} className="text-error" />
-                    </Button>
+                    {!isFinanceManager && (
+                      <Button variant="ghost" size="sm" onClick={() => remove(e.id)}>
+                        <Trash2 size={15} className="text-error" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

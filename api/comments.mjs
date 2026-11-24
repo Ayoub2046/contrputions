@@ -98,7 +98,7 @@ export default async function handler(req, res) {
       const reqClassId = url.searchParams.get('class_id')
 
       let filterClassId = null
-      if (caller.role === 'super_admin') {
+      if (caller.role === 'super_admin' || caller.role === 'finance_manager') {
         filterClassId = reqClassId && reqClassId !== 'all' ? reqClassId : null
       } else if (caller.role === 'admin') {
         if (reqClassId && reqClassId !== 'all') {

@@ -64,6 +64,7 @@ export function ReportsPage() {
   const appName = useAppName()
   const { user, activeClassId, adminClasses } = useAuth()
   const isSuperAdmin = user?.role === 'super_admin'
+  const canViewAllClasses = isSuperAdmin || user?.role === 'finance_manager'
 
   // Available classes & selected class scope
   const [classes, setClasses] = useState<ClassOption[]>([])
@@ -101,7 +102,7 @@ export function ReportsPage() {
   // 1. Load Available Classes
   useEffect(() => {
     async function loadClasses() {
-      if (isSuperAdmin) {
+      if (canViewAllClasses) {
         const { data } = await supabase.from('classes').select('id, name, contribution_target').order('name')
         if (data) {
           setClasses(data)
@@ -117,7 +118,7 @@ export function ReportsPage() {
       }
     }
     loadClasses()
-  }, [isSuperAdmin, activeClassId, adminClasses])
+  }, [canViewAllClasses, activeClassId, adminClasses])
 
   // 2. Fetch Live Financial Records based on Selected Scope
   useEffect(() => {
@@ -133,7 +134,7 @@ export function ReportsPage() {
 
         if (selectedClassId !== 'all') {
           contribQuery = contribQuery.eq('class_id', selectedClassId)
-        } else if (!isSuperAdmin && adminClasses.length > 0) {
+        } else if (!canViewAllClasses && adminClasses.length > 0) {
           contribQuery = contribQuery.in('class_id', adminClasses.map((c) => c.id))
         }
 
@@ -147,7 +148,7 @@ export function ReportsPage() {
 
         if (selectedClassId !== 'all') {
           expenseQuery = expenseQuery.eq('class_id', selectedClassId)
-        } else if (!isSuperAdmin && adminClasses.length > 0) {
+        } else if (!canViewAllClasses && adminClasses.length > 0) {
           expenseQuery = expenseQuery.in('class_id', adminClasses.map((c) => c.id))
         }
 
@@ -162,7 +163,7 @@ export function ReportsPage() {
 
         if (selectedClassId !== 'all') {
           studentQuery = studentQuery.eq('class_id', selectedClassId)
-        } else if (!isSuperAdmin && adminClasses.length > 0) {
+        } else if (!canViewAllClasses && adminClasses.length > 0) {
           studentQuery = studentQuery.in('class_id', adminClasses.map((c) => c.id))
         }
 
@@ -202,7 +203,7 @@ export function ReportsPage() {
     }
 
     fetchLedgerData()
-  }, [selectedClassId, isSuperAdmin, adminClasses, classes])
+  }, [selectedClassId, canViewAllClasses, adminClasses, classes])
 
   // Calculated Real-time Financial Totals
   const totalContributions = useMemo(() => {
@@ -383,7 +384,7 @@ export function ReportsPage() {
               onChange={(e) => setSelectedClassId(e.target.value)}
               className="bg-transparent text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] focus:outline-hidden cursor-pointer"
             >
-              {isSuperAdmin && (
+              {canViewAllClasses && (
                 <option value="all" className="bg-white dark:bg-[#132033]">
                   All Classes (Master Ledger)
                 </option>

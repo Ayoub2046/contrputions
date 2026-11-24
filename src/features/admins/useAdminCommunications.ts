@@ -17,11 +17,11 @@ export function useAdminCommunications() {
 
   const fetchAdmins = useCallback(async () => {
     try {
-      // 1. Fetch all super_admin and admin profiles
+      // 1. Fetch all super_admin, admin, and finance_manager profiles
       const { data: profiles, error: pErr } = await supabase
         .from('profiles')
         .select('*')
-        .in('role', ['super_admin', 'admin'])
+        .in('role', ['super_admin', 'admin', 'finance_manager'])
         .order('role', { ascending: false })
 
       if (profiles && !pErr) {

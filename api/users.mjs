@@ -221,7 +221,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PUT') {
-      const { id, student_id, password, name, phone, class_id } = req.body || {}
+      const { id, student_id, password, name, phone, class_id, role } = req.body || {}
       if (!id) return res.status(400).json({ error: 'Missing user id' })
 
       // Target privilege check
@@ -267,6 +267,7 @@ export default async function handler(req, res) {
       if (name) profileUpdates.name = name.trim()
       if (phone !== undefined) profileUpdates.phone = phone ? phone.trim() : null
       if (class_id !== undefined) profileUpdates.class_id = class_id
+      if (role && auth.caller.role === 'super_admin') profileUpdates.role = role
 
       if (Object.keys(profileUpdates).length > 0) {
         const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${id}`, {

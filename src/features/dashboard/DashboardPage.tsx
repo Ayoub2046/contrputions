@@ -76,11 +76,13 @@ export function DashboardPage() {
     return <StudentDashboardView userId={user.id} classId={activeClassId} />
   }
 
-  // Super admin can view all classes or a selected class
-  const classFilter = user?.role === 'super_admin' ? selectedClassId : activeClassId
+  const canSelectAllClasses = user?.role === 'super_admin' || user?.role === 'finance_manager'
+  const classFilter = canSelectAllClasses ? selectedClassId : activeClassId
   const { data, loading } = useDashboard(classFilter)
   const [admins, setAdmins] = useState<Profile[]>([])
   const [adminClasses, setAdminClasses] = useState<Record<string, string[]>>({})
+  const [classComparisonTab, setClassComparisonTab] = useState<'top' | 'unpaid'>('top')
+  const [studentStatusTab, setStudentStatusTab] = useState<'all' | 'paid' | 'unpaid'>('all')
 
   useEffect(() => {
     if (user?.role !== 'super_admin') return
@@ -126,10 +128,21 @@ export function DashboardPage() {
             <BarChart2 size={22} className="text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">
-              {user?.role === 'super_admin' ? 'Executive Dashboard' : t('dashboard.title')}
-            </h1>
-            <p className="text-xs text-[#9FBBDE]">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">
+                {user?.role === 'finance_manager'
+                  ? 'Finance Manager Dashboard'
+                  : user?.role === 'super_admin'
+                  ? 'Executive Dashboard'
+                  : t('dashboard.title')}
+              </h1>
+              {user?.role === 'finance_manager' && (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                  💼 Global Finance Auditing (Read-Only)
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#9FBBDE] mt-0.5">
               {selectedClassId
                 ? availableClasses.find((c) => c.id === selectedClassId)?.name || 'Class Group'
                 : 'All Classes Overview'} · Real-time Financial Ledger
@@ -138,8 +151,8 @@ export function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Class Filter Dropdown for Super Admin */}
-          {user?.role === 'super_admin' && (
+          {/* Class Filter Dropdown for Super Admin & Finance Manager */}
+          {canSelectAllClasses && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033]">
               <Filter size={14} className="text-[#1176BC]" />
               <select
@@ -171,14 +184,16 @@ export function DashboardPage() {
             <span>Report</span>
           </button>
 
-          {/* Broadcast Push Notification */}
-          <button
-            onClick={() => setShowBroadcast(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-xs font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95"
-          >
-            <Send size={13} />
-            <span>Broadcast Alert</span>
-          </button>
+          {/* Broadcast Push Notification (Admins only) */}
+          {user?.role !== 'finance_manager' && (
+            <button
+              onClick={() => setShowBroadcast(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-xs font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95"
+            >
+              <Send size={13} />
+              <span>Broadcast Alert</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -324,16 +339,40 @@ export function DashboardPage() {
               )}
             </div>
 
-            {/* Chart 2: Top Classes by Income Comparison */}
+            {/* Chart 2: Top Classes by Income Comparison & Unpaid Classes */}
             <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-5 space-y-4 shadow-2xs">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <BarChart2 size={18} className="text-[#25A8E0]" />
                   <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">
-                    Class Contribution Comparison
+                    Class Financial Performance
                   </h3>
                 </div>
-                <span className="text-[11px] text-[#9FBBDE] font-semibold">Total Income per Class</span>
+                {/* Comparison Tab Selector */}
+                <div className="flex items-center gap-1 bg-[#ECECEC]/60 dark:bg-[#0e1726] p-0.5 rounded-lg self-start">
+                  <button
+                    type="button"
+                    onClick={() => setClassComparisonTab('top')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      classComparisonTab === 'top'
+                        ? 'bg-white dark:bg-[#132033] text-[#0C9B5E] shadow-2xs'
+                        : 'text-[#9FBBDE] hover:text-[#1a2332]'
+                    }`}
+                  >
+                    🏆 Top Paid
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClassComparisonTab('unpaid')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                      classComparisonTab === 'unpaid'
+                        ? 'bg-white dark:bg-[#132033] text-[#ef4444] shadow-2xs'
+                        : 'text-[#9FBBDE] hover:text-[#1a2332]'
+                    }`}
+                  >
+                    ⚠️ Unpaid Dues
+                  </button>
+                </div>
               </div>
 
               {data.topClasses.length === 0 ? (
@@ -342,9 +381,22 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {data.topClasses.map((cls) => {
+                  {(classComparisonTab === 'top'
+                    ? [...data.topClasses].sort((a, b) => b.total_income - a.total_income)
+                    : [...data.topClasses].sort((a, b) => {
+                        const unpaidA = Math.max(0, (a.target * a.student_count) - a.total_income)
+                        const unpaidB = Math.max(0, (b.target * b.student_count) - b.total_income)
+                        return unpaidB - unpaidA
+                      })
+                  ).map((cls) => {
+                    const expectedTotal = cls.target * cls.student_count
+                    const unpaidAmount = Math.max(0, expectedTotal - cls.total_income)
                     const maxClassIncome = Math.max(...data.topClasses.map((c) => c.total_income), 1)
-                    const incomePct = (cls.total_income / maxClassIncome) * 100
+                    const maxUnpaid = Math.max(...data.topClasses.map((c) => Math.max(0, (c.target * c.student_count) - c.total_income)), 1)
+                    const barPct = classComparisonTab === 'top'
+                      ? (cls.total_income / maxClassIncome) * 100
+                      : (unpaidAmount / maxUnpaid) * 100
+
                     return (
                       <div key={cls.class_id} className="space-y-1.5">
                         <div className="flex items-center justify-between text-xs">
@@ -357,21 +409,40 @@ export function DashboardPage() {
                             </span>
                           </div>
                           <div className="text-right">
-                            <span className="font-bold text-[#0C9B5E] tabular-nums">
-                              {formatCurrency(cls.total_income)}
-                            </span>
-                            {cls.target > 0 && (
-                              <span className="text-[10px] text-[#9FBBDE] ml-1">
-                                / {formatCurrency(cls.target * cls.student_count)} target
-                              </span>
+                            {classComparisonTab === 'top' ? (
+                              <>
+                                <span className="font-bold text-[#0C9B5E] tabular-nums">
+                                  {formatCurrency(cls.total_income)}
+                                </span>
+                                {cls.target > 0 && (
+                                  <span className="text-[10px] text-[#9FBBDE] ml-1">
+                                    / {formatCurrency(expectedTotal)} target
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <span className={`font-bold tabular-nums ${unpaidAmount > 0 ? 'text-[#ef4444]' : 'text-[#0C9B5E]'}`}>
+                                  {unpaidAmount > 0 ? `-${formatCurrency(unpaidAmount)} unpaid` : '✓ Fully Cleared'}
+                                </span>
+                                <span className="text-[10px] text-[#9FBBDE] ml-1">
+                                  ({formatCurrency(cls.total_income)} collected)
+                                </span>
+                              </>
                             )}
                           </div>
                         </div>
                         {/* Visual Progress Bar */}
                         <div className="h-2.5 w-full bg-[#ECECEC] dark:bg-[#1e3550] rounded-full overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-[#25A8E0] to-[#0C9B5E] transition-all duration-700"
-                            style={{ width: `${Math.max(5, incomePct)}%` }}
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              classComparisonTab === 'top'
+                                ? 'bg-gradient-to-r from-[#25A8E0] to-[#0C9B5E]'
+                                : unpaidAmount > 0
+                                ? 'bg-gradient-to-r from-amber-500 to-red-500'
+                                : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${Math.max(5, barPct)}%` }}
                           />
                         </div>
                       </div>
@@ -461,6 +532,98 @@ export function DashboardPage() {
               ))}
             </div>
           </div>
+
+          {/* Row 3.5: Students Paid vs Unpaid Audit Directory (Read-Only) */}
+          {data.studentsStatusList.length > 0 && (
+            <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-5 space-y-4 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Users size={16} className="text-[#1176BC]" />
+                  <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">
+                    Students Payment Status Directory
+                  </h3>
+                </div>
+                <div className="flex items-center gap-1 bg-[#ECECEC]/60 dark:bg-[#0e1726] p-0.5 rounded-lg self-start">
+                  {[
+                    { id: 'all', label: `All (${data.totalStudents})` },
+                    { id: 'paid', label: `✅ Paid (${data.paidCount})` },
+                    { id: 'unpaid', label: `⚠️ Unpaid / Partial (${data.unpaidCount + data.partialCount})` },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setStudentStatusTab(tab.id as 'all' | 'paid' | 'unpaid')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                        studentStatusTab === tab.id
+                          ? 'bg-white dark:bg-[#132033] text-[#1176BC] shadow-2xs'
+                          : 'text-[#9FBBDE] hover:text-[#1a2332]'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto divide-y divide-[#ECECEC] dark:divide-[#1e3550] pr-1">
+                {data.studentsStatusList
+                  .filter((st) =>
+                    studentStatusTab === 'all'
+                      ? true
+                      : studentStatusTab === 'paid'
+                      ? st.status === 'paid'
+                      : st.status !== 'paid'
+                  )
+                  .slice(0, 50)
+                  .map((st) => {
+                    const remaining = Math.max(0, st.target - st.total_paid)
+                    return (
+                      <div key={st.id} className="flex items-center justify-between gap-3 py-2.5 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">
+                              {st.name}
+                            </span>
+                            <span className="text-[10px] font-mono text-[#9FBBDE]">#{st.student_id}</span>
+                            <span className="text-[10px] text-[#1176BC] bg-[#EAF4FB] dark:bg-[#0d2a40] px-1.5 py-0.2 rounded-full">
+                              {st.class_name}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <span className="font-bold text-[#1a2332] dark:text-[#e8f0f8] tabular-nums">
+                              {formatCurrency(st.total_paid)}
+                            </span>
+                            {st.target > 0 && (
+                              <span className="text-[10px] text-[#9FBBDE] ml-1">
+                                / {formatCurrency(st.target)}
+                              </span>
+                            )}
+                            {st.status !== 'paid' && remaining > 0 && (
+                              <span className="block text-[10px] text-amber-600 dark:text-amber-400">
+                                {formatCurrency(remaining)} due
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                              st.status === 'paid'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                                : st.status === 'partial'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400'
+                                : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400'
+                            }`}
+                          >
+                            {st.status}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
 
           {/* Row 4: Super Admin Class Leadership Roster */}
           {user?.role === 'super_admin' && admins.length > 0 && (

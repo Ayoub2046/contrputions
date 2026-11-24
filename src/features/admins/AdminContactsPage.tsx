@@ -129,6 +129,7 @@ export function AdminContactsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {adminsList.map((admin) => {
               const isSuper = admin.role === 'super_admin'
+              const isFinanceMgr = admin.role === 'finance_manager'
               const cleanPhone = admin.phone ? admin.phone.replace(/[^0-9+]/g, '') : ''
 
               return (
@@ -140,6 +141,8 @@ export function AdminContactsPage() {
                           className={`size-11 rounded-full flex items-center justify-center shrink-0 font-bold text-white shadow-sm ${
                             isSuper
                               ? 'bg-gradient-to-tr from-brand-700 to-brand-500'
+                              : isFinanceMgr
+                              ? 'bg-gradient-to-tr from-amber-600 to-amber-500'
                               : 'bg-gradient-to-tr from-slate-700 to-slate-500'
                           }`}
                         >
@@ -151,12 +154,12 @@ export function AdminContactsPage() {
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge
-                              variant={isSuper ? 'default' : 'info'}
+                              variant={isSuper ? 'default' : isFinanceMgr ? 'warning' : 'info'}
                               className={`text-[10px] uppercase font-bold tracking-wider ${
                                 isSuper ? 'bg-brand-600 text-white' : ''
                               }`}
                             >
-                              {isSuper ? 'Super Admin' : 'Class Admin'}
+                              {isSuper ? 'Super Admin' : isFinanceMgr ? 'Finance Manager' : 'Class Admin'}
                             </Badge>
                             <span className="text-xs text-muted">ID: {admin.student_id}</span>
                           </div>
@@ -167,11 +170,15 @@ export function AdminContactsPage() {
                     {/* Assigned Classes */}
                     <div>
                       <span className="text-[11px] uppercase tracking-wider text-muted font-medium block mb-1">
-                        Assigned Classes:
+                        Scope / Assigned Classes:
                       </span>
                       {isSuper ? (
                         <span className="inline-block text-xs font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 rounded">
                           Full Administrative Access (All Classes)
+                        </span>
+                      ) : isFinanceMgr ? (
+                        <span className="inline-block text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded">
+                          Global Financial Auditing (All Classes · Read-Only)
                         </span>
                       ) : admin.assignedClasses && admin.assignedClasses.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
@@ -238,10 +245,10 @@ export function AdminContactsPage() {
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-text flex items-center gap-2">
-                  <Megaphone size={16} className="text-brand-600" /> Post Admin Announcement or Notice
+                  <Megaphone size={16} className="text-brand-600" /> Post Admin Announcement or Comment
                 </h3>
                 <span className="text-xs text-muted">
-                  Visible to Super Admins & Class Admins only
+                  Visible to Super Admins, Finance Managers & Class Admins
                 </span>
               </div>
 
@@ -339,10 +346,10 @@ export function AdminContactsPage() {
                                 {msg.sender_name}
                               </span>
                               <Badge
-                                variant={msg.sender_role === 'super_admin' ? 'default' : 'info'}
+                                variant={msg.sender_role === 'super_admin' ? 'default' : msg.sender_role === 'finance_manager' ? 'warning' : 'info'}
                                 className="text-[9px] px-1.5 py-0 uppercase tracking-wider"
                               >
-                                {msg.sender_role === 'super_admin' ? 'Super Admin' : 'Class Admin'}
+                                {msg.sender_role === 'super_admin' ? 'Super Admin' : msg.sender_role === 'finance_manager' ? 'Finance Manager' : 'Class Admin'}
                               </Badge>
                               {getCategoryBadge(msg.category)}
                             </div>

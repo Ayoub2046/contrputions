@@ -30,14 +30,29 @@ import {
 
 export function StudentsPage() {
   const { t } = useTranslation()
-  const { user, activeClassId } = useAuth()
+  const { user, activeClassId, setActiveClassId } = useAuth()
   const isSuperAdmin = user?.role === 'super_admin'
+  const isFinanceManager = user?.role === 'finance_manager'
+  const canViewAllClasses = isSuperAdmin || isFinanceManager
   const isAdmin = user?.role === 'admin' || isSuperAdmin
-  const { students, loading, search, setSearch, create, update, remove, importCSV } = useStudents(activeClassId)
+
+  // Class filter for super admin and finance manager
+  const [classFilter, setClassFilter] = useState<string>(activeClassId || 'all')
+  useEffect(() => {
+    if (canViewAllClasses && activeClassId) {
+      setClassFilter(activeClassId)
+    }
+  }, [activeClassId, canViewAllClasses])
+
+  const effectiveClassId = canViewAllClasses
+    ? (classFilter === 'all' ? null : classFilter)
+    : activeClassId
+
+  const { students, loading, search, setSearch, create, update, remove, importCSV } = useStudents(effectiveClassId)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isAdmin && !isFinanceManager) return
     supabase.from('classes').select('id, name').order('name').then(({ data }) => {
       if (data) {
         setAvailableClasses(data)
@@ -46,16 +61,13 @@ export function StudentsPage() {
         }
       }
     })
-  }, [isAdmin, activeClassId])
+  }, [isAdmin, isFinanceManager, activeClassId])
 
   const [showForm, setShowForm] = useState(false)
   const [editStudent, setEditStudent] = useState<{ id: string; student_id: string; name: string; phone?: string; class_id?: string } | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [importClassId, setImportClassId] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-
-  // Class filter for super admin
-  const [classFilter, setClassFilter] = useState<string>('all')
 
   // Password visibility per student
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
@@ -68,7 +80,7 @@ export function StudentsPage() {
     })
   }
 
-  const [paymentData, setPaymentData] = useState<Record<string, { total: number; status: string }>>({})
+  const [contribTotalsByStudent, setContribTotalsByStudent] = useState<Record<string, number>>({})
   const [studentTargets, setStudentTargets] = useState<Record<string, number>>({})
   const [classTargets, setClassTargets] = useState<Record<string, number>>({})
 
@@ -90,25 +102,36 @@ export function StudentsPage() {
   }, [])
 
   useEffect(() => {
-    if (!activeClassId) { setPaymentData({}); return }
-    supabase.rpc('get_student_payment_status', { p_class_id: activeClassId }).then(({ data }) => {
+    let query = supabase.from('contributions').select('student_id, amount').is('deleted_at', null)
+    if (effectiveClassId) {
+      query = query.eq('class_id', effectiveClassId)
+    }
+    query.then(({ data }) => {
+      const map: Record<string, number> = {}
       if (data) {
-        const map: Record<string, { total: number; status: string }> = {}
-        for (const row of data as { student_id: string; status: string; total: number }[]) {
-          map[row.student_id] = { total: row.total, status: row.status }
+        for (const row of data as { student_id: string; amount: number }[]) {
+          map[row.student_id] = (map[row.student_id] ?? 0) + Number(row.amount || 0)
         }
-        setPaymentData(map)
       }
+      setContribTotalsByStudent(map)
     })
-  }, [activeClassId])
+  }, [effectiveClassId])
+
+  const paymentData: Record<string, { total: number; status: string }> = {}
+  for (const s of students) {
+    const total = contribTotalsByStudent[s.id] ?? 0
+    const target = studentTargets[s.id] ?? classTargets[s.class_id || ''] ?? 0
+    const status = target > 0 && total >= target ? 'paid' : total > 0 ? (target === 0 ? 'paid' : 'partial') : 'unpaid'
+    paymentData[s.id] = { total, status }
+  }
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all')
   const filters = ['all', 'paid', 'partial', 'unpaid'] as const
 
   const selectClass = 'rounded-btn border border-border-hover bg-bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30'
 
-  // Apply filters: class filter (super admin only) + status filter
-  const filteredByClass = isSuperAdmin && classFilter !== 'all'
+  // Apply filters: class filter + status filter
+  const filteredByClass = canViewAllClasses && classFilter !== 'all'
     ? students.filter(s => s.class_id === classFilter)
     : students
 
@@ -143,6 +166,12 @@ export function StudentsPage() {
               <span>{t('students.addStudent')}</span>
             </button>
           </div>
+        ) : isFinanceManager ? (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-500/20">
+              💼 Finance Manager · Read-Only Auditing
+            </span>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-500/20">
@@ -153,7 +182,7 @@ export function StudentsPage() {
         )}
       </div>
 
-      {showImport && (
+      {showImport && isSuperAdmin && (
         <Card>
           <CardContent className="p-4 sm:p-5">
             <StudentImport
@@ -168,13 +197,17 @@ export function StudentsPage() {
 
       <Card>
         <div className="px-4 pt-4 space-y-3">
-          {/* Class filter — super admin only */}
-          {isSuperAdmin && availableClasses.length > 0 && (
+          {/* Class filter — super admin & finance manager */}
+          {canViewAllClasses && availableClasses.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-muted font-medium">Filter by class:</span>
               <select
                 value={classFilter}
-                onChange={(e) => setClassFilter(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setClassFilter(val)
+                  setActiveClassId(val === 'all' ? null : val)
+                }}
                 className={selectClass}
                 style={{ minWidth: 160 }}
               >

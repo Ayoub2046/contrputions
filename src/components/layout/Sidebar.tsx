@@ -52,6 +52,15 @@ const navItems: Record<UserRole, { to: string; icon: any; key: string }[]> = {
     { to: '/reports', icon: FileText, key: 'reports' },
     { to: '/recycle-bin', icon: Trash2, key: 'recycleBin' },
   ],
+  finance_manager: [
+    { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
+    { to: '/classes', icon: Users, key: 'classes' },
+    { to: '/students', icon: Users, key: 'students' },
+    { to: '/contributions', icon: Wallet, key: 'contributions' },
+    { to: '/expenses', icon: Receipt, key: 'expenses' },
+    { to: '/reports', icon: FileText, key: 'reports' },
+    { to: '/admin-contacts', icon: MessageSquare, key: 'adminContacts' },
+  ],
   student: [
     { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
     { to: '/settings', icon: Settings, key: 'settings' },

@@ -15,9 +15,11 @@ interface ClassCommentsSectionProps {
 export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
   const { user, activeClassId } = useAuth()
   const isSuperAdmin = user?.role === 'super_admin'
-  const isAdmin = isSuperAdmin || user?.role === 'admin'
+  const isFinanceManager = user?.role === 'finance_manager'
+  const canViewAllClasses = isSuperAdmin || isFinanceManager
+  const isAdmin = isSuperAdmin || user?.role === 'admin' || isFinanceManager
 
-  // Class filtering for Super Admin
+  // Class filtering for Super Admin & Finance Manager
   const [selectedFilterClass, setSelectedFilterClass] = useState<string>(classId || 'all')
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
 
@@ -38,7 +40,7 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
   }, [isAdmin])
 
   // Determine effective classId to query
-  const effectiveClassId = isSuperAdmin
+  const effectiveClassId = canViewAllClasses
     ? selectedFilterClass === 'all'
       ? null
       : selectedFilterClass
@@ -90,8 +92,8 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Super Admin Class Filter */}
-          {isSuperAdmin && availableClasses.length > 0 && (
+          {/* Super Admin & Finance Manager Class Filter */}
+          {canViewAllClasses && availableClasses.length > 0 && (
             <div className="flex items-center gap-1.5">
               <Filter size={13} className="text-muted" />
               <select
@@ -119,8 +121,8 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
       <Card>
         <CardContent className="p-4">
           <form onSubmit={handleSubmit} className="space-y-3">
-            {/* If Super Admin with "All" selected, pick target class */}
-            {isSuperAdmin && selectedFilterClass === 'all' && availableClasses.length > 0 && (
+            {/* If Super Admin or Finance Manager with "All" selected, pick target class */}
+            {canViewAllClasses && selectedFilterClass === 'all' && availableClasses.length > 0 && (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted font-medium">Post to Class:</span>
                 <select
@@ -142,7 +144,9 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder={
-                  isAdmin
+                  isFinanceManager
+                    ? "Post a financial audit note or comment to the Super Admin..."
+                    : isAdmin
                     ? "Post a message, reply, or announcement to students in this class..."
                     : "Share your thoughts, suggestions, or ask questions about class contributions..."
                 }
@@ -165,7 +169,9 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
               <span className="text-[11px] text-muted flex items-center gap-1">
                 <Sparkles size={12} className="text-brand-500 shrink-0" />
                 <span>
-                  {isAdmin
+                  {isFinanceManager
+                    ? "Posting as Finance Manager (visible to Super Admin & class members)"
+                    : isAdmin
                     ? "Posting as Admin (visible to all students in the class)"
                     : "Visible to all classmates & class admins"}
                 </span>
@@ -176,7 +182,7 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
                 disabled={!content.trim() || submitting}
                 className="w-full sm:w-auto h-8 px-4 text-xs flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white font-medium"
               >
-                <Send size={13} /> {isAdmin ? "Send Reply" : "Post Comment"}
+                <Send size={13} /> {isAdmin ? "Send Comment" : "Post Comment"}
               </Button>
             </div>
           </form>
@@ -202,7 +208,7 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
           {comments.map((comment) => {
             const isAuthor = user?.id === comment.user_id
             const canDelete = isAuthor || isSuperAdmin || user?.role === 'admin'
-            const isAuthorAdmin = comment.author_role === 'super_admin' || comment.author_role === 'admin'
+            const isAuthorAdmin = comment.author_role === 'super_admin' || comment.author_role === 'admin' || comment.author_role === 'finance_manager'
 
             return (
               <Card key={comment.id} className="transition-all hover:border-border-hover">
@@ -224,8 +230,16 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
                             {comment.author_name}
                           </span>
                           {isAuthorAdmin && (
-                            <Badge variant="default" className="text-[9px] px-1.5 py-0 uppercase tracking-wider bg-brand-600 text-white font-bold">
-                              {comment.author_role === 'super_admin' ? '👑 Super Admin' : '🛡 Class Admin'}
+                            <Badge variant="default" className={`text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold ${
+                              comment.author_role === 'finance_manager'
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-brand-600 text-white'
+                            }`}>
+                              {comment.author_role === 'super_admin'
+                                ? '👑 Super Admin'
+                                : comment.author_role === 'finance_manager'
+                                ? '💼 Finance Manager'
+                                : '🛡 Class Admin'}
                             </Badge>
                           )}
                           {comment.author_student_id && !isAuthorAdmin && (

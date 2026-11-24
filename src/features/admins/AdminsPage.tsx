@@ -30,6 +30,7 @@ export function AdminsPage() {
   const [editSid, setEditSid] = useState('')
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
+  const [editRole, setEditRole] = useState<'admin' | 'finance_manager'>('admin')
   const [editPwd, setEditPwd] = useState('')
   const [editError, setEditError] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
@@ -37,6 +38,7 @@ export function AdminsPage() {
   const [sid, setSid] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [role, setRole] = useState<'admin' | 'finance_manager'>('admin')
   const [pwd, setPwd] = useState('')
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -46,6 +48,7 @@ export function AdminsPage() {
     setEditSid(admin.student_id)
     setEditName(admin.name)
     setEditPhone(admin.phone || '')
+    setEditRole((admin.role as any) === 'finance_manager' ? 'finance_manager' : 'admin')
     setEditPwd('')
     setEditError('')
   }
@@ -59,10 +62,11 @@ export function AdminsPage() {
     }
     setSavingEdit(true)
     setEditError('')
-    const updates: { student_id?: string; name?: string; phone?: string | null; password?: string } = {
+    const updates: { student_id?: string; name?: string; phone?: string | null; password?: string; role?: string } = {
       student_id: editSid.trim(),
       name: editName.trim(),
       phone: editPhone.trim() || null,
+      role: editRole,
     }
     if (editPwd.trim()) {
       updates.password = editPwd.trim()
@@ -83,11 +87,11 @@ export function AdminsPage() {
     if (!sid.trim() || !name.trim() || !pwd.trim()) return
     setCreating(true)
     setMsg('')
-    const { error } = await adminCreateUser(sid.trim(), name.trim(), pwd.trim(), null, 'admin', phone.trim() || null)
+    const { error } = await adminCreateUser(sid.trim(), name.trim(), pwd.trim(), null, role, phone.trim() || null)
     if (error) setMsg(error)
     else {
       setMsg(t('admins.created'))
-      setSid(''); setName(''); setPhone(''); setPwd('')
+      setSid(''); setName(''); setPhone(''); setPwd(''); setRole('admin')
       refetch()
     }
     setCreating(false)
@@ -126,6 +130,7 @@ export function AdminsPage() {
               <tr>
                 <Th>{t('admins.columns.id')}</Th>
                 <Th>{t('admins.columns.name')}</Th>
+                <Th>Role</Th>
                 <Th>Phone</Th>
                 <Th>{t('admins.columns.classes')}</Th>
                 <Th className="text-right">{t('admins.columns.actions')}</Th>
@@ -136,6 +141,15 @@ export function AdminsPage() {
                 <tr key={a.id}>
                   <Td className="font-mono text-sm text-muted">{a.student_id}</Td>
                   <Td className="font-medium text-text">{a.name}</Td>
+                  <Td>
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      a.role === 'finance_manager'
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                        : 'bg-[#EAF4FB] dark:bg-[#0d2a40] text-[#1176BC] dark:text-[#25A8E0] border-[#9FBBDE]/30'
+                    }`}>
+                      {a.role === 'finance_manager' ? '💼 Finance Manager' : '🛡️ Class Admin'}
+                    </span>
+                  </Td>
                   <Td className="text-xs font-mono font-medium text-emerald-600">
                     {a.phone ? (
                       <a href={`tel:${a.phone}`} className="hover:underline">
@@ -146,24 +160,32 @@ export function AdminsPage() {
                     )}
                   </Td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {(adminClasses[a.id] ?? []).length === 0 ? (
-                        <span className="text-xs text-muted">{t('admins.noClasses')}</span>
-                      ) : (
-                        (adminClasses[a.id] ?? []).map((cn, i) => (
-                          <Badge key={i} variant="default">{cn}</Badge>
-                        ))
-                      )}
-                    </div>
+                    {a.role === 'finance_manager' ? (
+                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        🌐 All Classes (Global Finance)
+                      </span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {(adminClasses[a.id] ?? []).length === 0 ? (
+                          <span className="text-xs text-muted">{t('admins.noClasses')}</span>
+                        ) : (
+                          (adminClasses[a.id] ?? []).map((cn, i) => (
+                            <Badge key={i} variant="default">{cn}</Badge>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => handleStartEdit(a)} title="Edit Admin">
                         <Pencil size={16} />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setAssignTarget(a)} title={t('admins.assignClasses.title', { name: a.name })}>
-                        <BookOpen size={16} />
-                      </Button>
+                      {a.role !== 'finance_manager' && (
+                        <Button variant="ghost" size="sm" onClick={() => setAssignTarget(a)} title={t('admins.assignClasses.title', { name: a.name })}>
+                          <BookOpen size={16} />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(a)}>
                         <Trash2 size={16} className="text-error" />
                       </Button>
@@ -190,10 +212,23 @@ export function AdminsPage() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <p className="font-semibold text-text">{a.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-text">{a.name}</p>
+                      <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                        a.role === 'finance_manager'
+                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                          : 'bg-[#EAF4FB] dark:bg-[#0d2a40] text-[#1176BC] dark:text-[#25A8E0] border-[#9FBBDE]/30'
+                      }`}>
+                        {a.role === 'finance_manager' ? '💼 Finance' : '🛡️ Admin'}
+                      </span>
+                    </div>
                     <p className="text-xs font-mono text-muted">{a.student_id}</p>
                     <div className="flex flex-wrap gap-1 pt-1">
-                      {(adminClasses[a.id] ?? []).length === 0 ? (
+                      {a.role === 'finance_manager' ? (
+                        <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                          🌐 All Classes (Global Finance)
+                        </span>
+                      ) : (adminClasses[a.id] ?? []).length === 0 ? (
                         <span className="text-xs text-muted">{t('admins.noClasses')}</span>
                       ) : (
                         (adminClasses[a.id] ?? []).map((cn, i) => (
@@ -204,7 +239,9 @@ export function AdminsPage() {
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm" onClick={() => handleStartEdit(a)} title="Edit Admin"><Pencil size={16} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setAssignTarget(a)}><BookOpen size={16} /></Button>
+                    {a.role !== 'finance_manager' && (
+                      <Button variant="ghost" size="sm" onClick={() => setAssignTarget(a)}><BookOpen size={16} /></Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(a)}><Trash2 size={16} className="text-error" /></Button>
                   </div>
                 </div>
@@ -225,6 +262,28 @@ export function AdminsPage() {
               <form onSubmit={handleCreate} className="space-y-3 max-w-md">
                 <Input id="admin-sid" label={t('admins.form.adminId')} value={sid} onChange={(e) => setSid(e.target.value)} required />
                 <Input id="admin-name" label={t('admins.form.name')} value={name} onChange={(e) => setName(e.target.value)} required />
+                
+                {/* Role Selection */}
+                <div className="space-y-1">
+                  <label htmlFor="admin-role-select" className="text-xs font-semibold text-text block">
+                    Administrative Role Scope *
+                  </label>
+                  <select
+                    id="admin-role-select"
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as 'admin' | 'finance_manager')}
+                    className="w-full px-3 py-2 rounded-xl border border-border bg-bg-card text-xs font-semibold text-text focus:outline-hidden focus:border-brand-600 cursor-pointer"
+                  >
+                    <option value="admin">🛡️ Class Administrator (Manage assigned classes & calling)</option>
+                    <option value="finance_manager">💼 Finance Manager (Global read-only finance & reports)</option>
+                  </select>
+                  <p className="text-[10px] text-muted">
+                    {role === 'finance_manager'
+                      ? 'Finance Managers can view all classes income, reports, and unpaid lists in read-only mode.'
+                      : 'Class Administrators record contributions and call unpaid students for their assigned classes.'}
+                  </p>
+                </div>
+
                 <Input id="admin-phone" label="Contact Phone Number (For Student Calling)" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +252 61 5000000" />
                 <Input id="admin-pwd" label={t('admins.form.password')} type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} required />
                 <Button type="submit" loading={creating}>{t('admins.form.submit')}</Button>
@@ -280,6 +339,23 @@ export function AdminsPage() {
               onChange={(e) => setEditName(e.target.value)}
               required
             />
+            
+            {/* Role Selection */}
+            <div className="space-y-1">
+              <label htmlFor="edit-admin-role-select" className="text-xs font-semibold text-text block">
+                Administrative Role Scope *
+              </label>
+              <select
+                id="edit-admin-role-select"
+                value={editRole}
+                onChange={(e) => setEditRole(e.target.value as 'admin' | 'finance_manager')}
+                className="w-full px-3 py-2 rounded-xl border border-border bg-bg-card text-xs font-semibold text-text focus:outline-hidden focus:border-brand-600 cursor-pointer"
+              >
+                <option value="admin">🛡️ Class Administrator</option>
+                <option value="finance_manager">💼 Finance Manager (Global Read-Only Finance)</option>
+              </select>
+            </div>
+
             <Input
               id="edit-admin-phone"
               label="Contact Phone Number (For Student Calling)"

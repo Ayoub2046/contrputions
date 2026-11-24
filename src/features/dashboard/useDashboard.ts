@@ -18,6 +18,16 @@ export interface ClassContributionStat {
   target: number
 }
 
+export interface StudentPaymentSummary {
+  id: string
+  student_id: string
+  name: string
+  class_name: string
+  total_paid: number
+  target: number
+  status: 'paid' | 'partial' | 'unpaid'
+}
+
 export interface DashboardData {
   totalContributions: number
   totalExpenses: number
@@ -28,6 +38,7 @@ export interface DashboardData {
   unpaidCount: number
   topStudents: TopStudentContributor[]
   topClasses: ClassContributionStat[]
+  studentsStatusList: StudentPaymentSummary[]
 }
 
 export function useDashboard(classId?: string | null) {
@@ -95,24 +106,40 @@ export function useDashboard(classId?: string | null) {
           studentPaidMap.set(c.student_id, (studentPaidMap.get(c.student_id) || 0) + Number(c.amount || 0))
         }
 
-        // Status counts
+        // Status counts & full student status list
         let paidCount = 0
         let partialCount = 0
         let unpaidCount = 0
+        const studentsStatusList: StudentPaymentSummary[] = []
 
         for (const st of students) {
           const paid = studentPaidMap.get(st.id) || 0
           const cls = classMap.get(st.class_id || '')
           const target = customTargets.get(st.id) ?? (cls?.contribution_target ? Number(cls.contribution_target) : 0)
 
-          if (target > 0 && paid >= target) {
+          let status: 'paid' | 'partial' | 'unpaid' = 'unpaid'
+          if ((target > 0 && paid >= target) || (target === 0 && paid > 0)) {
             paidCount++
+            status = 'paid'
           } else if (paid > 0) {
             partialCount++
+            status = 'partial'
           } else {
             unpaidCount++
+            status = 'unpaid'
           }
+
+          studentsStatusList.push({
+            id: st.id,
+            student_id: st.student_id,
+            name: st.name,
+            class_name: cls?.name || 'Class',
+            total_paid: paid,
+            target,
+            status,
+          })
         }
+        studentsStatusList.sort((a, b) => a.name.localeCompare(b.name))
 
         // Top contributing students
         const topStudentsList: TopStudentContributor[] = []
@@ -170,6 +197,7 @@ export function useDashboard(classId?: string | null) {
             unpaidCount,
             topStudents,
             topClasses: topClassesList,
+            studentsStatusList,
           })
           setLoading(false)
         }

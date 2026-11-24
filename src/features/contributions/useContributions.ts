@@ -108,19 +108,20 @@ export function useContributions(classId?: string | null) {
   return { contributions, loading, create, update, remove, clearAll, fetchDeleted, restore, permanentDelete, refetch: fetch }
 }
 
-export function useContributionTotals(classId?: string | null) {
+export function useContributionTotals(classId?: string | null, allowGlobal = false) {
   const [total, setTotal] = useState(0)
   const [studentTotals, setStudentTotals] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    if (!classId) { setTotal(0); setStudentTotals({}); return }
+    if (!classId && !allowGlobal) { setTotal(0); setStudentTotals({}); return }
 
-    supabase
+    let query = supabase
       .from('contributions')
       .select('student_id, amount')
-      .eq('class_id', classId)
       .is('deleted_at', null)
-      .then(({ data }) => {
+    if (classId) query = query.eq('class_id', classId)
+
+    query.then(({ data }) => {
         if (!data) return
         const t = data.reduce((sum, c) => sum + Number(c.amount), 0)
         setTotal(t)
@@ -130,7 +131,7 @@ export function useContributionTotals(classId?: string | null) {
         })
         setStudentTotals(byStudent)
       })
-  }, [classId])
+  }, [classId, allowGlobal])
 
   return { total, studentTotals }
 }

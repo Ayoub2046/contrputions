@@ -9,7 +9,7 @@ export function useAdmins() {
 
   async function fetch() {
     setLoading(true)
-    const { data: profiles } = await supabase.from('profiles').select('*').eq('role', 'admin').order('name')
+    const { data: profiles } = await supabase.from('profiles').select('*').in('role', ['admin', 'finance_manager']).order('name')
     if (profiles) {
       setAdmins(profiles)
       const ids = profiles.map((a) => a.id)

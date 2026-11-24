@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Navigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Table, TBody, Td, Th, THead } from '../../components/ui/Table'
@@ -25,7 +27,12 @@ function itemTypeBadge(type: string) {
 
 export function RecycleBinPage() {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const { deleted, loading, refetch, restoreItem, permanentDeleteItem } = useRecycleBin()
+
+  if (user?.role === 'finance_manager' || user?.role === 'student') {
+    return <Navigate to="/dashboard" replace />
+  }
 
   const [confirmRestore, setConfirmRestore] = useState<RecycleBinItem | null>(null)
   const [confirmPermanentDelete, setConfirmPermanentDelete] = useState<RecycleBinItem | null>(null)

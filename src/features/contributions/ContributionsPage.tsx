@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
+import { supabase } from '../../lib/supabase'
 import { useStudents } from '../students/useStudents'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -10,7 +11,7 @@ import { useStudentTargets } from './useStudentTargets'
 import type { ContributionWithStudent } from './useContributions'
 import { formatCurrency, formatDate } from '../../lib/utils'
 import {
-  Plus, Pencil, Trash2, PiggyBank, Search, Target,
+  Plus, Pencil, Trash2, PiggyBank, Search, Target, Filter,
   ChevronDown, ChevronUp, DollarSign, CheckCircle2, Clock, AlertTriangle
 } from 'lucide-react'
 
@@ -73,10 +74,27 @@ function DonutChart({ paid, partial, unpaid }: { paid: number; partial: number; 
 
 export function ContributionsPage() {
   const { t } = useTranslation()
-  const { activeClassId } = useAuth()
-  const classId = activeClassId
+  const { user, activeClassId, setActiveClassId } = useAuth()
+  const isFinanceManager = user?.role === 'finance_manager'
+  const isSuperAdmin = user?.role === 'super_admin'
+  const canViewAllClasses = isSuperAdmin || isFinanceManager
+  const [selectedClass, setSelectedClass] = useState<string>(activeClassId || '')
+  const [classes, setClasses] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    if (!canViewAllClasses) return
+    supabase.from('classes').select('id, name').order('name').then(({ data }) => {
+      if (data) setClasses(data)
+    })
+  }, [canViewAllClasses])
+
+  useEffect(() => {
+    setSelectedClass(activeClassId || '')
+  }, [activeClassId])
+
+  const classId = canViewAllClasses ? (selectedClass || null) : activeClassId
   const { contributions, loading, create, update, remove, clearAll } = useContributions(classId)
-  const { total } = useContributionTotals(classId)
+  const { total } = useContributionTotals(classId, canViewAllClasses)
   const { students } = useStudents(classId)
   const { upsertTarget, removeTarget, getTargetForStudent } = useStudentTargets(classId)
 
@@ -219,31 +237,60 @@ export function ContributionsPage() {
             <p className="text-xs text-[#9FBBDE]">{contributions.length} records · Total: {formatCurrency(total)}</p>
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setShowTargetPanel((v) => !v)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] text-sm font-semibold text-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] transition-colors cursor-pointer"
-          >
-            <Target size={15} />
-            Manage Targets
-            {showTargetPanel ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </button>
-          {contributions.length > 0 && (
-            <button
-              onClick={() => setShowClearConfirm(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
-            >
-              <Trash2 size={15} />
-              {t('contributions.clearAll')}
-            </button>
+        <div className="flex gap-2 flex-wrap items-center">
+          {canViewAllClasses && classes.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033]">
+              <Filter size={14} className="text-[#1176BC]" />
+              <select
+                value={selectedClass}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setSelectedClass(val)
+                  setActiveClassId(val || null)
+                }}
+                className="text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] bg-transparent focus:outline-none cursor-pointer"
+              >
+                <option value="">🌐 All Classes</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    📚 {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
-          <button
-            onClick={() => { setEditingContribution(null); setShowForm(true) }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-sm font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95"
-          >
-            <Plus size={16} />
-            {t('contributions.record')}
-          </button>
+          {isFinanceManager ? (
+            <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+              💼 Finance Manager · Read-Only Auditing
+            </span>
+          ) : (
+            <>
+              <button
+                onClick={() => setShowTargetPanel((v) => !v)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] text-sm font-semibold text-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] transition-colors cursor-pointer"
+              >
+                <Target size={15} />
+                Manage Targets
+                {showTargetPanel ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+              {contributions.length > 0 && isSuperAdmin && (
+                <button
+                  onClick={() => setShowClearConfirm(true)}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={15} />
+                  {t('contributions.clearAll')}
+                </button>
+              )}
+              <button
+                onClick={() => { setEditingContribution(null); setShowForm(true) }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-sm font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95"
+              >
+                <Plus size={16} />
+                {t('contributions.record')}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -433,13 +480,17 @@ export function ContributionsPage() {
           <div className="rounded-2xl border border-dashed border-[#9FBBDE]/40 bg-white dark:bg-[#132033] py-16 flex flex-col items-center gap-3 text-[#9FBBDE]">
             <PiggyBank size={44} className="opacity-30" />
             <p className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8]">No contributions yet</p>
-            <p className="text-xs">Click "Record Contribution" to add the first entry.</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1176BC] text-white text-sm font-semibold hover:bg-[#0D5A8A] transition-colors cursor-pointer"
-            >
-              <Plus size={15} /> Record Contribution
-            </button>
+            {!isFinanceManager && (
+              <>
+                <p className="text-xs">Click "Record Contribution" to add the first entry.</p>
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1176BC] text-white text-sm font-semibold hover:bg-[#0D5A8A] transition-colors cursor-pointer"
+                >
+                  <Plus size={15} /> Record Contribution
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] overflow-hidden divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
@@ -465,20 +516,24 @@ export function ContributionsPage() {
                     <span className="text-base font-bold tabular-nums" style={{ color: statusColor }}>
                       +{formatCurrency(Number(c.amount))}
                     </span>
-                    <button
-                      onClick={() => openEdit(c)}
-                      className="p-1.5 rounded-lg hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer"
-                      title="Edit"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => remove(c.id)}
-                      className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-[#9FBBDE] hover:text-red-500 transition-colors cursor-pointer"
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {!isFinanceManager && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEdit(c)}
+                          className="p-1.5 rounded-lg hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer"
+                          title="Edit"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => remove(c.id)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-[#9FBBDE] hover:text-red-500 transition-colors cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )

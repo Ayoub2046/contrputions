@@ -106,6 +106,7 @@ export async function adminUpdateUser(
     password?: string
     class_id?: string | null
     phone?: string | null
+    role?: string
   }
 ): Promise<{ error?: string }> {
   try {

@@ -64,19 +64,20 @@ export function useExpenses(classId?: string | null) {
   return { expenses, loading, create, remove, refetch: fetch }
 }
 
-export function useExpenseTotal(classId?: string | null) {
+export function useExpenseTotal(classId?: string | null, allowGlobal = false) {
   const [total, setTotal] = useState(0)
 
   useEffect(() => {
-    if (!classId) { setTotal(0); return }
-    supabase
+    if (!classId && !allowGlobal) { setTotal(0); return }
+    let query = supabase
       .from('expenses')
       .select('amount')
-      .eq('class_id', classId)
-      .then(({ data }) => {
+    if (classId) query = query.eq('class_id', classId)
+
+    query.then(({ data }) => {
         if (data) setTotal(data.reduce((sum, e) => sum + Number(e.amount), 0))
       })
-  }, [classId])
+  }, [classId, allowGlobal])
 
   return { total }
 }
