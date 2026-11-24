@@ -92,8 +92,8 @@ export function LandingHero({ settings }: LandingHeroProps) {
           <div className="lg:col-span-7 text-center lg:text-left space-y-6">
             {/* Announcement / Badge */}
             {settings.hero_badge && (
-              <div className="inline-flex items-center gap-2 rounded-full border border-brand-600/30 bg-brand-50/80 dark:bg-brand-900/30 px-4 py-1.5 text-xs font-semibold text-brand-600 dark:text-brand-900 shadow-sm backdrop-blur-sm">
-                <Sparkles size={14} className="text-brand-600 dark:text-brand-900" />
+              <div className="inline-flex items-center gap-2 rounded-full border border-brand-600/30 bg-brand-50/80 dark:bg-brand-900/30 px-4 py-1.5 text-xs font-semibold text-brand-600 dark:text-brand-300 shadow-sm backdrop-blur-sm">
+                <Sparkles size={14} className="text-brand-600 dark:text-brand-300" />
                 <span>{settings.hero_badge}</span>
               </div>
             )}

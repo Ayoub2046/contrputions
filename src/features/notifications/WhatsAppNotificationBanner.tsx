@@ -32,7 +32,7 @@ export function WhatsAppNotificationBanner() {
   if (!activeBanner) return null
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-96 animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-auto">
+    <div className="fixed top-4 left-3 right-3 sm:left-auto sm:right-4 z-50 max-w-sm sm:w-96 animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-auto">
       <div
         className="rounded-2xl bg-white dark:bg-slate-900 border border-emerald-500/30 shadow-2xl overflow-hidden backdrop-blur-md cursor-pointer transition-transform hover:scale-[1.01]"
         onClick={dismissBanner}

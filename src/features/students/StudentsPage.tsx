@@ -89,13 +89,13 @@ export function StudentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-bold text-text">{t('students.title')}</h1>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setShowImport(!showImport)}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="text-xl sm:text-2xl font-bold text-text">{t('students.title')}</h1>
+        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
+          <Button variant="secondary" onClick={() => setShowImport(!showImport)} className="flex-1 sm:flex-none justify-center">
             <Plus size={16} /> {t('students.importCsv')}
           </Button>
-          <Button onClick={() => { setEditStudent(null); setShowForm(true) }}>
+          <Button onClick={() => { setEditStudent(null); setShowForm(true) }} className="flex-1 sm:flex-none justify-center">
             <Plus size={16} /> {t('students.addStudent')}
           </Button>
         </div>

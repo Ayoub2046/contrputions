@@ -5,6 +5,7 @@ export interface PushNotificationPayload {
   title: string
   body: string
   category?: NotificationCategory
+  senderId?: string
   senderName?: string
   senderRole?: string
   classId?: string | null

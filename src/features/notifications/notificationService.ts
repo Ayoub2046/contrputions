@@ -46,7 +46,18 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
   const iconUrl = '/icons/icon-192.png'
   const targetUrl = payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
 
-  // Try service worker showNotification first (essential for mobile & background PWA)
+  // 1. Post to active Service Worker controller
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    try {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'PUSH_NOTIFICATION',
+        payload: { ...payload, url: targetUrl },
+      })
+      return
+    } catch {}
+  }
+
+  // 2. Try service worker ready showNotification
   if ('serviceWorker' in navigator) {
     try {
       const reg = await navigator.serviceWorker.ready
@@ -62,12 +73,10 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
         } as NotificationOptions)
         return
       }
-    } catch {
-      // Fall through to window Notification
-    }
+    } catch {}
   }
 
-  // Fallback to Window Notification API
+  // 3. Fallback to Window Notification API
   try {
     const notif = new Notification(payload.title, {
       body: payload.body,
@@ -164,21 +173,33 @@ export async function fetchNotificationsList(classId?: string | null): Promise<S
 }
 
 export async function broadcastPushNotification(payload: PushNotificationPayload): Promise<void> {
-  // 1. Save locally and in Supabase
+  // 1. Save locally and in Supabase database
   await persistNotification(payload)
 
-  // 2. Broadcast to all users connected to Supabase Realtime
+  // 2. Broadcast publicly to all connected users via Supabase Realtime
   try {
-    const channel = supabase.channel(CHANNEL_NAME)
-    await channel.send({
+    const existingChannels = supabase.getChannels()
+    let channel = existingChannels.find(
+      (c: any) => c.topic === `realtime:${CHANNEL_NAME}` || c.name === CHANNEL_NAME
+    )
+
+    if (!channel) {
+      channel = supabase.channel(CHANNEL_NAME)
+      await new Promise<void>((resolve) => {
+        channel!.subscribe((status) => {
+          if (status === 'SUBSCRIBED') resolve()
+        })
+        setTimeout(resolve, 2000)
+      })
+    }
+
+    const sendStatus = await channel.send({
       type: 'broadcast',
       event: 'push_event',
       payload,
     })
+    console.log('[Realtime Broadcast Delivered]:', sendStatus, payload.title)
   } catch (err) {
-    console.warn('Realtime broadcast notice:', err)
+    console.warn('Realtime broadcast transmission notice:', err)
   }
-
-  // 3. Trigger locally on sender device if permitted
-  await triggerSystemNotification(payload)
 }

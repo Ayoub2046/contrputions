@@ -69,16 +69,20 @@ export function ContributionsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text">{t('contributions.title')}</h1>
-          <p className="text-3xl font-serif font-bold text-success tabular-nums mt-1">{formatCurrency(total)}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-text">{t('contributions.title')}</h1>
+          <p className="text-2xl sm:text-3xl font-serif font-bold text-success tabular-nums mt-1">{formatCurrency(total)}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
           {contributions.length > 0 && (
-            <Button variant="danger" onClick={() => setShowClearConfirm(true)}><Trash2 size={16} /> {t('contributions.clearAll')}</Button>
+            <Button variant="danger" onClick={() => setShowClearConfirm(true)} className="flex-1 sm:flex-none justify-center">
+              <Trash2 size={16} /> {t('contributions.clearAll')}
+            </Button>
           )}
-          <Button onClick={() => setShowForm(true)}><Plus size={16} /> {t('contributions.record')}</Button>
+          <Button onClick={() => setShowForm(true)} className="flex-1 sm:flex-none justify-center">
+            <Plus size={16} /> {t('contributions.record')}
+          </Button>
         </div>
       </div>
 

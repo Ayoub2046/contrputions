@@ -37,12 +37,14 @@ export function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text">{t('expenses.title')}</h1>
-          <p className="text-3xl font-serif font-bold text-error tabular-nums mt-1">{formatCurrency(total)}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-text">{t('expenses.title')}</h1>
+          <p className="text-2xl sm:text-3xl font-serif font-bold text-error tabular-nums mt-1">{formatCurrency(total)}</p>
         </div>
-        <Button onClick={() => setShowForm(true)}><Plus size={16} /> {t('expenses.record')}</Button>
+        <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto justify-center">
+          <Plus size={16} /> {t('expenses.record')}
+        </Button>
       </div>
 
       <Card>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -44,6 +44,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [notifications, setNotifications] = useState<StoredNotification[]>([])
   const [activeBanner, setActiveBanner] = useState<PushNotificationPayload | null>(null)
 
+  // Track notifications already shown to avoid duplicate popups/chimes
+  const seenIdsRef = useRef<Set<string>>(new Set())
+
   // Initialize permission status & FCM Token if granted
   useEffect(() => {
     setIsSupported(isNotificationSupported())
@@ -75,49 +78,137 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [])
 
-  // Fetch notifications
+  // Fetch notifications initially and populate seen IDs
   const refreshNotifications = useCallback(async () => {
-    const list = await fetchNotificationsList(activeClassId)
+    const list = await fetchNotificationsList(activeClassId || user?.class_id)
     setNotifications(list)
-  }, [activeClassId])
+    for (const item of list) {
+      seenIdsRef.current.add(item.id)
+    }
+  }, [activeClassId, user?.class_id])
 
   useEffect(() => {
     refreshNotifications()
   }, [refreshNotifications])
 
-  // Realtime subscription for incoming broadcast notifications
+  // Helper to process an incoming notification for this user
+  const handleIncomingNotification = useCallback(
+    async (notif: PushNotificationPayload) => {
+      if (!notif || !notif.id) return
+
+      // Don't show duplicate popup if already seen
+      if (seenIdsRef.current.has(notif.id)) return
+      seenIdsRef.current.add(notif.id)
+
+      // If user is the author who sent it, don't popup on their own device
+      if (notif.senderId && user?.id && notif.senderId === user.id) {
+        return
+      }
+
+      // Filter by class if specific target class is set and user is in a class
+      const userClass = activeClassId || user?.class_id
+      if (notif.classId && userClass && notif.classId !== userClass && user?.role === 'student') {
+        return
+      }
+
+      // 1. Play chime & trigger native OS notification
+      await triggerSystemNotification(notif)
+
+      // 2. Show in-app floating banner
+      setActiveBanner(notif)
+
+      // 3. Save to storage & state
+      await persistNotification(notif)
+      setNotifications((prev) => [
+        { ...notif, read: false },
+        ...prev.filter((p) => p.id !== notif.id),
+      ])
+    },
+    [activeClassId, user]
+  )
+
+  // Realtime subscription for incoming broadcast notifications (Immediate WebSocket delivery)
   useEffect(() => {
     const channel = supabase.channel('classbank_push_channel')
 
     channel
       .on('broadcast', { event: 'push_event' }, async ({ payload }) => {
         const notif = payload as PushNotificationPayload
-        if (!notif) return
-
-        // Filter by class if specific target class is set and user is in a class
-        if (notif.classId && activeClassId && notif.classId !== activeClassId && user?.role === 'student') {
-          return
+        if (notif) {
+          await handleIncomingNotification(notif)
         }
-
-        // 1. Play sound & show OS push notification
-        await triggerSystemNotification(notif)
-
-        // 2. Show in-app WhatsApp popup banner
-        setActiveBanner(notif)
-
-        // 3. Save to state and storage
-        await persistNotification(notif)
-        setNotifications((prev) => [
-          { ...notif, read: false },
-          ...prev.filter((p) => p.id !== notif.id),
-        ])
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime Channel Active]: classbank_push_channel ready')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [activeClassId, user?.role])
+  }, [handleIncomingNotification])
+
+  // Periodic and Visibility-Change Database Sync (Guaranteed delivery if phone was locked or offline)
+  useEffect(() => {
+    let isMounted = true
+
+    async function syncDatabaseNotifications() {
+      try {
+        const userClass = activeClassId || user?.class_id
+        let query = supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(10)
+
+        if (userClass) {
+          query = query.or(`class_id.eq.${userClass},class_id.is.null`)
+        }
+
+        const { data, error } = await query
+        if (!error && data && data.length > 0 && isMounted) {
+          const now = Date.now()
+          for (const row of data) {
+            // Check if created within last 20 minutes and not yet seen
+            const ageMs = now - new Date(row.created_at).getTime()
+            if (ageMs < 20 * 60 * 1000 && !seenIdsRef.current.has(row.id)) {
+              const payload: PushNotificationPayload = {
+                id: row.id,
+                title: row.title,
+                body: row.body,
+                category: row.type || 'announcement',
+                senderName: row.sender_name,
+                senderRole: row.sender_role,
+                classId: row.class_id,
+                createdAt: row.created_at,
+              }
+              await handleIncomingNotification(payload)
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Sync on tab visibility change (e.g. unlocking phone or switching back to app)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncDatabaseNotifications()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', syncDatabaseNotifications)
+
+    // Sync every 12 seconds in background
+    const timer = setInterval(syncDatabaseNotifications, 12000)
+
+    return () => {
+      isMounted = false
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', syncDatabaseNotifications)
+      clearInterval(timer)
+    }
+  }, [activeClassId, user, handleIncomingNotification])
 
   const dismissBanner = useCallback(() => {
     setActiveBanner(null)
@@ -140,20 +231,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         title: data.title,
         body: data.body,
         category: data.category || 'announcement',
+        senderId: user?.id,
         senderName: user?.name || 'Administrator',
         senderRole: user?.role || 'admin',
         classId: data.classId || null,
         createdAt: new Date().toISOString(),
       }
 
+      // Mark as seen on sender device so sender doesn't get duplicate alert
+      seenIdsRef.current.add(payload.id)
+
+      // Broadcast to all other devices & save to Supabase
       await broadcastPushNotification(payload)
 
-      // Add to local state & active banner
+      // Add to sender's notification bell list without triggering disruptive popup
       setNotifications((prev) => [
-        { ...payload, read: false },
+        { ...payload, read: true },
         ...prev.filter((p) => p.id !== payload.id),
       ])
-      setActiveBanner(payload)
     },
     [user]
   )
@@ -178,7 +273,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const sample: PushNotificationPayload = {
       id: `test_${Date.now()}`,
       title: '📢 ClassBank Notice',
-      body: 'This is a WhatsApp-style notification! You will see alerts like this before opening the application.',
+      body: 'Live push notification test! You will see alerts like this before opening the application.',
       category: 'announcement',
       senderName: 'ClassBank System',
       senderRole: 'super_admin',

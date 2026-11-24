@@ -48,3 +48,21 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(self.registration.showNotification(data.title, options))
 })
+
+// Listen to messages from app to trigger system notifications
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'PUSH_NOTIFICATION') {
+    const payload = event.data.payload || {}
+    const title = payload.title || 'ClassBank Notification'
+    const options = {
+      body: payload.body || 'New class announcement received.',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      vibrate: [200, 100, 200],
+      data: { url: payload.url || '/dashboard' },
+      renotify: true,
+      tag: payload.id || 'classbank_msg_' + Date.now(),
+    }
+    event.waitUntil(self.registration.showNotification(title, options))
+  }
+})

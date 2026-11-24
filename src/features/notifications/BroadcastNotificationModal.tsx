@@ -88,17 +88,17 @@ export function BroadcastNotificationModal({ open, onClose, availableClasses = [
 
           <div>
             <label className="block text-xs font-semibold text-text mb-1.5">Category</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
-                { id: 'news', label: 'News / Announcement' },
-                { id: 'reminder', label: 'Payment Reminder' },
-                { id: 'general', label: 'General Alert' },
+                { id: 'news', label: '📢 News / Announcement' },
+                { id: 'reminder', label: '💳 Payment Reminder' },
+                { id: 'general', label: '🔔 General Alert' },
               ].map((cat) => (
                 <button
                   type="button"
                   key={cat.id}
                   onClick={() => setCategory(cat.id as NotificationCategory)}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-btn border transition-colors cursor-pointer text-center truncate ${
+                  className={`px-3 py-2 text-xs font-semibold rounded-btn border transition-all cursor-pointer text-center ${
                     category === cat.id
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                       : 'bg-bg-card text-secondary border-border hover:bg-bg-elevated'

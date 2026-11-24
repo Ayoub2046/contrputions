@@ -161,20 +161,22 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
               </p>
             )}
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-1">
               <span className="text-[11px] text-muted flex items-center gap-1">
-                <Sparkles size={12} className="text-brand-500" />
-                {isAdmin
-                  ? "Posting as Admin (visible to all students in the class)"
-                  : "Visible to all classmates & class admins"}
+                <Sparkles size={12} className="text-brand-500 shrink-0" />
+                <span>
+                  {isAdmin
+                    ? "Posting as Admin (visible to all students in the class)"
+                    : "Visible to all classmates & class admins"}
+                </span>
               </span>
               <Button
                 type="submit"
                 loading={submitting}
                 disabled={!content.trim() || submitting}
-                className="h-8 px-3.5 text-xs flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+                className="w-full sm:w-auto h-8 px-4 text-xs flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white font-medium"
               >
-                <Send size={13} /> {isAdmin ? "Send Reply" : "Post"}
+                <Send size={13} /> {isAdmin ? "Send Reply" : "Post Comment"}
               </Button>
             </div>
           </form>

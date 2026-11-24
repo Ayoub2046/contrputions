@@ -50,7 +50,7 @@ function StudentDashboard({ userId, classId }: { userId: string; classId: string
   const progressPct = data.target ? Math.min(100, (data.personalTotal / data.target) * 100) : 0
 
   return (
-    <div className="space-y-5 max-w-lg mx-auto">
+    <div className="space-y-5 w-full max-w-4xl mx-auto">
       <div>
         <h1 className="text-xl font-bold text-text">{t('dashboard.title')}</h1>
         <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name || '' })}</p>
@@ -202,7 +202,7 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="space-y-5 max-w-lg mx-auto lg:max-w-none">
+      <div className="space-y-5 w-full max-w-6xl mx-auto">
         <Skeleton className="h-6 w-40" />
         <Skeleton className="h-48 w-full rounded-xl" />
         <Skeleton className="h-32 w-full rounded-xl" />
@@ -212,7 +212,7 @@ export function DashboardPage() {
 
   if (!data) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 w-full max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
         {user?.role === 'super_admin' ? (
           <Card>
@@ -284,7 +284,7 @@ export function DashboardPage() {
   const totalS = data.totalStudents || 1
 
   return (
-    <div className="space-y-5 max-w-lg mx-auto lg:max-w-none">
+    <div className="space-y-5 w-full max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-text">{t('dashboard.title')}</h1>

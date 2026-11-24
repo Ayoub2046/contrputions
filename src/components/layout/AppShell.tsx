@@ -40,7 +40,7 @@ function BottomNav({ role, onSignOut }: { role: UserRole; onSignOut: () => void 
 
   return (
     <>
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-bg-card/95 backdrop-blur-md border-t border-border shadow-lg">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-bg-card/95 backdrop-blur-md border-t border-border shadow-lg pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-around h-16 px-1">
           {visible.map((item) => (
             <NavLink
@@ -144,19 +144,19 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
   const { adminClasses, activeClassId, setActiveClassId } = useAuth()
 
   return (
-    <div className="lg:hidden flex items-center justify-between px-3 py-2.5 sm:px-4 sm:py-3 bg-bg-card/95 backdrop-blur-md border-b border-border sticky top-0 z-40 shadow-xs">
+    <div className="lg:hidden flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3 bg-bg-card/95 backdrop-blur-md border-b border-border sticky top-0 z-40 shadow-xs">
       <div className="flex items-center gap-2 min-w-0 shrink">
-        <img src="/classBankLogo.png" alt={t('app.name')} className="h-7 w-auto shrink-0" />
-        <span className="font-bold text-text truncate text-sm sm:text-base">{t('app.name')}</span>
+        <img src="/classBankLogo.png" alt={t('app.name')} className="h-6 sm:h-7 w-auto shrink-0" />
+        <span className="font-bold text-text truncate text-xs sm:text-base">{t('app.name')}</span>
       </div>
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         <NotificationBell />
         <PwaInstallButton size="sm" />
         {adminClasses.length > 0 && (
           <select
             value={activeClassId ?? ''}
             onChange={(e) => setActiveClassId(e.target.value || null)}
-            className="rounded-btn border border-border bg-bg-card px-2 py-1 text-xs text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30 max-w-[105px] sm:max-w-[140px] truncate font-medium"
+            className="rounded-btn border border-border bg-bg-card px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30 max-w-[95px] sm:max-w-[140px] truncate font-medium"
           >
             {adminClasses.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
@@ -165,7 +165,7 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
         )}
         <button
           onClick={onSignOut}
-          className="flex items-center justify-center size-8 sm:size-9 rounded-btn border border-error/30 text-error hover:bg-error hover:text-white transition-colors cursor-pointer"
+          className="hidden sm:flex items-center justify-center size-8 sm:size-9 rounded-btn border border-error/30 text-error hover:bg-error hover:text-white transition-colors cursor-pointer"
           title={t('nav.signOut')}
         >
           <LogOut size={16} />
@@ -177,11 +177,11 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
 
 export function AppShell({ role, onSignOut, children }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-bg-main">
+    <div className="min-h-screen bg-bg-main overflow-x-hidden">
       <WhatsAppNotificationBanner />
       <Sidebar role={role} onSignOut={onSignOut} />
       <MobileTopBar onSignOut={onSignOut} />
-      <main className="lg:ml-64 px-3.5 py-4 sm:p-5 lg:p-8 pb-28 lg:pb-8 max-w-full overflow-x-hidden">
+      <main className="lg:ml-64 px-3 py-4 sm:px-5 sm:py-6 lg:p-8 pb-28 lg:pb-8 w-full max-w-full overflow-x-hidden">
         <NotificationPermissionBanner />
         {children}
       </main>
