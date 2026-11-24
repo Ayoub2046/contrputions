@@ -21,7 +21,7 @@
           if (metaTheme) metaTheme.setAttribute('content', '#0F172A');
         }
 
-        // Immediately apply custom application name and logo if cached
+        // Immediately apply custom application name and logo if cached safely
         try {
           var customName = localStorage.getItem('cb_app_name');
           var customLogo = localStorage.getItem('cb_app_logo');
@@ -30,7 +30,7 @@
             var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
             if (appleTitle) appleTitle.setAttribute('content', customName);
           }
-          if (customLogo) {
+          if (customLogo && customLogo.length < 50000 && !customLogo.startsWith('data:')) {
             var icon = document.querySelector('link[rel="icon"]');
             if (icon) icon.setAttribute('href', customLogo);
             var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
