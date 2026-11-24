@@ -178,14 +178,16 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
 
 export function AppShell({ role, onSignOut, children }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-bg-main overflow-x-hidden">
+    <div className="min-h-screen bg-bg-main overflow-x-hidden flex flex-col">
       <WhatsAppNotificationBanner />
       <Sidebar role={role} onSignOut={onSignOut} />
-      <MobileTopBar onSignOut={onSignOut} />
-      <main className="lg:ml-64 px-3 py-4 sm:px-5 sm:py-6 lg:p-8 pb-28 lg:pb-8 w-full max-w-full overflow-x-hidden">
-        <NotificationPermissionBanner />
-        {children}
-      </main>
+      <div className="lg:pl-64 flex flex-col flex-1 min-w-0 w-full">
+        <MobileTopBar onSignOut={onSignOut} />
+        <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8 pb-28 lg:pb-8 min-w-0 w-full">
+          <NotificationPermissionBanner />
+          {children}
+        </main>
+      </div>
       <BottomNav role={role} onSignOut={onSignOut} />
     </div>
   )

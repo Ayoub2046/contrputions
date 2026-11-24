@@ -13,7 +13,7 @@ import { StudentImport } from './StudentImport'
 import { useStudents } from './useStudents'
 import { formatCurrency, normalizeAuthPassword } from '../../lib/utils'
 import { SkeletonTable } from '../../components/ui/Skeleton'
-import { Search, Plus, Pencil, Trash2, Wallet, Eye, EyeOff } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, Wallet, Eye, EyeOff, Upload, Target } from 'lucide-react'
 
 export function StudentsPage() {
   const { t } = useTranslation()
@@ -56,6 +56,25 @@ export function StudentsPage() {
   }
 
   const [paymentData, setPaymentData] = useState<Record<string, { total: number; status: string }>>({})
+  const [studentTargets, setStudentTargets] = useState<Record<string, number>>({})
+  const [classTargets, setClassTargets] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    supabase.from('classes').select('id, contribution_target').then(({ data }) => {
+      if (data) {
+        const map: Record<string, number> = {}
+        data.forEach((c: any) => { map[c.id] = Number(c.contribution_target || 0) })
+        setClassTargets(map)
+      }
+    })
+    supabase.from('student_contribution_targets').select('student_id, target_amount').then(({ data }) => {
+      if (data) {
+        const map: Record<string, number> = {}
+        data.forEach((t: any) => { map[t.student_id] = Number(t.target_amount) })
+        setStudentTargets(map)
+      }
+    })
+  }, [])
 
   useEffect(() => {
     if (!activeClassId) { setPaymentData({}); return }
@@ -88,16 +107,27 @@ export function StudentsPage() {
     status === 'paid' ? 'success' : status === 'partial' ? 'warning' : 'danger'
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl sm:text-2xl font-bold text-text">{t('students.title')}</h1>
-        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
-          <Button variant="secondary" onClick={() => setShowImport(!showImport)} className="flex-1 sm:flex-none justify-center">
-            <Plus size={16} /> {t('students.importCsv')}
-          </Button>
-          <Button onClick={() => { setEditStudent(null); setShowForm(true) }} className="flex-1 sm:flex-none justify-center">
-            <Plus size={16} /> {t('students.addStudent')}
-          </Button>
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#ECECEC] dark:border-[#1e3550] pb-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-text">{t('students.title')}</h1>
+          <p className="text-xs text-[#9FBBDE]">Directory of all enrolled students and contribution clearance</p>
+        </div>
+        <div className="flex gap-2 flex-wrap items-center">
+          <button
+            onClick={() => setShowImport(!showImport)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-xs font-semibold text-[#1176BC] transition-all cursor-pointer shadow-2xs"
+          >
+            <Upload size={14} />
+            <span>{showImport ? 'Hide Import' : t('students.importCsv')}</span>
+          </button>
+          <button
+            onClick={() => { setEditStudent(null); setShowForm(true) }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white text-xs font-semibold shadow-sm hover:shadow-md hover:opacity-95 transition-all cursor-pointer active:scale-95"
+          >
+            <Plus size={14} />
+            <span>{t('students.addStudent')}</span>
+          </button>
         </div>
       </div>
 
@@ -185,57 +215,67 @@ export function StudentsPage() {
                     <Th>{t('students.columns.phone')}</Th>
                     <Th>{t('students.columns.name')}</Th>
                     {isAdmin && <Th>Password</Th>}
+                    <Th>Assigned Target</Th>
                     <Th>{t('students.columns.status')}</Th>
                     <Th className="text-right">{t('students.columns.totalContributed')}</Th>
                     <Th className="text-right">{t('students.columns.actions')}</Th>
                   </tr>
                 </THead>
                 <TBody>
-                  {displayStudents.map((s, i) => (
-                    <tr key={s.id}>
-                      <td className="px-4 py-3 text-xs text-muted text-center">{i + 1}</td>
-                      <Td className="font-mono text-sm text-brand-600 font-semibold">{s.student_id}</Td>
-                      <Td className="text-sm text-muted">{s.phone || '—'}</Td>
-                      <Td className="font-medium text-text">{s.name}</Td>
-                      {isAdmin && (
+                  {displayStudents.map((s, i) => {
+                    const assignedTarget = studentTargets[s.id] ?? classTargets[s.class_id || ''] ?? 0
+                    return (
+                      <tr key={s.id}>
+                        <td className="px-4 py-3 text-xs text-muted text-center">{i + 1}</td>
+                        <Td className="font-mono text-sm text-brand-600 font-semibold">{s.student_id}</Td>
+                        <Td className="text-sm text-muted">{s.phone || '—'}</Td>
+                        <Td className="font-medium text-text">{s.name}</Td>
+                        {isAdmin && (
+                          <Td>
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono text-xs text-text">
+                                {visiblePasswords.has(s.id)
+                                  ? normalizeAuthPassword(s.student_id)
+                                  : '••••••'}
+                              </span>
+                              <button
+                                onClick={() => togglePassword(s.id)}
+                                className="text-muted hover:text-text transition-colors p-0.5"
+                                title={visiblePasswords.has(s.id) ? 'Hide password' : 'Show password'}
+                              >
+                                {visiblePasswords.has(s.id)
+                                  ? <EyeOff size={13} />
+                                  : <Eye size={13} />}
+                              </button>
+                            </div>
+                          </Td>
+                        )}
+                        <Td className="font-semibold tabular-nums text-text">
+                          <span className="inline-flex items-center gap-1 text-xs">
+                            <Target size={13} className="text-[#1176BC]" />
+                            {formatCurrency(assignedTarget)}
+                          </span>
+                        </Td>
+                        <Td><Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge></Td>
+                        <Td className="text-right font-semibold tabular-nums text-text">
+                          <span className="inline-flex items-center gap-1">
+                            <Wallet size={14} className="text-muted" />
+                            {formatCurrency((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).total)}
+                          </span>
+                        </Td>
                         <Td>
-                          <div className="flex items-center gap-1">
-                            <span className="font-mono text-xs text-text">
-                              {visiblePasswords.has(s.id)
-                                ? normalizeAuthPassword(s.student_id)
-                                : '••••••'}
-                            </span>
-                            <button
-                              onClick={() => togglePassword(s.id)}
-                              className="text-muted hover:text-text transition-colors p-0.5"
-                              title={visiblePasswords.has(s.id) ? 'Hide password' : 'Show password'}
-                            >
-                              {visiblePasswords.has(s.id)
-                                ? <EyeOff size={13} />
-                                : <Eye size={13} />}
-                            </button>
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => { setEditStudent({ id: s.id, student_id: s.student_id, name: s.name, phone: s.phone, class_id: s.class_id ?? undefined }); setShowForm(true) }}>
+                              <Pencil size={16} />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(s.id)}>
+                              <Trash2 size={16} className="text-error" />
+                            </Button>
                           </div>
                         </Td>
-                      )}
-                      <Td><Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge></Td>
-                      <Td className="text-right font-semibold tabular-nums text-text">
-                        <span className="inline-flex items-center gap-1">
-                          <Wallet size={14} className="text-muted" />
-                          {formatCurrency((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).total)}
-                        </span>
-                      </Td>
-                      <Td>
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => { setEditStudent({ id: s.id, student_id: s.student_id, name: s.name, phone: s.phone, class_id: s.class_id ?? undefined }); setShowForm(true) }}>
-                            <Pencil size={16} />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(s.id)}>
-                            <Trash2 size={16} className="text-error" />
-                          </Button>
-                        </div>
-                      </Td>
-                    </tr>
-                  ))}
+                      </tr>
+                    )
+                  })}
                 </TBody>
               </Table>
             </div>
@@ -262,10 +302,13 @@ export function StudentsPage() {
                         </button>
                       </div>
                     )}
-                    <div className="flex items-center gap-3 mt-1.5">
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <Badge variant={badgeVariant((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status)}>{t(`students.status.${(paymentData[s.id] ?? { total: 0, status: 'unpaid' }).status}`)}</Badge>
+                      <span className="text-xs text-[#9FBBDE]">
+                        Target: {formatCurrency(studentTargets[s.id] ?? classTargets[s.class_id || ''] ?? 0)}
+                      </span>
                       <span className="text-xs font-semibold tabular-nums text-text">
-                        {formatCurrency((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).total)}
+                        Paid: {formatCurrency((paymentData[s.id] ?? { total: 0, status: 'unpaid' }).total)}
                       </span>
                     </div>
                   </div>

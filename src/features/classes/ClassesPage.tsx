@@ -1,16 +1,21 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { ClassForm } from './ClassForm'
 import { AssignAdminsModal } from './AssignAdminsModal'
-import { useClasses } from './useClasses'
+import { useClasses, type ClassWithMetrics } from './useClasses'
+import { useStudents } from '../students/useStudents'
+import { StudentImport } from '../students/StudentImport'
+import { StudentForm } from '../students/StudentForm'
 import { ROLES } from '../../lib/constants'
 import { formatCurrency } from '../../lib/utils'
 import {
   Plus, Pencil, Trash2, UserPlus, School, Calendar,
-  TrendingUp, Users, Target, ChevronRight, GraduationCap
+  TrendingUp, Users, Target, ChevronRight, GraduationCap,
+  Upload, DollarSign
 } from 'lucide-react'
 
 function formatDate(date: string) {
@@ -24,12 +29,18 @@ function ClassCard({
   onEdit,
   onAssign,
   onDelete,
+  onImportStudents,
+  onAddStudent,
+  onSelectClass,
 }: {
-  c: any
+  c: ClassWithMetrics
   canEdit: boolean
   onEdit?: () => void
   onAssign?: () => void
   onDelete?: () => void
+  onImportStudents: () => void
+  onAddStudent: () => void
+  onSelectClass: () => void
 }) {
   const target = c.contribution_target || 0
 
@@ -41,12 +52,18 @@ function ClassCard({
       <div className="flex flex-col flex-1 p-5 gap-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="size-11 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm shrink-0">
+          <div
+            onClick={onSelectClass}
+            className="flex items-center gap-3 cursor-pointer min-w-0"
+            title="Click to select this class"
+          >
+            <div className="size-11 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm shrink-0 group-hover:scale-105 transition-transform">
               <GraduationCap size={22} className="text-white" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-base text-[#1a2332] dark:text-[#e8f0f8] truncate">{c.name}</h3>
+              <h3 className="font-bold text-base text-[#1a2332] dark:text-[#e8f0f8] truncate hover:text-[#1176BC] transition-colors">
+                {c.name}
+              </h3>
               <div className="flex items-center gap-1 text-xs text-[#9FBBDE] mt-0.5">
                 <Calendar size={11} />
                 <span>{formatDate(c.created_at)}</span>
@@ -55,7 +72,7 @@ function ClassCard({
           </div>
 
           {canEdit && (
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
               {onAssign && (
                 <button
                   onClick={onAssign}
@@ -87,40 +104,101 @@ function ClassCard({
           )}
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Total Enrolled Students */}
           <div className="rounded-xl bg-[#EAF4FB] dark:bg-[#0d2a40] p-3">
             <div className="flex items-center gap-1.5 mb-1">
-              <Target size={12} className="text-[#1176BC]" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9FBBDE]">Class Target</span>
+              <Users size={12} className="text-[#1176BC]" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9FBBDE]">Enrolled</span>
             </div>
-            <p className="text-base font-bold text-[#1176BC] tabular-nums">{formatCurrency(target)}</p>
+            <p className="text-base font-bold text-[#1176BC] tabular-nums">
+              {c.student_count} <span className="text-xs font-normal text-[#9FBBDE]">students</span>
+            </p>
           </div>
+
+          {/* Total Income */}
+          <div className="rounded-xl bg-[#f0fdf4] dark:bg-[#064e3b]/30 p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <DollarSign size={12} className="text-[#0C9B5E]" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9FBBDE]">Total Income</span>
+            </div>
+            <p className="text-base font-bold text-[#0C9B5E] tabular-nums">
+              {formatCurrency(c.total_income || 0)}
+            </p>
+          </div>
+
+          {/* Target Amount */}
+          <div className="rounded-xl bg-[#ECECEC]/60 dark:bg-[#1a2d42] p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Target size={12} className="text-[#1176BC]" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9FBBDE]">Target / Student</span>
+            </div>
+            <p className="text-sm font-bold text-[#1176BC] tabular-nums">
+              {formatCurrency(target)}
+            </p>
+          </div>
+
+          {/* Target Pool */}
           <div className="rounded-xl bg-[#ECECEC]/60 dark:bg-[#1a2d42] p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <TrendingUp size={12} className="text-[#25A8E0]" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9FBBDE]">Per Student</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9FBBDE]">Target Pool</span>
             </div>
-            <p className="text-base font-bold text-[#25A8E0] tabular-nums">
-              {c.student_count && c.student_count > 0
-                ? formatCurrency(target / c.student_count)
-                : '—'}
+            <p className="text-sm font-bold text-[#25A8E0] tabular-nums">
+              {formatCurrency(target * (c.student_count || 1))}
             </p>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-2 text-xs text-[#9FBBDE] border-t border-[#ECECEC] dark:border-[#1e3550] pt-3 mt-auto">
-          <Users size={13} />
-          <span>{c.student_count ?? 0} enrolled students</span>
-          <ChevronRight size={13} className="ml-auto" />
+        {/* Direct Action Buttons on Card */}
+        <div className="pt-2 border-t border-[#ECECEC] dark:border-[#1e3550] flex items-center justify-between gap-2 mt-auto">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onImportStudents}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#EAF4FB] dark:bg-[#0d2a40] hover:bg-[#1176BC] hover:text-white text-xs font-semibold text-[#1176BC] transition-all cursor-pointer shadow-2xs"
+              title="Import CSV students directly into this class"
+            >
+              <Upload size={12} />
+              <span>Import CSV</span>
+            </button>
+            <button
+              onClick={onAddStudent}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] border border-[#ECECEC] dark:border-[#1e3550] text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] transition-all cursor-pointer shadow-2xs"
+              title="Add individual student to this class"
+            >
+              <Plus size={12} />
+              <span>Add Student</span>
+            </button>
+          </div>
+
+          <button
+            onClick={onSelectClass}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer"
+            title="View students in this class"
+          >
+            <span>View</span>
+            <ChevronRight size={13} />
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
-function AdminClassesView({ classes, loading }: { classes: any[]; loading: boolean }) {
+function AdminClassesView({
+  classes,
+  loading,
+  onImportStudents,
+  onAddStudent,
+  onSelectClass,
+}: {
+  classes: ClassWithMetrics[]
+  loading: boolean
+  onImportStudents: (cls: ClassWithMetrics) => void
+  onAddStudent: (cls: ClassWithMetrics) => void
+  onSelectClass: (cls: ClassWithMetrics) => void
+}) {
   if (loading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -148,7 +226,14 @@ function AdminClassesView({ classes, loading }: { classes: any[]; loading: boole
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       {classes.map((c) => (
-        <ClassCard key={c.id} c={c} canEdit={false} />
+        <ClassCard
+          key={c.id}
+          c={c}
+          canEdit={false}
+          onImportStudents={() => onImportStudents(c)}
+          onAddStudent={() => onAddStudent(c)}
+          onSelectClass={() => onSelectClass(c)}
+        />
       ))}
     </div>
   )
@@ -156,17 +241,31 @@ function AdminClassesView({ classes, loading }: { classes: any[]; loading: boole
 
 export function ClassesPage() {
   const { t } = useTranslation()
-  const { user } = useAuth()
-  const { classes, loading, create, update, remove } = useClasses()
+  const { user, setActiveClassId } = useAuth()
+  const navigate = useNavigate()
+  const { classes, loading, create, update, remove, refetch } = useClasses()
+  const { create: createStudent, importCSV } = useStudents(null)
+
   const [showForm, setShowForm] = useState(false)
   const [editClass, setEditClass] = useState<{ id: string; name: string; contribution_target?: number } | null>(null)
   const [assignTo, setAssignTo] = useState<{ id: string; name: string } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Direct Student Import & Add Modals in Classes Page
+  const [targetClassForImport, setTargetClassForImport] = useState<ClassWithMetrics | null>(null)
+  const [targetClassForAdd, setTargetClassForAdd] = useState<ClassWithMetrics | null>(null)
+
+  function handleSelectClass(c: ClassWithMetrics) {
+    setActiveClassId(c.id)
+    navigate('/students')
+  }
+
+  const availableClassesForImport = classes.map((c) => ({ id: c.id, name: c.name }))
+
   if (user?.role !== ROLES.SUPER_ADMIN) {
     return (
-      <div className="space-y-6 w-full max-w-6xl mx-auto">
+      <div className="space-y-6 w-full max-w-7xl mx-auto">
         {/* Page header */}
         <div className="flex items-center gap-3">
           <div className="size-10 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm">
@@ -177,7 +276,59 @@ export function ClassesPage() {
             <p className="text-xs text-[#9FBBDE]">Classes assigned to your admin account</p>
           </div>
         </div>
-        <AdminClassesView classes={classes} loading={loading} />
+        <AdminClassesView
+          classes={classes}
+          loading={loading}
+          onImportStudents={(c) => setTargetClassForImport(c)}
+          onAddStudent={(c) => setTargetClassForAdd(c)}
+          onSelectClass={handleSelectClass}
+        />
+
+        {/* Import Students Modal */}
+        {targetClassForImport && (
+          <Modal
+            open={!!targetClassForImport}
+            onClose={() => { setTargetClassForImport(null); refetch() }}
+            title={`📥 Import Students into "${targetClassForImport.name}"`}
+          >
+            <StudentImport
+              availableClasses={availableClassesForImport}
+              selectedClassId={targetClassForImport.id}
+              onSelectClassId={(id) => {
+                const found = classes.find((c) => c.id === id)
+                if (found) setTargetClassForImport(found)
+              }}
+              onImport={async (rows, targetClassId) => {
+                const res = await importCSV(rows, targetClassId)
+                refetch()
+                return res
+              }}
+            />
+          </Modal>
+        )}
+
+        {/* Add Individual Student Modal */}
+        {targetClassForAdd && (
+          <Modal
+            open={!!targetClassForAdd}
+            onClose={() => { setTargetClassForAdd(null); refetch() }}
+            title={`👤 Add Student to "${targetClassForAdd.name}"`}
+          >
+            <StudentForm
+              classId={targetClassForAdd.id}
+              classes={availableClassesForImport}
+              onSave={async (studentId, name, password, classId, phone) => {
+                const err = await createStudent(studentId, name, password || studentId, classId || targetClassForAdd.id, phone)
+                if (!err) {
+                  setTargetClassForAdd(null)
+                  refetch()
+                }
+                return err
+              }}
+              onCancel={() => setTargetClassForAdd(null)}
+            />
+          </Modal>
+        )}
       </div>
     )
   }
@@ -191,20 +342,23 @@ export function ClassesPage() {
   }
 
   const confirmClass = classes.find((c) => c.id === confirmDelete)
+  const totalStudentsEnrolled = classes.reduce((s, c) => s + (c.student_count || 0), 0)
+  const totalIncomeAll = classes.reduce((s, c) => s + (c.total_income || 0), 0)
+  const totalTargetPool = classes.reduce((s, c) => s + (c.contribution_target || 0) * (c.student_count || 1), 0)
 
   return (
-    <div className="space-y-6 w-full max-w-6xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="size-10 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm">
-            <School size={20} className="text-white" />
+          <div className="size-11 rounded-2xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-md">
+            <School size={22} className="text-white" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-[#1a2332] dark:text-[#e8f0f8]">
               {t('classes.superAdmin.title')}
             </h1>
-            <p className="text-xs text-[#9FBBDE]">{classes.length} class{classes.length !== 1 ? 'es' : ''} total</p>
+            <p className="text-xs text-[#9FBBDE]">{classes.length} registered class{classes.length !== 1 ? 'es' : ''}</p>
           </div>
         </div>
 
@@ -221,43 +375,42 @@ export function ClassesPage() {
       {!loading && classes.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Total Classes', value: classes.length, icon: School, color: '#1176BC' },
+            { label: 'Total Classes', value: classes.length, icon: School, color: '#1176BC', bg: '#EAF4FB' },
             {
               label: 'Total Students',
-              value: classes.reduce((s, c) => s + ((c as any).student_count ?? 0), 0),
+              value: `${totalStudentsEnrolled} enrolled`,
               icon: Users,
               color: '#25A8E0',
+              bg: '#EAF4FB',
             },
             {
-              label: 'Avg Target',
-              value: formatCurrency(
-                classes.length > 0
-                  ? classes.reduce((s, c) => s + (c.contribution_target || 0), 0) / classes.length
-                  : 0
-              ),
+              label: 'Total Income',
+              value: formatCurrency(totalIncomeAll),
+              icon: DollarSign,
+              color: '#0C9B5E',
+              bg: '#f0fdf4',
+            },
+            {
+              label: 'Total Target Pool',
+              value: formatCurrency(totalTargetPool),
               icon: Target,
-              color: '#0D5A8A',
-            },
-            {
-              label: 'Total Targets',
-              value: formatCurrency(classes.reduce((s, c) => s + (c.contribution_target || 0), 0)),
-              icon: TrendingUp,
-              color: '#9FBBDE',
+              color: '#d97706',
+              bg: '#fffbeb',
             },
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-4 flex items-center gap-3"
+              className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-4 flex items-center gap-3 shadow-2xs"
             >
               <div
                 className="size-9 rounded-lg flex items-center justify-center shrink-0"
-                style={{ backgroundColor: `${stat.color}18` }}
+                style={{ backgroundColor: stat.bg }}
               >
                 <stat.icon size={18} style={{ color: stat.color }} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-[#9FBBDE] font-medium">{stat.label}</p>
-                <p className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8] truncate">{stat.value}</p>
+                <p className="text-base font-bold text-[#1a2332] dark:text-[#e8f0f8] truncate">{stat.value}</p>
               </div>
             </div>
           ))}
@@ -301,9 +454,58 @@ export function ClassesPage() {
               onEdit={() => { setEditClass(c); setShowForm(true) }}
               onAssign={() => setAssignTo({ id: c.id, name: c.name })}
               onDelete={() => setConfirmDelete(c.id)}
+              onImportStudents={() => setTargetClassForImport(c)}
+              onAddStudent={() => setTargetClassForAdd(c)}
+              onSelectClass={() => handleSelectClass(c)}
             />
           ))}
         </div>
+      )}
+
+      {/* Direct CSV Import Modal in Classes Page */}
+      {targetClassForImport && (
+        <Modal
+          open={!!targetClassForImport}
+          onClose={() => { setTargetClassForImport(null); refetch() }}
+          title={`📥 Import Students into "${targetClassForImport.name}"`}
+        >
+          <StudentImport
+            availableClasses={availableClassesForImport}
+            selectedClassId={targetClassForImport.id}
+            onSelectClassId={(id) => {
+              const found = classes.find((c) => c.id === id)
+              if (found) setTargetClassForImport(found)
+            }}
+            onImport={async (rows, targetClassId) => {
+              const res = await importCSV(rows, targetClassId)
+              refetch()
+              return res
+            }}
+          />
+        </Modal>
+      )}
+
+      {/* Direct Add Individual Student Modal in Classes Page */}
+      {targetClassForAdd && (
+        <Modal
+          open={!!targetClassForAdd}
+          onClose={() => { setTargetClassForAdd(null); refetch() }}
+          title={`👤 Add Student to "${targetClassForAdd.name}"`}
+        >
+          <StudentForm
+            classId={targetClassForAdd.id}
+            classes={availableClassesForImport}
+            onSave={async (studentId, name, password, classId, phone) => {
+              const err = await createStudent(studentId, name, password || studentId, classId || targetClassForAdd.id, phone)
+              if (!err) {
+                setTargetClassForAdd(null)
+                refetch()
+              }
+              return err
+            }}
+            onCancel={() => setTargetClassForAdd(null)}
+          />
+        </Modal>
       )}
 
       {/* Create / Edit Class Modal */}

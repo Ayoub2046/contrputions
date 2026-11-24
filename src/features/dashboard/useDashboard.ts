@@ -1,7 +1,24 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
-interface DashboardData {
+export interface TopStudentContributor {
+  id: string
+  student_id: string
+  name: string
+  class_name: string
+  total_paid: number
+  target: number
+}
+
+export interface ClassContributionStat {
+  class_id: string
+  class_name: string
+  total_income: number
+  student_count: number
+  target: number
+}
+
+export interface DashboardData {
   totalContributions: number
   totalExpenses: number
   remainingBalance: number
@@ -9,6 +26,8 @@ interface DashboardData {
   paidCount: number
   partialCount: number
   unpaidCount: number
+  topStudents: TopStudentContributor[]
+  topClasses: ClassContributionStat[]
 }
 
 export function useDashboard(classId?: string | null) {
@@ -16,73 +35,153 @@ export function useDashboard(classId?: string | null) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!classId) {
-      setData(null)
-      setLoading(false)
-      return
-    }
-
     setLoading(true)
     let active = true
 
-    // Maximum 5-second wait before clearing loading state on mobile
     const timeout = setTimeout(() => {
       if (active) setLoading(false)
-    }, 5000)
+    }, 6000)
 
-    Promise.all([
-      supabase
-        .from('contributions')
-        .select('amount')
-        .eq('class_id', classId)
-        .is('deleted_at', null),
-      supabase
-        .from('expenses')
-        .select('amount')
-        .eq('class_id', classId),
-      supabase
-        .from('profiles')
-        .select('id')
-        .eq('class_id', classId)
-        .eq('role', 'student'),
-      supabase
-        .rpc('get_student_payment_status', { p_class_id: classId })
-        .then((res) => res, () => ({ data: [] })),
-    ])
-      .then(([contribRes, expenseRes, studentRes, statusRes]) => {
-        if (!active) return
-        clearTimeout(timeout)
+    async function loadData() {
+      try {
+        // 1. Fetch classes
+        const { data: classesData } = await supabase
+          .from('classes')
+          .select('id, name, contribution_target')
+          .order('name')
+        const classes = classesData || []
+        const classMap = new Map(classes.map((c) => [c.id, c]))
 
-        const contributions = (contribRes?.data ?? []) as { amount: number }[]
-        const expenses = (expenseRes?.data ?? []) as { amount: number }[]
-        const students = (studentRes?.data ?? []) as { id: string }[]
+        // 2. Fetch contributions
+        let contribQuery = supabase
+          .from('contributions')
+          .select('id, student_id, class_id, amount, profiles!contributions_student_id_fkey(name, student_id, class_id)')
+          .is('deleted_at', null)
+        if (classId) contribQuery = contribQuery.eq('class_id', classId)
+        const { data: contribsData } = await contribQuery
+        const contributions = contribsData || []
 
-        const totalContributions = contributions.reduce((s: number, c: { amount: number }) => s + Number(c.amount), 0)
-        const totalExpenses = expenses.reduce((s: number, e: { amount: number }) => s + Number(e.amount), 0)
-        const studentStatuses = (statusRes?.data ?? []) as { student_id: string; status: string; total: number }[]
+        // 3. Fetch expenses
+        let expenseQuery = supabase.from('expenses').select('amount, class_id')
+        if (classId) expenseQuery = expenseQuery.eq('class_id', classId)
+        const { data: expensesData } = await expenseQuery
+        const expenses = expensesData || []
 
-        const paidCount = studentStatuses.filter((s) => s.status === 'paid').length
-        const partialCount = studentStatuses.filter((s) => s.status === 'partial').length
-        const unpaidCount = studentStatuses.filter((s) => s.status === 'unpaid').length
+        // 4. Fetch students
+        let studentQuery = supabase
+          .from('profiles')
+          .select('id, student_id, name, class_id')
+          .eq('role', 'student')
+        if (classId) studentQuery = studentQuery.eq('class_id', classId)
+        const { data: studentsData } = await studentQuery
+        const students = studentsData || []
 
-        setData({
-          totalContributions,
-          totalExpenses,
-          remainingBalance: totalContributions - totalExpenses,
-          totalStudents: students.length,
-          paidCount,
-          partialCount,
-          unpaidCount,
-        })
-        setLoading(false)
-      })
-      .catch((err) => {
-        console.error('Error in useDashboard:', err)
+        // 5. Fetch custom targets
+        let targetQuery = supabase
+          .from('student_contribution_targets')
+          .select('student_id, class_id, target_amount')
+        if (classId) targetQuery = targetQuery.eq('class_id', classId)
+        const { data: targetsData } = await targetQuery
+        const customTargets = new Map((targetsData || []).map((t: any) => [t.student_id, Number(t.target_amount)]))
+
+        // Calculations
+        const totalContributions = contributions.reduce((s, c) => s + Number(c.amount || 0), 0)
+        const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount || 0), 0)
+        const remainingBalance = totalContributions - totalExpenses
+
+        // Student total paid map
+        const studentPaidMap = new Map<string, number>()
+        for (const c of contributions) {
+          studentPaidMap.set(c.student_id, (studentPaidMap.get(c.student_id) || 0) + Number(c.amount || 0))
+        }
+
+        // Status counts
+        let paidCount = 0
+        let partialCount = 0
+        let unpaidCount = 0
+
+        for (const st of students) {
+          const paid = studentPaidMap.get(st.id) || 0
+          const cls = classMap.get(st.class_id || '')
+          const target = customTargets.get(st.id) ?? (cls?.contribution_target ? Number(cls.contribution_target) : 0)
+
+          if (target > 0 && paid >= target) {
+            paidCount++
+          } else if (paid > 0) {
+            partialCount++
+          } else {
+            unpaidCount++
+          }
+        }
+
+        // Top contributing students
+        const topStudentsList: TopStudentContributor[] = []
+        for (const st of students) {
+          const paid = studentPaidMap.get(st.id) || 0
+          if (paid > 0) {
+            const cls = classMap.get(st.class_id || '')
+            const target = customTargets.get(st.id) ?? (cls?.contribution_target ? Number(cls.contribution_target) : 0)
+            topStudentsList.push({
+              id: st.id,
+              student_id: st.student_id,
+              name: st.name,
+              class_name: cls?.name || 'Class',
+              total_paid: paid,
+              target,
+            })
+          }
+        }
+        topStudentsList.sort((a, b) => b.total_paid - a.total_paid)
+        const topStudents = topStudentsList.slice(0, 8)
+
+        // Class contribution stats
+        const classIncomeMap = new Map<string, number>()
+        for (const c of contributions) {
+          if (c.class_id) {
+            classIncomeMap.set(c.class_id, (classIncomeMap.get(c.class_id) || 0) + Number(c.amount || 0))
+          }
+        }
+        const classStudentCountMap = new Map<string, number>()
+        for (const st of students) {
+          if (st.class_id) {
+            classStudentCountMap.set(st.class_id, (classStudentCountMap.get(st.class_id) || 0) + 1)
+          }
+        }
+
+        const topClassesList: ClassContributionStat[] = classes
+          .filter((c) => !classId || c.id === classId)
+          .map((c) => ({
+            class_id: c.id,
+            class_name: c.name,
+            total_income: classIncomeMap.get(c.id) || 0,
+            student_count: classStudentCountMap.get(c.id) || 0,
+            target: Number(c.contribution_target || 0),
+          }))
+        topClassesList.sort((a, b) => b.total_income - a.total_income)
+
         if (active) {
-          clearTimeout(timeout)
+          setData({
+            totalContributions,
+            totalExpenses,
+            remainingBalance,
+            totalStudents: students.length,
+            paidCount,
+            partialCount,
+            unpaidCount,
+            topStudents,
+            topClasses: topClassesList,
+          })
           setLoading(false)
         }
-      })
+      } catch (err) {
+        console.error('useDashboard load error:', err)
+        if (active) setLoading(false)
+      } finally {
+        clearTimeout(timeout)
+      }
+    }
+
+    loadData()
 
     return () => {
       active = false
