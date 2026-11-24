@@ -118,22 +118,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(studentId: string, password: string): Promise<string | null> {
     const cleanId = studentId.trim()
-    const email = `${cleanId}@${AUTH_EMAIL_DOMAIN}`
+    const email = cleanId.includes('@') ? cleanId : `${cleanId}@${AUTH_EMAIL_DOMAIN}`
     const finalPassword = normalizeAuthPassword(cleanId, password)
     setLoading(true)
-    const { error, data } = await supabase.auth.signInWithPassword({ email, password: finalPassword })
-    if (error) { setLoading(false); return error.message }
-    if (data?.user) {
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single()
+
+    // First attempt: with normalized password
+    let authRes = await supabase.auth.signInWithPassword({ email, password: finalPassword })
+
+    // Fallback attempt: if failed and raw password was different, try raw password
+    if (authRes.error && finalPassword !== password.trim()) {
+      authRes = await supabase.auth.signInWithPassword({ email, password: password.trim() })
+    }
+
+    if (authRes.error) {
+      setLoading(false)
+      return authRes.error.message
+    }
+
+    if (authRes.data?.user) {
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authRes.data.user.id)
+        .single()
+
+      if (profileErr) {
+        console.error('Profile fetch error on login:', profileErr)
+        setLoading(false)
+        return `Database profile error: ${profileErr.message}`
+      }
+
       if (profile) {
         setUser(profile)
         await fetchAdminClasses(profile)
         // Log login event
         supabase.from('activity_logs').insert({
-          user_id: data.user.id,
+          user_id: authRes.data.user.id,
           action: 'login',
           event_type: 'login',
         } as never).then(() => {}, () => {})
+      } else {
+        setLoading(false)
+        return 'No profile found for this user account.'
       }
     }
     setLoading(false)
