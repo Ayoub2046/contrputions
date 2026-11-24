@@ -7,7 +7,7 @@ import { Input } from '../../components/ui/Input'
 import { adminCreateUser } from '../../lib/admin-api'
 import { supabase } from '../../lib/supabase'
 import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2, Type, Sparkles } from 'lucide-react'
-import { DEFAULT_APP_NAME, DEFAULT_LOGO } from '../../hooks/useAppLogo'
+import { DEFAULT_APP_NAME, DEFAULT_LOGO, updateDynamicManifest } from '../../hooks/useAppLogo'
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation()
@@ -82,6 +82,7 @@ export function SettingsPage() {
       document.title = val
       const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
       if (meta) meta.setAttribute('content', val)
+      updateDynamicManifest(val, currentLogo)
       setAppNameMsg(`✓ Application name updated to "${val}"!`)
       window.dispatchEvent(new Event('storage'))
     } else {
@@ -117,6 +118,11 @@ export function SettingsPage() {
         if (!settingsError) {
           setCurrentLogo(dataUrl)
           localStorage.setItem('cb_app_logo', dataUrl)
+          updateDynamicManifest(appNameInput, dataUrl)
+          const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
+          if (iconLink) iconLink.href = dataUrl
+          const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement
+          if (appleIconLink) appleIconLink.href = dataUrl
           window.dispatchEvent(new Event('storage'))
           setLogoMsg('✓ Logo updated successfully.')
         } else {
@@ -139,6 +145,11 @@ export function SettingsPage() {
     if (!settingsError) {
       setCurrentLogo(publicUrl)
       localStorage.setItem('cb_app_logo', publicUrl)
+      updateDynamicManifest(appNameInput, publicUrl)
+      const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
+      if (iconLink) iconLink.href = publicUrl
+      const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement
+      if (appleIconLink) appleIconLink.href = publicUrl
       window.dispatchEvent(new Event('storage'))
       setLogoMsg('✓ Logo updated successfully across all dashboards and student install screens!')
     } else {

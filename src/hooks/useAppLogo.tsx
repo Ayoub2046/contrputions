@@ -7,6 +7,74 @@ const LOGO_CACHE_KEY = 'cb_app_logo'
 const NAME_CACHE_KEY = 'cb_app_name'
 
 /**
+ * Injects a dynamic Web App Manifest into the browser DOM.
+ * This guarantees that when a user or student taps "Install App" or "Add to Home Screen",
+ * the browser's native install prompt uses the exact custom logo and name configured by the Super Admin.
+ */
+export function updateDynamicManifest(appName: string, logoUrl: string) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+  try {
+    const finalName = appName || DEFAULT_APP_NAME
+    const finalLogo = logoUrl || DEFAULT_LOGO
+
+    const manifestObj = {
+      id: '/',
+      name: finalName,
+      short_name: finalName,
+      description: `${finalName} - Class Contribution Transparency System`,
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      orientation: 'portrait',
+      theme_color: '#F4F6FA',
+      background_color: '#F4F6FA',
+      prefer_related_applications: false,
+      categories: ['education', 'finance'],
+      display_override: ['window-controls-overlay', 'minimal-ui'],
+      icons: [
+        {
+          src: finalLogo,
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any',
+        },
+        {
+          src: finalLogo,
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'maskable',
+        },
+        {
+          src: finalLogo,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any',
+        },
+        {
+          src: finalLogo,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'maskable',
+        },
+      ],
+    }
+
+    const blob = new Blob([JSON.stringify(manifestObj)], { type: 'application/manifest+json' })
+    const manifestBlobUrl = URL.createObjectURL(blob)
+
+    let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement
+    if (!manifestLink) {
+      manifestLink = document.createElement('link')
+      manifestLink.rel = 'manifest'
+      document.head.appendChild(manifestLink)
+    }
+    manifestLink.href = manifestBlobUrl
+  } catch (err) {
+    console.error('Failed to update dynamic PWA manifest:', err)
+  }
+}
+
+/**
  * Hook to retrieve and reactively update the application name.
  * Caches in localStorage for instant rendering and syncs with Supabase app_settings.
  */
@@ -21,6 +89,8 @@ export function useAppName(): string {
       document.title = appName
       const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
       if (meta) meta.setAttribute('content', appName)
+      const currentLogo = localStorage.getItem(LOGO_CACHE_KEY) || DEFAULT_LOGO
+      updateDynamicManifest(appName, currentLogo)
     }
 
     supabase
@@ -36,6 +106,8 @@ export function useAppName(): string {
           document.title = val
           const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
           if (meta) meta.setAttribute('content', val)
+          const currentLogo = localStorage.getItem(LOGO_CACHE_KEY) || DEFAULT_LOGO
+          updateDynamicManifest(val, currentLogo)
         }
       })
   }, [appName])
@@ -45,7 +117,7 @@ export function useAppName(): string {
 
 /**
  * Hook to retrieve and reactively update the application logo URL.
- * Automatically updates browser favicon and apple-touch-icon.
+ * Automatically updates browser favicon, apple-touch-icon, and PWA manifest.
  */
 export function useAppLogo(): string {
   const [logoUrl, setLogoUrl] = useState<string>(() => {
@@ -62,6 +134,8 @@ export function useAppLogo(): string {
     if (appleIconLink && logoUrl) {
       appleIconLink.href = logoUrl
     }
+    const currentName = localStorage.getItem(NAME_CACHE_KEY) || DEFAULT_APP_NAME
+    updateDynamicManifest(currentName, logoUrl)
 
     supabase
       .from('app_settings')
@@ -74,6 +148,8 @@ export function useAppLogo(): string {
           localStorage.setItem(LOGO_CACHE_KEY, data.value)
           if (iconLink) iconLink.href = data.value
           if (appleIconLink) appleIconLink.href = data.value
+          const currentName = localStorage.getItem(NAME_CACHE_KEY) || DEFAULT_APP_NAME
+          updateDynamicManifest(currentName, data.value)
         }
       })
   }, [logoUrl])

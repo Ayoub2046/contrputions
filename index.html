@@ -17,8 +17,27 @@
         var t = localStorage.getItem('theme');
         if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
           document.documentElement.classList.add('dark');
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0F172A');
+          var metaTheme = document.querySelector('meta[name="theme-color"]');
+          if (metaTheme) metaTheme.setAttribute('content', '#0F172A');
         }
+
+        // Immediately apply custom application name and logo if cached
+        try {
+          var customName = localStorage.getItem('cb_app_name');
+          var customLogo = localStorage.getItem('cb_app_logo');
+          if (customName) {
+            document.title = customName;
+            var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+            if (appleTitle) appleTitle.setAttribute('content', customName);
+          }
+          if (customLogo) {
+            var icon = document.querySelector('link[rel="icon"]');
+            if (icon) icon.setAttribute('href', customLogo);
+            var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+            if (appleIcon) appleIcon.setAttribute('href', customLogo);
+          }
+        } catch(e) {}
+
         window.addEventListener('beforeinstallprompt', function(e) {
           e.preventDefault();
           window.__deferredPwaPrompt = e;
