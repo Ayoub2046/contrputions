@@ -165,7 +165,7 @@ function MobileTopBar({ onSignOut }: { onSignOut: () => void }) {
         )}
         <button
           onClick={onSignOut}
-          className="hidden sm:flex items-center justify-center size-8 sm:size-9 rounded-btn border border-error/30 text-error hover:bg-error hover:text-white transition-colors cursor-pointer"
+          className="flex items-center justify-center size-8 sm:size-9 rounded-btn border border-error/30 text-error hover:bg-error hover:text-white transition-colors cursor-pointer shrink-0"
           title={t('nav.signOut')}
         >
           <LogOut size={16} />

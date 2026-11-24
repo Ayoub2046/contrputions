@@ -10,19 +10,19 @@ import { useDashboard } from './useDashboard'
 import { useStudentDashboard } from './useStudentDashboard'
 import { cn, formatCurrency, formatDate } from '../../lib/utils'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { PiggyBank, Shield, Send } from 'lucide-react'
+import { PiggyBank, Shield, Send, LogOut } from 'lucide-react'
 import { ClassCommentsSection } from './ClassCommentsSection'
 import { BroadcastNotificationModal } from '../notifications/BroadcastNotificationModal'
 import type { Profile } from '../../lib/types'
 
 function StudentDashboard({ userId, classId }: { userId: string; classId: string | null }) {
   const { t } = useTranslation()
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
   const { data, loading } = useStudentDashboard(userId, classId)
 
   if (loading) {
     return (
-      <div className="space-y-5 max-w-lg mx-auto">
+      <div className="space-y-5 w-full max-w-4xl mx-auto">
         <Skeleton className="h-7 w-40" />
         <Skeleton className="h-44 w-full rounded-xl" />
         <Skeleton className="h-24 w-full rounded-xl" />
@@ -34,8 +34,19 @@ function StudentDashboard({ userId, classId }: { userId: string; classId: string
 
   if (!data) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+      <div className="space-y-6 w-full max-w-4xl mx-auto">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={signOut}
+            className="flex items-center gap-1.5 border-error/30 text-error hover:bg-error hover:text-white transition-all shadow-xs"
+          >
+            <LogOut size={15} />
+            <span>{t('nav.signOut')}</span>
+          </Button>
+        </div>
         <Card>
           <CardContent className="py-12 text-center text-muted">
             {t('dashboard.noClassAssigned')}
@@ -51,9 +62,20 @@ function StudentDashboard({ userId, classId }: { userId: string; classId: string
 
   return (
     <div className="space-y-5 w-full max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-xl font-bold text-text">{t('dashboard.title')}</h1>
-        <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name || '' })}</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+          <p className="text-sm text-muted">{t('dashboard.welcome', { name: user?.name || '' })}</p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={signOut}
+          className="flex items-center gap-1.5 border-error/30 text-error hover:bg-error hover:text-white transition-all shadow-xs"
+        >
+          <LogOut size={15} />
+          <span>{t('nav.signOut')}</span>
+        </Button>
       </div>
 
       <Card className="border-none bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden shadow-sm">
