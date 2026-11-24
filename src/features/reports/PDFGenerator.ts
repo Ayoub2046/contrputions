@@ -20,16 +20,20 @@ export async function generateContributionReport(
   title: string,
   contributions: ContributionWithStudent[],
   total: number,
+  className?: string,
 ) {
   const doc = new jsPDF('p', 'mm', 'a4')
   doc.setFontSize(18)
-  doc.text(title, 14, 22)
+  doc.text(title, 14, 20)
   doc.setFontSize(10)
-  doc.text(i18n.t('pdf.generated', { date: new Date().toLocaleDateString() }), 14, 30)
-  doc.text(i18n.t('pdf.totalContributions', { currency: formatCurrency(total) }), 14, 36)
+  if (className) {
+    doc.text(`Class Scope: ${className}`, 14, 26)
+  }
+  doc.text(i18n.t('pdf.generated', { date: new Date().toLocaleDateString() }), 14, className ? 32 : 26)
+  doc.text(i18n.t('pdf.totalContributions', { currency: formatCurrency(total) }), 14, className ? 38 : 32)
 
   autoTable(doc, {
-    startY: 44,
+    startY: className ? 44 : 38,
     head: [[i18n.t('pdf.columns.studentId'), i18n.t('pdf.columns.name'), i18n.t('pdf.columns.amount'), i18n.t('pdf.columns.date')]],
     body: contributions.map((c) => [
       c.profiles?.student_id ?? '',
@@ -54,16 +58,20 @@ export async function generateExpenseReport(
   title: string,
   expenses: Expense[],
   total: number,
+  className?: string,
 ) {
   const doc = new jsPDF('p', 'mm', 'a4')
   doc.setFontSize(18)
-  doc.text(title, 14, 22)
+  doc.text(title, 14, 20)
   doc.setFontSize(10)
-  doc.text(i18n.t('pdf.generated', { date: new Date().toLocaleDateString() }), 14, 30)
-  doc.text(i18n.t('pdf.totalExpenses', { currency: formatCurrency(total) }), 14, 36)
+  if (className) {
+    doc.text(`Class Scope: ${className}`, 14, 26)
+  }
+  doc.text(i18n.t('pdf.generated', { date: new Date().toLocaleDateString() }), 14, className ? 32 : 26)
+  doc.text(i18n.t('pdf.totalExpenses', { currency: formatCurrency(total) }), 14, className ? 38 : 32)
 
   autoTable(doc, {
-    startY: 44,
+    startY: className ? 44 : 38,
     head: [[i18n.t('pdf.columns.description'), i18n.t('pdf.columns.amount'), i18n.t('pdf.columns.date')]],
     body: expenses.map((e) => [
       e.description,
@@ -88,32 +96,42 @@ export async function generateStudentStatusReport(
   students: Profile[],
   studentTotals: Record<string, number>,
   target: number,
+  className?: string,
 ) {
   const doc = new jsPDF('p', 'mm', 'a4')
   doc.setFontSize(18)
-  doc.text(title, 14, 22)
+  doc.text(title, 14, 20)
   doc.setFontSize(10)
-  doc.text(i18n.t('pdf.generated', { date: new Date().toLocaleDateString() }), 14, 30)
-  doc.text(i18n.t('pdf.targetPerStudent', { currency: formatCurrency(target) }), 14, 36)
+  if (className) {
+    doc.text(`Class: ${className}`, 14, 26)
+  }
+  doc.text(i18n.t('pdf.generated', { date: new Date().toLocaleDateString() }), 14, className ? 32 : 26)
+  doc.text(i18n.t('pdf.targetPerStudent', { currency: formatCurrency(target) }), 14, className ? 38 : 32)
 
   const t = i18n.t
 
   autoTable(doc, {
-    startY: 44,
-    head: [[t('pdf.columns.studentId'), t('pdf.columns.name'), t('pdf.columns.totalPaid'), t('pdf.columns.status')]],
-    body: students
-      .filter((s) => (studentTotals[s.id] ?? 0) > 0)
-      .map((s) => {
-        const paid = studentTotals[s.id] ?? 0
-        const status = paid >= target ? t('pdf.status.paid') : paid > 0 ? t('pdf.status.partial') : t('pdf.status.unpaid')
-        return [s.student_id, s.name, formatCurrency(paid), status]
-      }),
+    startY: className ? 44 : 38,
+    head: [[t('pdf.columns.studentId'), t('pdf.columns.name'), t('pdf.columns.totalPaid'), 'Remaining', t('pdf.columns.status')]],
+    body: students.map((s) => {
+      const paid = studentTotals[s.id] ?? 0
+      const remaining = Math.max(0, target - paid)
+      const status = target > 0 && paid >= target ? 'Cleared (Paid)' : paid > 0 ? 'Partial' : 'Unpaid'
+      return [
+        s.student_id,
+        s.name,
+        formatCurrency(paid),
+        target > 0 ? formatCurrency(remaining) : '-',
+        status,
+      ]
+    }),
     theme: 'grid',
     headStyles: { fillColor: darkBg, textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: altBg },
     columnStyles: {
       2: { halign: 'right' },
-      3: { halign: 'center' },
+      3: { halign: 'right' },
+      4: { halign: 'center' },
     },
     margin: { horizontal: 10 },
   })

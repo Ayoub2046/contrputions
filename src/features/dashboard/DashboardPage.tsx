@@ -57,9 +57,9 @@ export function DashboardPage() {
     })
   }, [])
 
-  // Fetch recent activity log (login/logout events)
+  // Fetch recent activity log (login/logout events) - ONLY FOR SUPER ADMIN
   useEffect(() => {
-    if (user?.role !== 'super_admin' && user?.role !== 'admin') return
+    if (user?.role !== 'super_admin') return
     setLogLoading(true)
     supabase
       .from('activity_logs')
@@ -502,95 +502,97 @@ export function DashboardPage() {
             </div>
           )}
 
-          {/* Row 5: Activity Log (Login / Logout Tracking) */}
-          <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-5 space-y-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Activity size={16} className="text-[#25A8E0]" />
-                <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">
-                  Audit & Security Activity Log
-                </h3>
+          {/* Row 5: Activity Log (Login / Logout Tracking) - ONLY FOR SUPER ADMIN */}
+          {user?.role === 'super_admin' && (
+            <div className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-5 space-y-4 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity size={16} className="text-[#25A8E0]" />
+                  <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">
+                    Audit & Security Activity Log
+                  </h3>
+                </div>
+                <span className="text-xs text-[#9FBBDE]">Live Auth Events</span>
               </div>
-              <span className="text-xs text-[#9FBBDE]">Live Auth Events</span>
-            </div>
 
-            {logLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-3 animate-pulse">
-                    <div className="size-7 rounded-full bg-[#ECECEC] dark:bg-[#1e3550]" />
-                    <div className="flex-1 space-y-1">
-                      <div className="h-3 w-32 bg-[#ECECEC] dark:bg-[#1e3550] rounded" />
-                      <div className="h-2.5 w-20 bg-[#ECECEC] dark:bg-[#1e3550] rounded" />
+              {logLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-3 animate-pulse">
+                      <div className="size-7 rounded-full bg-[#ECECEC] dark:bg-[#1e3550]" />
+                      <div className="flex-1 space-y-1">
+                        <div className="h-3 w-32 bg-[#ECECEC] dark:bg-[#1e3550] rounded" />
+                        <div className="h-2.5 w-20 bg-[#ECECEC] dark:bg-[#1e3550] rounded" />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : activityLog.length === 0 ? (
-              <p className="text-xs text-[#9FBBDE] py-4 text-center">
-                No activity logged yet. Login/logout events will appear here automatically.
-              </p>
-            ) : (
-              <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
-                {activityLog.map((log) => {
-                  const isLogin =
-                    log.action?.toLowerCase().includes('login') || log.event_type === 'login'
-                  const isLogout =
-                    log.action?.toLowerCase().includes('logout') || log.event_type === 'logout'
-                  return (
-                    <div
-                      key={log.id}
-                      className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                    >
+                  ))}
+                </div>
+              ) : activityLog.length === 0 ? (
+                <p className="text-xs text-[#9FBBDE] py-4 text-center">
+                  No activity logged yet. Login/logout events will appear here automatically.
+                </p>
+              ) : (
+                <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
+                  {activityLog.map((log) => {
+                    const isLogin =
+                      log.action?.toLowerCase().includes('login') || log.event_type === 'login'
+                    const isLogout =
+                      log.action?.toLowerCase().includes('logout') || log.event_type === 'logout'
+                    return (
                       <div
-                        className={cn(
-                          'size-7 rounded-full flex items-center justify-center shrink-0',
-                          isLogin
-                            ? 'bg-[#EAF4FB] dark:bg-[#0d2a40]'
-                            : isLogout
-                            ? 'bg-red-50 dark:bg-red-950/30'
-                            : 'bg-[#ECECEC] dark:bg-[#1a2d42]'
-                        )}
+                        key={log.id}
+                        className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                       >
-                        {isLogin ? (
-                          <LogIn size={13} className="text-[#1176BC]" />
-                        ) : isLogout ? (
-                          <LogOut size={13} className="text-red-500" />
-                        ) : (
-                          <Activity size={13} className="text-[#9FBBDE]" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">
-                          {log.profiles?.name || 'Unknown User'}
-                          <span className="font-normal text-[#9FBBDE] ml-1">
-                            · {log.action}
-                          </span>
-                        </p>
-                        <p className="text-[10px] text-[#9FBBDE]">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                      {log.profiles?.role && (
-                        <span
+                        <div
                           className={cn(
-                            'text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0',
-                            log.profiles.role === 'super_admin'
-                              ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400'
-                              : log.profiles.role === 'admin'
-                              ? 'bg-[#EAF4FB] text-[#1176BC] border-[#9FBBDE]/30'
-                              : 'bg-[#ECECEC] text-[#9FBBDE] border-[#C6CACB]/30'
+                            'size-7 rounded-full flex items-center justify-center shrink-0',
+                            isLogin
+                              ? 'bg-[#EAF4FB] dark:bg-[#0d2a40]'
+                              : isLogout
+                              ? 'bg-red-50 dark:bg-red-950/30'
+                              : 'bg-[#ECECEC] dark:bg-[#1a2d42]'
                           )}
                         >
-                          {log.profiles.role}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+                          {isLogin ? (
+                            <LogIn size={13} className="text-[#1176BC]" />
+                          ) : isLogout ? (
+                            <LogOut size={13} className="text-red-500" />
+                          ) : (
+                            <Activity size={13} className="text-[#9FBBDE]" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">
+                            {log.profiles?.name || 'Unknown User'}
+                            <span className="font-normal text-[#9FBBDE] ml-1">
+                              · {log.action}
+                            </span>
+                          </p>
+                          <p className="text-[10px] text-[#9FBBDE]">
+                            {new Date(log.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                        {log.profiles?.role && (
+                          <span
+                            className={cn(
+                              'text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0',
+                              log.profiles.role === 'super_admin'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400'
+                                : log.profiles.role === 'admin'
+                                ? 'bg-[#EAF4FB] text-[#1176BC] border-[#9FBBDE]/30'
+                                : 'bg-[#ECECEC] text-[#9FBBDE] border-[#C6CACB]/30'
+                            )}
+                          >
+                            {log.profiles.role}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : null}
 

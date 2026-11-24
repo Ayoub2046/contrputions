@@ -9,11 +9,11 @@ import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
 import { useAdmins } from './useAdmins'
 import { AssignClassesModal } from './AssignClassesModal'
-import { adminCreateUser, adminDeleteUser } from '../../lib/admin-api'
+import { adminCreateUser, adminDeleteUser, adminUpdateUser } from '../../lib/admin-api'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import { ROLES } from '../../lib/constants'
-import { Shield, UserPlus, Trash2, BookOpen } from 'lucide-react'
+import { Shield, UserPlus, Trash2, BookOpen, Pencil } from 'lucide-react'
 import type { Profile } from '../../lib/types'
 
 export function AdminsPage() {
@@ -25,12 +25,58 @@ export function AdminsPage() {
   const [assignTarget, setAssignTarget] = useState<Profile | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null)
 
+  // Edit Admin state
+  const [editAdmin, setEditAdmin] = useState<Profile | null>(null)
+  const [editSid, setEditSid] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editPwd, setEditPwd] = useState('')
+  const [editError, setEditError] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+
   const [sid, setSid] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [pwd, setPwd] = useState('')
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
+
+  function handleStartEdit(admin: Profile) {
+    setEditAdmin(admin)
+    setEditSid(admin.student_id)
+    setEditName(admin.name)
+    setEditPhone(admin.phone || '')
+    setEditPwd('')
+    setEditError('')
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editAdmin) return
+    if (!editSid.trim() || !editName.trim()) {
+      setEditError('Admin ID and Name are required.')
+      return
+    }
+    setSavingEdit(true)
+    setEditError('')
+    const updates: { student_id?: string; name?: string; phone?: string | null; password?: string } = {
+      student_id: editSid.trim(),
+      name: editName.trim(),
+      phone: editPhone.trim() || null,
+    }
+    if (editPwd.trim()) {
+      updates.password = editPwd.trim()
+    }
+    const { error } = await adminUpdateUser(editAdmin.id, updates)
+    if (error) {
+      setEditError(error)
+      setSavingEdit(false)
+    } else {
+      setEditAdmin(null)
+      setSavingEdit(false)
+      refetch()
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -112,6 +158,9 @@ export function AdminsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleStartEdit(a)} title="Edit Admin">
+                        <Pencil size={16} />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => setAssignTarget(a)} title={t('admins.assignClasses.title', { name: a.name })}>
                         <BookOpen size={16} />
                       </Button>
@@ -154,6 +203,7 @@ export function AdminsPage() {
                     </div>
                   </div>
                   <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => handleStartEdit(a)} title="Edit Admin"><Pencil size={16} /></Button>
                     <Button variant="ghost" size="sm" onClick={() => setAssignTarget(a)}><BookOpen size={16} /></Button>
                     <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(a)}><Trash2 size={16} className="text-error" /></Button>
                   </div>
@@ -207,6 +257,61 @@ export function AdminsPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Edit Admin Modal */}
+      {editAdmin && (
+        <Modal
+          open={!!editAdmin}
+          onClose={() => setEditAdmin(null)}
+          title={`Edit Admin: ${editAdmin.name}`}
+        >
+          <form onSubmit={handleSaveEdit} className="space-y-4">
+            <Input
+              id="edit-admin-sid"
+              label={t('admins.form.adminId')}
+              value={editSid}
+              onChange={(e) => setEditSid(e.target.value)}
+              required
+            />
+            <Input
+              id="edit-admin-name"
+              label={t('admins.form.name')}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              required
+            />
+            <Input
+              id="edit-admin-phone"
+              label="Contact Phone Number (For Student Calling)"
+              type="tel"
+              value={editPhone}
+              onChange={(e) => setEditPhone(e.target.value)}
+              placeholder="e.g. +252 61 5000000"
+            />
+            <Input
+              id="edit-admin-pwd"
+              label="New Password (optional)"
+              type="password"
+              value={editPwd}
+              onChange={(e) => setEditPwd(e.target.value)}
+              placeholder="Leave blank to keep current password"
+            />
+            {editError && (
+              <p className="text-sm text-error bg-error/10 rounded-btn px-3 py-2 border border-error/20">
+                {editError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setEditAdmin(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={savingEdit}>
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }
