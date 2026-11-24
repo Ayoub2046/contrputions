@@ -47,26 +47,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function fetchProfile(id: string) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', id).single()
-    if (data) {
-      setUser(data)
-      await fetchAdminClasses(data)
-      if (data.class_id) setActiveClassId(data.class_id)
-    } else {
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', id).single()
+      if (error) {
+        console.warn('Profile fetch error:', error.message)
+      }
+      if (data) {
+        setUser(data)
+        await fetchAdminClasses(data)
+        if (data.class_id) setActiveClassId(data.class_id)
+      } else {
+        setUser(null)
+      }
+    } catch (e) {
+      console.error('Failed to fetch profile:', e)
       setUser(null)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
-    })
+    let active = true
+
+    // Failsafe timeout: guarantee loading finishes in 5 seconds max on slow mobile connections
+    const timer = setTimeout(() => {
+      if (active) setLoading(false)
+    }, 5000)
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!active) return
+        if (session?.user) {
+          fetchProfile(session.user.id)
+        } else {
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        console.warn('getSession error:', err)
+        if (active) setLoading(false)
+      })
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) fetchProfile(session.user.id)
-      else {
+      if (!active) return
+      if (session?.user) {
+        fetchProfile(session.user.id)
+      } else {
         setUser(null)
         setActiveClassId(null)
         setAdminClassIds([])
@@ -75,7 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    return () => listener?.subscription.unsubscribe()
+    return () => {
+      active = false
+      clearTimeout(timer)
+      listener?.subscription.unsubscribe()
+    }
   }, [])
 
   async function signIn(studentId: string, password: string): Promise<string | null> {
