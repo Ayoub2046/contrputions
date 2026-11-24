@@ -71,7 +71,75 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'POST') {
-      const { student_id, name, password, class_id, role, phone } = req.body || {}
+      const body = req.body || {}
+
+      // Batch import support for CSV
+      if (Array.isArray(body.students)) {
+        const results = []
+        const errors = []
+        const targetClassId = body.class_id || auth.caller.class_id || null
+
+        for (let i = 0; i < body.students.length; i++) {
+          const item = body.students[i]
+          const { student_id, name, password, phone } = item
+          if (!student_id || !name) {
+            errors.push(`Row ${i + 1}: Missing student_id or name`)
+            continue
+          }
+
+          const cleanId = String(student_id).trim()
+          const cleanName = String(name).trim()
+          const rawPassword = password && String(password).trim() ? String(password).trim() : cleanId
+          const finalPassword = normalizeAuthPassword(cleanId, rawPassword)
+          const email = `${cleanId}@${AUTH_DOMAIN}`
+
+          // 1. Create or check Auth user
+          const authRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              apikey: SERVICE_ROLE_KEY,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password: finalPassword, email_confirm: true }),
+          })
+
+          const authData = await authRes.json()
+          if (!authRes.ok) {
+            errors.push(`Row ${i + 1} (${cleanId}): ${authData.msg || authData.message || 'Failed to create user'}`)
+            continue
+          }
+
+          // 2. Create Profile
+          const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              apikey: SERVICE_ROLE_KEY,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal',
+            },
+            body: JSON.stringify({
+              id: authData.id,
+              student_id: cleanId,
+              name: cleanName,
+              phone: phone ? String(phone).trim() : null,
+              role: 'student',
+              class_id: targetClassId,
+            }),
+          })
+
+          if (!profileRes.ok) {
+            const pErr = await profileRes.json().catch(() => ({}))
+            errors.push(`Row ${i + 1} (${cleanId}): ${pErr.message || 'Failed to create profile'}`)
+          } else {
+            results.push({ id: authData.id, student_id: cleanId, name: cleanName })
+          }
+        }
+        return res.status(200).json({ ok: true, createdCount: results.length, errors })
+      }
+
+      const { student_id, name, password, class_id, role, phone } = body
 
       if (!student_id || !name) {
         return res.status(400).json({ error: 'Missing required fields: student_id and name' })

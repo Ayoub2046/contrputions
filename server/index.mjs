@@ -118,7 +118,70 @@ const server = createServer(async (req, res) => {
         let body = ''
         req.on('data', (c) => (body += c))
         req.on('end', async () => {
-          const { student_id, name, password, class_id, role, phone } = JSON.parse(body)
+          const parsed = JSON.parse(body)
+
+          // Batch import support
+          if (Array.isArray(parsed.students)) {
+            const results = []
+            const errors = []
+            const targetClassId = parsed.class_id || auth.caller.class_id || null
+
+            for (let i = 0; i < parsed.students.length; i++) {
+              const item = parsed.students[i]
+              const { student_id, name, password, phone } = item
+              if (!student_id || !name) {
+                errors.push(`Row ${i + 1}: Missing student_id or name`)
+                continue
+              }
+
+              const cleanId = String(student_id).trim()
+              const cleanName = String(name).trim()
+              const rawPassword = password && String(password).trim() ? String(password).trim() : cleanId
+              let finalPassword = rawPassword
+              if (finalPassword.length < 6) finalPassword = finalPassword.padEnd(6, '0')
+              const email = `${cleanId}@${AUTH_DOMAIN}`
+
+              const r = await fetchAdmin('POST', '/users', {
+                email,
+                password: finalPassword,
+                email_confirm: true,
+              })
+
+              if (r.status !== 200) {
+                errors.push(`Row ${i + 1} (${cleanId}): ${r.data?.msg || r.data?.message || 'Failed to create user'}`)
+                continue
+              }
+
+              const pr = await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+                  apikey: SERVICE_ROLE_KEY,
+                  'Content-Type': 'application/json',
+                  Prefer: 'return=minimal',
+                },
+                body: JSON.stringify({
+                  id: r.data.id,
+                  student_id: cleanId,
+                  name: cleanName,
+                  phone: phone ? String(phone).trim() : null,
+                  role: 'student',
+                  class_id: targetClassId,
+                }),
+              })
+
+              if (!pr.ok) {
+                const pErr = await pr.json().catch(() => ({}))
+                await fetchAdmin('DELETE', `/users/${r.data.id}`)
+                errors.push(`Row ${i + 1} (${cleanId}): ${pErr.message || 'Failed to create profile'}`)
+              } else {
+                results.push({ id: r.data.id, student_id: cleanId, name: cleanName })
+              }
+            }
+            return json(res, 200, { ok: true, createdCount: results.length, errors })
+          }
+
+          const { student_id, name, password, class_id, role, phone } = parsed
           const targetRole = role || 'student'
 
           if (auth.caller.role !== 'super_admin' && targetRole !== 'student') {

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { adminCreateUser, adminDeleteUser, adminUpdateUser } from '../../lib/admin-api'
+import { adminCreateUser, adminDeleteUser, adminUpdateUser, adminImportStudentsBatch } from '../../lib/admin-api'
 import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
 import type { Profile } from '../../lib/types'
+import type { ParsedStudentRow } from './csvStudentParser'
 
 export function useStudents(classId?: string | null) {
   const [students, setStudents] = useState<Profile[]>([])
@@ -83,17 +84,11 @@ export function useStudents(classId?: string | null) {
     return error?.message ?? null
   }
 
-  async function importCSV(lines: string[][], importClassId?: string) {
-    const errors: string[] = []
-    for (let i = 0; i < lines.length; i++) {
-      const [sid, name, password, phone] = lines[i]
-      if (!sid || !name) {
-        errors.push(`Row ${i + 1}: missing required fields (student_id, name)`)
-        continue
-      }
-      const finalPwd = (password && password.trim()) ? password.trim() : sid.trim()
-      const err = await create(sid.trim(), name.trim(), finalPwd, importClassId, phone?.trim() || null)
-      if (err) errors.push(`Row ${i + 1} (${sid}): ${err}`)
+  async function importCSV(parsedRows: ParsedStudentRow[], importClassId?: string): Promise<string[]> {
+    const targetClass = importClassId ?? classId ?? null
+    const { successCount, errors } = await adminImportStudentsBatch(parsedRows, targetClass)
+    if (successCount > 0) {
+      await fetch()
     }
     return errors
   }
