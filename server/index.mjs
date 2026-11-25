@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import commentsHandler from '../api/comments.mjs'
+import manifestHandler from '../api/manifest.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = resolve(__dirname, '..', '.env')
@@ -247,6 +248,21 @@ const server = createServer(async (req, res) => {
       } else {
         json(res, 405, { error: 'Method not allowed' })
       }
+    } else if (path === '/api/manifest' || path === '/manifest.webmanifest') {
+      const enhancedRes = Object.assign(res, {
+        status(code) {
+          res.statusCode = code
+          return this
+        },
+        json(data) {
+          if (!res.getHeader('Content-Type')) {
+            res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8')
+          }
+          res.end(JSON.stringify(data))
+          return this
+        },
+      })
+      await manifestHandler(req, enhancedRes)
     } else if (path.startsWith('/api/comments')) {
       let body = ''
       req.on('data', (c) => (body += c))

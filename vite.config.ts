@@ -1,16 +1,110 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig({
-  server: {
-    proxy: { '/api': 'http://localhost:3001' },
-  },
-  plugins: [
-    react(),
-    tailwindcss(),
-    VitePWA({
+function apiDevServerPlugin(): Plugin {
+  return {
+    name: 'api-dev-server',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url) return next()
+
+        const parsedUrl = new URL(req.url, 'http://localhost:5173')
+        const pathname = parsedUrl.pathname
+
+        if (!pathname.startsWith('/api/') && pathname !== '/manifest.webmanifest') {
+          return next()
+        }
+
+        const enhancedRes = Object.assign(res, {
+          status(code: number) {
+            res.statusCode = code
+            return this
+          },
+          json(data: any) {
+            if (!res.getHeader('Content-Type')) {
+              res.setHeader('Content-Type', 'application/json')
+            }
+            res.end(JSON.stringify(data))
+            return this
+          },
+        })
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+          res.end()
+          return
+        }
+
+        let body: any = {}
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          try {
+            const chunks: any[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk)
+            }
+            const rawBody = Buffer.concat(chunks).toString('utf-8')
+            if (rawBody.trim()) {
+              body = JSON.parse(rawBody)
+            }
+          } catch {
+            body = {}
+          }
+        }
+        ;(req as any).body = body
+        ;(req as any).query = Object.fromEntries(parsedUrl.searchParams)
+
+        try {
+          if (pathname === '/api/manifest' || pathname === '/manifest.webmanifest') {
+            // @ts-ignore
+            const { default: handler } = await import('./api/manifest.mjs')
+            return await handler(req, enhancedRes)
+          }
+
+          if (pathname.startsWith('/api/comments')) {
+            // @ts-ignore
+            const { default: handler } = await import('./api/comments.mjs')
+            return await handler(req, enhancedRes)
+          }
+
+          if (pathname.startsWith('/api/chat')) {
+            // @ts-ignore
+            const { default: handler } = await import('./api/chat.mjs')
+            return await handler(req, enhancedRes)
+          }
+
+          if (pathname.startsWith('/api/users')) {
+            // @ts-ignore
+            const { default: handler } = await import('./api/users.mjs')
+            return await handler(req, enhancedRes)
+          }
+
+          enhancedRes.status(404).json({ error: 'API route not found' })
+        } catch (err: any) {
+          console.error(`[api-dev] Error handling ${pathname}:`, err)
+          if (!res.headersSent) {
+            enhancedRes.status(500).json({ error: err.message || 'Internal server error' })
+          }
+        }
+      })
+    },
+  }
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  Object.assign(process.env, env)
+
+  return {
+    plugins: [
+      apiDevServerPlugin(),
+      react(),
+      tailwindcss(),
+      VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png'],
       workbox: {
@@ -74,4 +168,5 @@ export default defineConfig({
       },
     }),
   ],
+}
 })
