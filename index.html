@@ -13,6 +13,21 @@
     <meta name="description" content="Class Contribution Transparency System" />
     <title>ClassBank</title>
     <script>
+      // ── Service Worker cleanup ───────────────────────────────────────────────
+      // Unregister any stale SW that belongs to a different origin (e.g. after a
+      // domain change). This prevents Chrome's RESULT_CODE_KILLED_BAD_MESSAGE crash.
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          regs.forEach(function(reg) {
+            // If the SW scope doesn't start with the current origin, kill it.
+            if (reg.scope && !reg.scope.startsWith(location.origin)) {
+              reg.unregister();
+            }
+          });
+        }).catch(function() {});
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       (function() {
         var t = localStorage.getItem('theme');
         if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {

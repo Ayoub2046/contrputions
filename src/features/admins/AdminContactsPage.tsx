@@ -25,11 +25,14 @@ export function AdminContactsPage() {
   const { adminsList, messages, loading, submitting, postMessage, deleteMessage } =
     useAdminCommunications()
 
-  // Hide Super Admin from Class Admins and Finance Manager
+  // Visibility rules:
+  // - super_admin sees everyone
+  // - class_admin: cannot see super_admin or finance_manager
+  // - finance_manager: cannot see super_admin; can only see class admins (not other finance managers)
   const visibleAdmins = adminsList.filter((admin) => {
-    if (user?.role !== 'super_admin' && admin.role === 'super_admin') {
-      return false
-    }
+    if (user?.role === 'super_admin') return true
+    if (admin.role === 'super_admin') return false          // hide super_admin from all non-super
+    if (admin.role === 'finance_manager') return false      // hide finance_manager from class admins & other finance managers
     return true
   })
 
@@ -183,10 +186,6 @@ export function AdminContactsPage() {
                       {isSuper ? (
                         <span className="inline-block text-xs font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 rounded">
                           Full Administrative Access (All Classes)
-                        </span>
-                      ) : isFinanceMgr ? (
-                        <span className="inline-block text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded">
-                          All Classes
                         </span>
                       ) : admin.assignedClasses && admin.assignedClasses.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
