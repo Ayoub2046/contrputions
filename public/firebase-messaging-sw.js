@@ -18,8 +18,11 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  const now = Date.now()
   const title = data.title || 'ClassBank Notification'
-  const notifTag = data.tag || (data.id ? `classbank_${data.id}` : `classbank_${Date.now()}`)
+  const notifTag =
+    data.tag ||
+    `classbank_${data.id || 'msg'}_${now}_${Math.random().toString(36).slice(2, 6)}`
 
   const options = {
     body: data.body || 'You have a new update.',
@@ -28,12 +31,13 @@ self.addEventListener('push', (event) => {
     vibrate: data.vibrate || [300, 150, 300, 150, 400],
     tag: notifTag,
     renotify: true,
-    requireInteraction: true,
+    requireInteraction: false,
     silent: false,
+    timestamp: typeof data.timestamp === 'number' ? data.timestamp : now,
     data: {
       url: data.url || '/dashboard',
       id: data.id,
-      timestamp: Date.now(),
+      timestamp: now,
     },
     actions: [{ action: 'open', title: 'Open App' }],
   }

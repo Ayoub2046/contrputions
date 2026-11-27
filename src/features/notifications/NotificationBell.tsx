@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useNotifications } from './NotificationContext'
 import { useAuth } from '../auth/AuthContext'
@@ -14,29 +14,34 @@ import {
   Receipt,
   MessageSquare,
   Info,
-  Trash2,
   Clock,
   Sparkles,
+  Check,
+  CheckCheck,
 } from 'lucide-react'
 import { BroadcastNotificationModal } from './BroadcastNotificationModal'
+import type { StoredNotification } from './notificationTypes'
 
 interface NotificationBellProps {
   placement?: 'sidebar' | 'header'
 }
 
+type FilterTab = 'all' | 'unread'
+type CategoryFilter = 'all' | 'contribution' | 'expense' | 'news' | 'reminder'
+
 function getCategoryIcon(cat?: string) {
   switch (cat) {
     case 'contribution':
-      return <Wallet size={15} className="text-emerald-500" />
+      return <Wallet size={15} className="text-emerald-600 dark:text-emerald-400" />
     case 'expense':
-      return <Receipt size={15} className="text-amber-500" />
+      return <Receipt size={15} className="text-amber-600 dark:text-amber-400" />
     case 'reminder':
-      return <Bell size={15} className="text-blue-500" />
+      return <Bell size={15} className="text-blue-600 dark:text-blue-400" />
     case 'announcement':
     case 'news':
-      return <MessageSquare size={15} className="text-indigo-500" />
+      return <MessageSquare size={15} className="text-indigo-600 dark:text-indigo-400" />
     default:
-      return <Info size={15} className="text-[#1176BC]" />
+      return <Info size={15} className="text-[#1176BC] dark:text-[#38BDF8]" />
   }
 }
 
@@ -56,6 +61,32 @@ function getCategoryColor(cat?: string) {
   }
 }
 
+function getCategoryLabel(cat?: string) {
+  switch (cat) {
+    case 'contribution':
+      return 'Contribution'
+    case 'expense':
+      return 'Expense'
+    case 'reminder':
+      return 'Reminder'
+    case 'announcement':
+    case 'news':
+      return 'Announcement'
+    case 'system':
+      return 'System'
+    default:
+      return 'Notice'
+  }
+}
+
+function formatRole(role?: string) {
+  if (role === 'super_admin') return 'Super Admin'
+  if (role === 'admin') return 'Class Admin'
+  if (role === 'finance_manager') return 'Finance'
+  if (role === 'student') return 'Student'
+  return role || ''
+}
+
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
@@ -64,7 +95,18 @@ function timeAgo(dateStr: string) {
   const hrs = Math.floor(mins / 60)
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.floor(hrs / 24)
-  return `${days}d ago`
+  if (days < 7) return `${days}d ago`
+  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function isTodayDate(dateStr: string): boolean {
+  const d = new Date(dateStr)
+  const now = new Date()
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  )
 }
 
 export function NotificationBell({ placement = 'header' }: NotificationBellProps) {
@@ -84,7 +126,8 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
   const [open, setOpen] = useState(false)
   const [showBroadcastModal, setShowBroadcastModal] = useState(false)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
-  const [activeTab, setActiveTab] = useState<'unread' | 'all'>('unread')
+  const [activeTab, setActiveTab] = useState<FilterTab>('all')
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
   const dropdownRef = useRef<HTMLDivElement>(null)
   const portalRef = useRef<HTMLDivElement>(null)
 
@@ -92,17 +135,19 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
   useEffect(() => {
     if (isAdmin) {
-      supabase.from('classes').select('id, name').order('name').then(({ data }) => {
-        if (data) setAvailableClasses(data)
-      })
+      supabase
+        .from('classes')
+        .select('id, name')
+        .order('name')
+        .then(({ data }) => {
+          if (data) setAvailableClasses(data)
+        })
     }
   }, [isAdmin])
 
-  // Close dropdown on click outside for desktop and mobile
   useEffect(() => {
     function handleClickOutside(e: MouseEvent | TouchEvent) {
       const target = e.target as Node
-      // If click/touch is inside the bell trigger button or inside the drawer, do not close
       if (
         (dropdownRef.current && dropdownRef.current.contains(target)) ||
         (portalRef.current && portalRef.current.contains(target))
@@ -121,8 +166,142 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
     }
   }, [open])
 
-  const displayedNotifications =
-    activeTab === 'unread' ? notifications.filter((n) => !n.read) : notifications
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter((n) => {
+      if (activeTab === 'unread' && n.read) return false
+      if (categoryFilter === 'all') return true
+      if (categoryFilter === 'news') {
+        return n.category === 'news' || n.category === 'announcement'
+      }
+      return n.category === categoryFilter
+    })
+  }, [notifications, activeTab, categoryFilter])
+
+  const groupedSections = useMemo(() => {
+    const today: StoredNotification[] = []
+    const earlier: StoredNotification[] = []
+    for (const item of filteredNotifications) {
+      if (isTodayDate(item.createdAt)) today.push(item)
+      else earlier.push(item)
+    }
+    return { today, earlier }
+  }, [filteredNotifications])
+
+  function renderNotificationItem(n: StoredNotification) {
+    return (
+      <div
+        key={n.id}
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          if (!n.read) markAsRead(n.id)
+        }}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && !n.read) {
+            e.preventDefault()
+            markAsRead(n.id)
+          }
+        }}
+        className={`p-3.5 sm:p-4 transition-all group relative ${
+          n.read
+            ? 'bg-white dark:bg-[#132033] hover:bg-[#F8FAFC] dark:hover:bg-[#101c2e]'
+            : 'bg-[#EAF4FB]/70 dark:bg-[#1176BC]/12 border-l-[3px] border-l-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/20 cursor-pointer'
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          {/* Category Icon */}
+          <div
+            className={`size-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${getCategoryColor(
+              n.category
+            )}`}
+          >
+            {getCategoryIcon(n.category)}
+          </div>
+
+          {/* Content */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {!n.read && (
+                    <span
+                      className="size-2 rounded-full bg-[#1176BC] dark:bg-[#38BDF8] shrink-0 ring-2 ring-[#1176BC]/20"
+                      title="Unread"
+                    />
+                  )}
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0d1a2d] text-[#4a5a72] dark:text-[#9FBBDE]">
+                    {getCategoryLabel(n.category)}
+                  </span>
+                </div>
+                <p
+                  className={`text-xs sm:text-[13px] leading-snug break-words ${
+                    n.read
+                      ? 'font-medium text-[#4a5a72] dark:text-[#9FBBDE]'
+                      : 'font-bold text-[#1a2332] dark:text-[#e8f0f8]'
+                  }`}
+                >
+                  {n.title}
+                </p>
+              </div>
+
+              {/* Mark as Read Action / Read Status Pill */}
+              <div className="shrink-0 flex items-center pt-0.5">
+                {!n.read ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      markAsRead(n.id)
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#1176BC]/10 hover:bg-[#1176BC] text-[#1176BC] hover:text-white dark:bg-[#25A8E0]/15 dark:hover:bg-[#25A8E0] dark:text-[#38BDF8] dark:hover:text-slate-950 text-[10px] font-bold transition-all cursor-pointer active:scale-95 touch-manipulation"
+                    title="Mark as read"
+                  >
+                    <Check size={12} />
+                    <span>Mark read</span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40">
+                    <CheckCheck size={11} />
+                    <span>Read</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <p
+              className={`text-xs mt-1.5 leading-relaxed whitespace-pre-line break-words ${
+                n.read
+                  ? 'text-[#6b7a90] dark:text-[#86a2c4]'
+                  : 'text-[#334155] dark:text-[#cbd5e1]'
+              }`}
+            >
+              {n.body}
+            </p>
+
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 text-[10px] text-[#7c93b0] dark:text-[#88a3c4]">
+                <Clock size={10} className="shrink-0" />
+                {timeAgo(n.createdAt)}
+              </span>
+              {n.senderName && (
+                <>
+                  <span className="text-[#9FBBDE] text-[10px]">&middot;</span>
+                  <span className="text-[10px] text-[#4a5a72] dark:text-[#9FBBDE] font-semibold truncate">
+                    {n.senderName}
+                  </span>
+                </>
+              )}
+              {n.senderRole && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-[#F1F5F9] dark:bg-[#0d1a2d] text-[#64748b] dark:text-[#9FBBDE]">
+                  {formatRole(n.senderRole)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const drawerContent = (
     <div className="flex flex-col h-full max-h-full">
@@ -142,18 +321,18 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
               <span className="font-bold text-sm text-[#1a2332] dark:text-[#e8f0f8] block leading-tight truncate">
                 {appName} Notifications
               </span>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Realtime Active
+                  Live
                 </span>
                 {webPushReady ? (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#1176BC] dark:text-[#25A8E0]">
-                    · <Sparkles size={9} /> Push Ready
+                    &middot; <Sparkles size={9} /> Push Ready
                   </span>
                 ) : permission === 'granted' ? (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                    · Connecting Push...
+                    &middot; Syncing Push...
                   </span>
                 ) : null}
               </div>
@@ -161,19 +340,18 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Always visible Clear All button when notifications exist */}
-            {notifications.length > 0 && (
+            {unreadCount > 0 && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
                   markAllAsRead()
                 }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 hover:bg-red-100 transition-colors cursor-pointer active:scale-95 touch-manipulation"
-                title="Clear all notifications"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#1176BC] dark:text-[#38BDF8] hover:text-white hover:bg-[#1176BC] dark:hover:bg-[#25A8E0] dark:hover:text-slate-950 px-2.5 py-1.5 rounded-lg bg-[#EAF4FB] dark:bg-[#1176BC]/20 transition-all cursor-pointer active:scale-95 touch-manipulation"
+                title="Mark all notifications as read"
               >
-                <Trash2 size={13} />
-                <span>Clear All</span>
+                <CheckCheck size={14} />
+                <span>Mark all read</span>
               </button>
             )}
 
@@ -191,24 +369,56 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* All / Unread Segmented Tabs */}
         <div className="flex gap-1 p-0.5 bg-[#F5F8FA] dark:bg-[#0d1a2d] rounded-lg">
-          {(['unread', 'all'] as const).map((tab) => (
+          {(
+            [
+              { id: 'all', label: `All (${notifications.length})` },
+              { id: 'unread', label: `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}` },
+            ] as const
+          ).map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
               className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                activeTab === tab
-                  ? 'bg-white dark:bg-[#132033] text-[#1176BC] shadow-sm'
-                  : 'text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8]'
+                activeTab === tab.id
+                  ? 'bg-white dark:bg-[#132033] text-[#1176BC] dark:text-[#38BDF8] shadow-sm'
+                  : 'text-[#6b7a90] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8]'
               }`}
             >
-              {tab === 'unread'
-                ? `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}`
-                : `All (${notifications.length})`}
+              {tab.label}
             </button>
           ))}
         </div>
+
+        {/* Compact Category Filters */}
+        {notifications.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto no-scrollbar pb-0.5">
+            {(
+              [
+                { id: 'all', label: 'Everything' },
+                { id: 'news', label: 'News' },
+                { id: 'contribution', label: 'Payments' },
+                { id: 'expense', label: 'Expenses' },
+                { id: 'reminder', label: 'Reminders' },
+              ] as const
+            ).map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setCategoryFilter(cat.id)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                  categoryFilter === cat.id
+                    ? 'bg-[#1176BC] text-white shadow-2xs'
+                    : 'bg-[#F1F5F9] dark:bg-[#0d1a2d] text-[#4a5a72] dark:text-[#9FBBDE] hover:bg-[#E2E8F0] dark:hover:bg-[#1a2d42]'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Permission Status Banner if not granted */}
@@ -259,136 +469,103 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
       {/* Notification Items List */}
       <div className="overflow-y-auto flex-1 overscroll-contain">
-        {displayedNotifications.length === 0 ? (
+        {filteredNotifications.length === 0 ? (
           <div className="py-14 text-center space-y-3 px-4">
-            <div className="size-16 rounded-2xl bg-[#F5F8FA] dark:bg-[#0d1a2d] flex items-center justify-center mx-auto">
-              <Bell size={28} className="text-[#9FBBDE] opacity-50" />
+            <div className="size-16 rounded-2xl bg-[#F5F8FA] dark:bg-[#0d1a2d] p-3 flex items-center justify-center mx-auto border border-[#ECECEC] dark:border-[#1e3550]">
+              <AppLogo className="size-full object-contain opacity-70" alt={appName} />
             </div>
             <div>
               <p className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8]">
-                {activeTab === 'unread' ? 'All caught up! 🎉' : 'No notifications yet'}
+                {activeTab === 'unread' ? 'All caught up!' : 'No notifications matching filter'}
               </p>
-              <p className="text-xs text-[#9FBBDE] mt-0.5">
+              <p className="text-xs text-[#6b7a90] dark:text-[#9FBBDE] mt-0.5 max-w-xs mx-auto">
                 {activeTab === 'unread'
-                  ? 'No unread notifications. Switch to "All" to view history.'
-                  : 'Announcements, contribution alerts, and reminders will appear here.'}
+                  ? 'Every notification has been read. Switch to "All" to review past messages anytime.'
+                  : 'Announcements, contribution alerts, and reminders will stay organized here.'}
               </p>
             </div>
             {activeTab === 'unread' && notifications.length > 0 && (
               <button
-                onClick={() => setActiveTab('all')}
-                className="text-xs font-semibold text-[#1176BC] hover:underline cursor-pointer"
+                type="button"
+                onClick={() => {
+                  setCategoryFilter('all')
+                  setActiveTab('all')
+                }}
+                className="text-xs font-semibold text-[#1176BC] dark:text-[#38BDF8] hover:underline cursor-pointer"
               >
-                View all notifications ({notifications.length}) →
+                View all notifications ({notifications.length}) &rarr;
               </button>
             )}
           </div>
         ) : (
-          <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
-            {displayedNotifications.map((n) => (
-              <div
-                key={n.id}
-                className={`p-3.5 transition-all group ${
-                  n.read
-                    ? 'hover:bg-[#F5F8FA] dark:hover:bg-[#0d1a2d]'
-                    : 'bg-[#EAF4FB]/60 dark:bg-[#1176BC]/8 border-l-2 border-l-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/15'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  {/* Category Icon */}
-                  <div
-                    className={`size-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${getCategoryColor(
-                      n.category
-                    )}`}
-                  >
-                    {getCategoryIcon(n.category)}
-                  </div>
-
-                  {/* Content */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p
-                        className={`text-xs leading-snug break-words ${
-                          n.read
-                            ? 'font-medium text-[#4a5a72] dark:text-[#9FBBDE]'
-                            : 'font-bold text-[#1a2332] dark:text-[#e8f0f8]'
-                        }`}
-                      >
-                        {n.title}
-                      </p>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {!n.read && (
-                          <span className="size-2 rounded-full bg-[#1176BC] ring-2 ring-[#EAF4FB] dark:ring-[#132033]" />
-                        )}
-                        {/* Individual Delete / Dismiss Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            markAsRead(n.id)
-                          }}
-                          className="size-6 rounded-md flex items-center justify-center text-[#9FBBDE] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer touch-manipulation"
-                          title="Dismiss notification"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-[#4a5a72] dark:text-[#9FBBDE] mt-1 leading-relaxed break-words">
-                      {n.body}
-                    </p>
-
-                    <div className="flex items-center gap-2 mt-2">
-                      <Clock size={10} className="text-[#9FBBDE] shrink-0" />
-                      <span className="text-[10px] text-[#9FBBDE]">{timeAgo(n.createdAt)}</span>
-                      {n.senderName && (
-                        <>
-                          <span className="text-[#9FBBDE] text-[10px]">·</span>
-                          <span className="text-[10px] text-[#9FBBDE] font-medium truncate">
-                            {n.senderName}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+          <div>
+            {groupedSections.today.length > 0 && (
+              <div>
+                <div className="px-4 py-1.5 bg-[#F8FAFC] dark:bg-[#0d1a2d]/90 border-y border-[#ECECEC]/70 dark:border-[#1e3550]/70 sticky top-0 z-10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-[#9FBBDE]">
+                    Today
+                  </span>
+                </div>
+                <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
+                  {groupedSections.today.map(renderNotificationItem)}
                 </div>
               </div>
-            ))}
+            )}
+
+            {groupedSections.earlier.length > 0 && (
+              <div>
+                <div className="px-4 py-1.5 bg-[#F8FAFC] dark:bg-[#0d1a2d]/90 border-y border-[#ECECEC]/70 dark:border-[#1e3550]/70 sticky top-0 z-10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-[#9FBBDE]">
+                    Earlier
+                  </span>
+                </div>
+                <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
+                  {groupedSections.earlier.map(renderNotificationItem)}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Footer for quick dismissal when multiple items exist */}
+      {/* Professional Read-Status Footer */}
       {notifications.length > 0 && (
-        <div className="p-2.5 border-t border-[#ECECEC] dark:border-[#1e3550] bg-[#F5F8FA] dark:bg-[#0d1a2d] shrink-0 flex items-center justify-between px-4">
-          <span className="text-[11px] text-[#9FBBDE]">
-            {notifications.length} notification{notifications.length === 1 ? '' : 's'}
+        <div className="p-2.5 sm:px-4 border-t border-[#ECECEC] dark:border-[#1e3550] bg-[#F5F8FA] dark:bg-[#0d1a2d] shrink-0 flex items-center justify-between gap-2">
+          <span className="text-[11px] font-medium text-[#64748b] dark:text-[#9FBBDE]">
+            {unreadCount > 0
+              ? `${unreadCount} unread of ${notifications.length} total`
+              : `All ${notifications.length} notification${notifications.length === 1 ? '' : 's'} read`}
           </span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              markAllAsRead()
-            }}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1176BC] hover:text-red-500 transition-colors cursor-pointer touch-manipulation"
-          >
-            <Trash2 size={12} />
-            Clear all
-          </button>
+
+          {unreadCount > 0 ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                markAllAsRead()
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1176BC] dark:text-[#38BDF8] hover:underline cursor-pointer touch-manipulation"
+            >
+              <CheckCheck size={13} />
+              Mark all as read
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+              <CheckCheck size={13} />
+              Caught up
+            </span>
+          )}
         </div>
       )}
     </div>
   )
 
-  // Desktop flyout for sidebar placement (>= lg)
   const sidebarFlyoutClasses =
-    'hidden lg:flex flex-col absolute z-50 top-0 left-full ml-3 w-96 md:w-[420px] max-h-[85vh] rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+    'hidden lg:flex flex-col absolute z-50 top-0 left-full ml-3 w-96 md:w-[430px] max-h-[85vh] rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
 
   return (
     <div className="relative inline-block" ref={dropdownRef}>
-      {/* Bell Trigger Button - High Visibility & Modern Styling */}
+      {/* Bell Trigger Button */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -415,7 +592,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
         )}
       </button>
 
-      {/* 1. Desktop Sidebar Anchored Flyout */}
+      {/* Desktop Sidebar Anchored Flyout */}
       {open && placement === 'sidebar' && (
         <div
           ref={portalRef}
@@ -426,19 +603,16 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
         </div>
       )}
 
-      {/* 2. Responsive Bottom Sheet for Mobile & Modal for Desktop/Tablet */}
+      {/* Mobile Bottom Sheet / Modal */}
       {open &&
         placement !== 'sidebar' &&
         typeof document !== 'undefined' &&
         createPortal(
           <div className="fixed inset-0 z-[100] flex items-end sm:items-start justify-center sm:pt-14 p-0 sm:px-3 pointer-events-auto animate-in fade-in duration-150">
-            {/* Dimmed Backdrop */}
             <div
               className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
               onClick={() => setOpen(false)}
             />
-
-            {/* Mobile Bottom Sheet (< sm) or Centered Modal (>= sm) */}
             <div
               ref={portalRef}
               onClick={(e) => e.stopPropagation()}

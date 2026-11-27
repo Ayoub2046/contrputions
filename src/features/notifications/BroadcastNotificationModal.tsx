@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { useNotifications } from './NotificationContext'
 import { useAuth } from '../auth/AuthContext'
+import { useAppName } from '../../hooks/useAppLogo'
 import { Send, CheckCircle2 } from 'lucide-react'
 import type { NotificationCategory } from './notificationTypes'
 
@@ -16,6 +17,7 @@ interface BroadcastModalProps {
 export function BroadcastNotificationModal({ open, onClose, availableClasses = [] }: BroadcastModalProps) {
   const { broadcast } = useNotifications()
   const { user, activeClassId } = useAuth()
+  const appName = useAppName()
 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -139,7 +141,7 @@ export function BroadcastNotificationModal({ open, onClose, availableClasses = [
             </span>
             <div className="rounded-lg bg-white dark:bg-slate-900 border border-border p-2.5 shadow-sm">
               <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mb-1">
-                <span>ClassBank &middot; Push Notification</span>
+                <span>{appName} &middot; Push Notification</span>
                 <span className="text-[10px] text-muted">Just now</span>
               </div>
               <p className="text-xs font-bold text-text truncate">{title || 'Your Notification Title'}</p>

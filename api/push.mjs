@@ -289,6 +289,10 @@ export default async function handler(req, res) {
       return !sub.class_id || sub.class_id === targetClassId
     })
 
+    const uniqueTag = notifId
+      ? `classbank_${notifId}_${Date.now()}`
+      : `classbank_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+
     const pushData = JSON.stringify({
       id: notifId,
       title,
@@ -302,8 +306,8 @@ export default async function handler(req, res) {
       vibrate: [300, 150, 300, 150, 400],
       renotify: true,
       silent: false,
-      requireInteraction: true,
-      tag: notifId ? `classbank_${notifId}` : `classbank_${Date.now()}`,
+      requireInteraction: false,
+      tag: uniqueTag,
       timestamp: Date.now(),
     })
 
@@ -327,7 +331,6 @@ export default async function handler(req, res) {
             {
               TTL: 86400, // 24 hours retention on push service
               urgency: 'high',
-              topic: 'announcement',
               headers: {
                 Urgency: 'high',
               },

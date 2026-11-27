@@ -390,14 +390,26 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-text">{n.title}</span>
-                      {!n.read && (
-                        <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-text">{n.title}</span>
+                        {!n.read && (
+                          <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
+                        )}
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.2 rounded-full border border-emerald-500/20 uppercase tracking-wider">
+                          {n.category || 'Announcement'}
+                        </span>
+                      </div>
+
+                      {!n.read ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
+                          <Check size={11} /> Mark read
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted">
+                          <Check size={11} className="text-emerald-500" /> Read
+                        </span>
                       )}
-                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.2 rounded-full border border-emerald-500/20 uppercase tracking-wider">
-                        {n.category || 'Announcement'}
-                      </span>
                     </div>
 
                     <p className="text-xs text-secondary leading-relaxed whitespace-pre-wrap break-words">

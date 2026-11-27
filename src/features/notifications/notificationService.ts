@@ -58,7 +58,6 @@ function resolveNotificationAppLogo(): string {
       return href
     }
   }
-  // Default fast-loading 192x192 crisp PNG derived from application logo
   return '/icons/notif-logo-192.png'
 }
 
@@ -95,7 +94,8 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
   const badgeUrl = '/icons/notif-badge-96.png'
   const targetUrl =
     payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
-  const notifTag = payload.id ? `classbank_${payload.id}` : `classbank_${Date.now()}`
+  const now = Date.now()
+  const notifTag = payload.id ? `classbank_${payload.id}_${now}` : `classbank_${now}`
 
   // 1. Post to active Service Worker controller
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -124,8 +124,9 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
           vibrate: [300, 150, 300, 150, 400],
           data: { url: targetUrl, id: payload.id },
           renotify: true,
-          requireInteraction: true,
+          requireInteraction: false,
           silent: false,
+          timestamp: now,
         } as NotificationOptions)
         return
       }
@@ -139,7 +140,7 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
       icon: iconUrl,
       badge: badgeUrl,
       tag: notifTag,
-      requireInteraction: true,
+      requireInteraction: false,
       silent: false,
     } as NotificationOptions)
     notif.onclick = () => {
@@ -162,7 +163,6 @@ export async function persistNotification(payload: PushNotificationPayload): Pro
     read: false,
   }
 
-  // Persist directly to Supabase public.notifications database table
   try {
     const { error } = await supabase.from('notifications').upsert(
       {
@@ -190,13 +190,114 @@ export async function persistNotification(payload: PushNotificationPayload): Pro
   return item
 }
 
-export async function fetchNotificationsList(classId?: string | null): Promise<StoredNotification[]> {
+function getReadStorageKey(userId?: string | null) {
+  return `classbank_read_notifs_${userId || 'guest'}`
+}
+
+export function loadLocalReadIds(userId?: string | null): Set<string> {
+  try {
+    const raw = localStorage.getItem(getReadStorageKey(userId))
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return new Set(parsed)
+    }
+  } catch {}
+  return new Set()
+}
+
+export function saveLocalReadIds(userId: string | null | undefined, ids: Set<string>): void {
+  try {
+    const arr = Array.from(ids).slice(-400)
+    localStorage.setItem(getReadStorageKey(userId), JSON.stringify(arr))
+  } catch {}
+}
+
+export async function fetchReadNotificationIds(userId?: string | null): Promise<Set<string>> {
+  const localSet = loadLocalReadIds(userId)
+  if (!userId || !isValidUUID(userId)) return localSet
+
   try {
     const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(60)
+      .from('notification_reads')
+      .select('notification_id')
+      .eq('user_id', userId)
+      .limit(400)
+
+    if (!error && Array.isArray(data)) {
+      for (const row of data as any[]) {
+        if (row?.notification_id) localSet.add(row.notification_id)
+      }
+      saveLocalReadIds(userId, localSet)
+    }
+  } catch {
+    // Graceful fallback if notification_reads migration hasn't been applied yet
+  }
+  return localSet
+}
+
+export async function markNotificationReadInDB(
+  notificationId: string,
+  userId?: string | null
+): Promise<void> {
+  if (!notificationId) return
+  const current = loadLocalReadIds(userId)
+  current.add(notificationId)
+  saveLocalReadIds(userId, current)
+
+  if (!userId || !isValidUUID(userId) || !isValidUUID(notificationId)) return
+  try {
+    await supabase.from('notification_reads').upsert(
+      {
+        notification_id: notificationId,
+        user_id: userId,
+        read_at: new Date().toISOString(),
+      } as never,
+      { onConflict: 'notification_id,user_id' }
+    )
+  } catch {}
+}
+
+export async function markAllNotificationsReadInDB(
+  notificationIds: string[],
+  userId?: string | null
+): Promise<void> {
+  if (!notificationIds || notificationIds.length === 0) return
+  const current = loadLocalReadIds(userId)
+  for (const id of notificationIds) {
+    if (id) current.add(id)
+  }
+  saveLocalReadIds(userId, current)
+
+  if (!userId || !isValidUUID(userId)) return
+  const validRows = notificationIds
+    .filter((id) => isValidUUID(id))
+    .map((id) => ({
+      notification_id: id,
+      user_id: userId,
+      read_at: new Date().toISOString(),
+    }))
+
+  if (validRows.length === 0) return
+  try {
+    await supabase
+      .from('notification_reads')
+      .upsert(validRows as never, { onConflict: 'notification_id,user_id' })
+  } catch {}
+}
+
+export async function fetchNotificationsList(
+  classId?: string | null,
+  userId?: string | null
+): Promise<StoredNotification[]> {
+  try {
+    const [{ data, error }, readIds] = await Promise.all([
+      supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(80),
+      fetchReadNotificationIds(userId),
+    ])
 
     if (error) {
       console.warn('[Supabase DB Notifications Fetch Error]:', error.message)
@@ -220,7 +321,7 @@ export async function fetchNotificationsList(classId?: string | null): Promise<S
         senderRole: d.sender_role,
         classId: d.class_id,
         createdAt: d.created_at,
-        read: false,
+        read: readIds.has(d.id),
       }))
     }
   } catch (err) {
@@ -230,30 +331,8 @@ export async function fetchNotificationsList(classId?: string | null): Promise<S
   return []
 }
 
-export async function deleteNotificationFromDB(id: string): Promise<void> {
-  if (!id || !isValidUUID(id)) return
-  try {
-    const { error } = await supabase.from('notifications').delete().eq('id', id)
-    if (error) {
-      console.warn('[Database Notifications Delete Error]:', error.message)
-    }
-  } catch (err) {
-    console.error('[Database Notifications Delete Exception]:', err)
-  }
-}
-
-export async function clearAllNotificationsFromDB(classId?: string | null): Promise<void> {
-  try {
-    if (classId && isValidUUID(classId)) {
-      await supabase.from('notifications').delete().eq('class_id', classId)
-    }
-    await supabase.from('notifications').delete().is('class_id', null)
-  } catch (err) {
-    console.error('[Database Notifications Clear Exception]:', err)
-  }
-}
-
-export async function broadcastClearAll(classId?: string | null, userId?: string | null): Promise<void> {
+export async function broadcastMarkAllRead(userId?: string | null): Promise<void> {
+  if (!userId) return
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(
@@ -265,16 +344,14 @@ export async function broadcastClearAll(classId?: string | null, userId?: string
     }
     await channel.send({
       type: 'broadcast',
-      event: 'clear_all',
-      payload: { classId, userId },
+      event: 'mark_all_read',
+      payload: { userId },
     })
-  } catch (err) {
-    console.warn('[Broadcast Clear All Notice]:', err)
-  }
+  } catch {}
 }
 
-export async function broadcastDeleteNotification(id: string, userId?: string | null): Promise<void> {
-  if (!id) return
+export async function broadcastMarkRead(id: string, userId?: string | null): Promise<void> {
+  if (!id || !userId) return
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(
@@ -286,12 +363,10 @@ export async function broadcastDeleteNotification(id: string, userId?: string | 
     }
     await channel.send({
       type: 'broadcast',
-      event: 'delete_notification',
+      event: 'mark_read',
       payload: { id, userId },
     })
-  } catch (err) {
-    console.warn('[Broadcast Delete Notice]:', err)
-  }
+  } catch {}
 }
 
 export async function dispatchWebPushApi(

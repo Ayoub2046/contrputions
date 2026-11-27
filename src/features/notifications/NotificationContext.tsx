@@ -11,8 +11,12 @@ import {
   fetchNotificationsList,
   generateUUID,
   NOTIFICATION_CHANNEL,
-  broadcastClearAll,
-  broadcastDeleteNotification,
+  broadcastMarkAllRead,
+  broadcastMarkRead,
+  markNotificationReadInDB,
+  markAllNotificationsReadInDB,
+  loadLocalReadIds,
+  saveLocalReadIds,
   isLocalSentNotification,
   markLocalSentNotification,
 } from './notificationService'
@@ -29,36 +33,13 @@ interface NotificationContextType {
   dismissBanner: () => void
   requestPermission: () => Promise<NotificationPermission>
   broadcast: (data: { title: string; body: string; category?: NotificationCategory; classId?: string | null }) => Promise<void>
-  markAllAsRead: () => void
-  markAsRead: (id: string) => void
+  markAllAsRead: () => Promise<void>
+  markAsRead: (id: string) => Promise<void>
   testNotification: () => Promise<void>
   refreshNotifications: () => Promise<void>
 }
 
 const NotificationContext = createContext<NotificationContextType | null>(null)
-
-function getDismissedStorageKey(userId?: string | null) {
-  return `classbank_dismissed_notifs_${userId || 'guest'}`
-}
-
-function loadDismissedIds(userId?: string | null): Set<string> {
-  try {
-    const raw = localStorage.getItem(getDismissedStorageKey(userId))
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return new Set(parsed)
-    }
-  } catch {}
-  return new Set()
-}
-
-function saveDismissedIds(userId: string | null | undefined, ids: Set<string>) {
-  try {
-    // Keep only most recent 200 dismissed IDs to stay compact
-    const arr = Array.from(ids).slice(-200)
-    localStorage.setItem(getDismissedStorageKey(userId), JSON.stringify(arr))
-  } catch {}
-}
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user, activeClassId, adminClassIds } = useAuth()
@@ -69,20 +50,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [activeBanner, setActiveBanner] = useState<PushNotificationPayload | null>(null)
 
   const seenIdsRef = useRef<Set<string>>(new Set())
-  const dismissedIdsRef = useRef<Set<string>>(loadDismissedIds(user?.id))
+  const readIdsRef = useRef<Set<string>>(loadLocalReadIds(user?.id))
   const userRef = useRef(user)
   const activeClassIdRef = useRef(activeClassId)
 
   useEffect(() => {
     userRef.current = user
     activeClassIdRef.current = activeClassId
-    dismissedIdsRef.current = loadDismissedIds(user?.id)
+    readIdsRef.current = loadLocalReadIds(user?.id)
   }, [user, activeClassId])
 
-  // Compute the appropriate push subscription class scope:
-  // - Super admins & finance managers receive alerts from ALL classes (null).
-  // - Multi-class admins receive alerts from ALL classes (null); single-class admin gets their class.
-  // - Students receive alerts for their assigned class (or null if unassigned yet).
   const pushScopeClassId =
     user?.role === 'super_admin' || user?.role === 'finance_manager'
       ? null
@@ -98,7 +75,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setWebPushReady(Boolean(sub))
   }, [user?.id, pushScopeClassId])
 
-  // Initialize permission status, subscribe to Web Push, and watch browser permission changes
   useEffect(() => {
     setIsSupported(isNotificationSupported())
     const currentPerm = getNotificationPermission()
@@ -116,7 +92,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         .query({ name: 'notifications' as PermissionName })
         .then((status) => {
           permStatus = status
-          const onChange = () => {
+          status.onchange = () => {
             const newPerm = getNotificationPermission()
             setPermission(newPerm)
             if (newPerm === 'granted') {
@@ -125,72 +101,65 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
               setWebPushReady(false)
             }
           }
-          status.addEventListener('change', onChange)
         })
         .catch(() => {})
     }
 
     return () => {
-      if (permStatus) {
-        permStatus.onchange = null
-      }
+      if (permStatus) permStatus.onchange = null
     }
   }, [syncPushRegistration])
 
-  // Fetch notifications initially and populate seen IDs
+  // Load notifications from database along with persistent per-user read status
   const refreshNotifications = useCallback(async () => {
     const filterClass =
       user?.role === 'student' ? user?.class_id || activeClassId : activeClassId || user?.class_id
-    const list = await fetchNotificationsList(filterClass)
-    const active = list.filter((n) => !dismissedIdsRef.current.has(n.id))
-    setNotifications(active)
-    for (const item of active) {
+    const list = await fetchNotificationsList(filterClass, user?.id)
+    for (const item of list) {
       seenIdsRef.current.add(item.id)
+      if (item.read) readIdsRef.current.add(item.id)
     }
-  }, [activeClassId, user?.class_id, user?.role])
+    setNotifications(list)
+  }, [activeClassId, user?.class_id, user?.id, user?.role])
 
   useEffect(() => {
     refreshNotifications()
   }, [refreshNotifications])
 
-  // Process an incoming notification from realtime or DB sync
   const handleIncomingNotification = useCallback(async (notif: PushNotificationPayload) => {
     if (!notif || !notif.id) return
 
-    // Skip if user already dismissed this notification
-    if (dismissedIdsRef.current.has(notif.id)) return
-
-    // Skip if already seen in this tab
     if (seenIdsRef.current.has(notif.id)) return
     seenIdsRef.current.add(notif.id)
 
     const currUser = userRef.current
-    const currClass = currUser?.role === 'student' ? currUser?.class_id || activeClassIdRef.current : activeClassIdRef.current || currUser?.class_id
+    const currClass =
+      currUser?.role === 'student'
+        ? currUser?.class_id || activeClassIdRef.current
+        : activeClassIdRef.current || currUser?.class_id
 
-    // Filter out notifications meant strictly for another class (for students)
     if (notif.classId && currClass && notif.classId !== currClass && currUser?.role === 'student') {
       return
     }
 
-    // If this exact browser tab triggered the notification, add quietly without self-chime
+    const alreadyRead = readIdsRef.current.has(notif.id)
+
     if (isLocalSentNotification(notif.id)) {
       return
     }
 
-    // 1. Trigger auditory chime & OS notification
-    await triggerSystemNotification(notif)
+    if (!alreadyRead) {
+      await triggerSystemNotification(notif)
+      setActiveBanner(notif)
+    }
 
-    // 2. Show in-app floating banner
-    setActiveBanner(notif)
-
-    // 3. Add to notification bell list
     setNotifications((prev) => [
-      { ...notif, read: false },
+      { ...notif, read: alreadyRead },
       ...prev.filter((p) => p.id !== notif.id),
     ])
   }, [])
 
-  // Realtime subscription: postgres_changes on notifications table + WebSocket broadcast
+  // Realtime subscription: postgres_changes + WebSocket events
   useEffect(() => {
     const existing = supabase
       .getChannels()
@@ -238,21 +207,22 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           await handleIncomingNotification(payload as PushNotificationPayload)
         }
       })
-      .on('broadcast', { event: 'clear_all' }, ({ payload }: any) => {
-        // Only clear across tabs/devices belonging to the same user
+      .on('broadcast', { event: 'mark_all_read' }, ({ payload }: any) => {
         if (payload?.userId && userRef.current?.id && payload.userId === userRef.current.id) {
           setNotifications((prev) => {
-            prev.forEach((n) => dismissedIdsRef.current.add(n.id))
-            saveDismissedIds(userRef.current?.id, dismissedIdsRef.current)
-            return []
+            prev.forEach((n) => readIdsRef.current.add(n.id))
+            saveLocalReadIds(userRef.current?.id, readIdsRef.current)
+            return prev.map((n) => ({ ...n, read: true }))
           })
         }
       })
-      .on('broadcast', { event: 'delete_notification' }, ({ payload }: any) => {
+      .on('broadcast', { event: 'mark_read' }, ({ payload }: any) => {
         if (payload?.id && payload?.userId && userRef.current?.id && payload.userId === userRef.current.id) {
-          dismissedIdsRef.current.add(payload.id)
-          saveDismissedIds(userRef.current?.id, dismissedIdsRef.current)
-          setNotifications((prev) => prev.filter((n) => n.id !== payload.id))
+          readIdsRef.current.add(payload.id)
+          saveLocalReadIds(userRef.current?.id, readIdsRef.current)
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === payload.id ? { ...n, read: true } : n))
+          )
         }
       })
       .subscribe((status) => {
@@ -273,14 +243,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     async function syncDatabaseNotifications() {
       try {
         const currUser = userRef.current
-        const userClass = currUser?.role === 'student' ? currUser?.class_id || activeClassIdRef.current : activeClassIdRef.current || currUser?.class_id
-        const list = await fetchNotificationsList(userClass)
+        const userClass =
+          currUser?.role === 'student'
+            ? currUser?.class_id || activeClassIdRef.current
+            : activeClassIdRef.current || currUser?.class_id
+        const list = await fetchNotificationsList(userClass, currUser?.id)
         if (!isMounted || !list || list.length === 0) return
 
         const now = Date.now()
         for (const item of list) {
-          if (dismissedIdsRef.current.has(item.id)) continue
-
+          if (item.read) readIdsRef.current.add(item.id)
           const ageMs = now - new Date(item.createdAt).getTime()
           if (ageMs < 30 * 60 * 1000 && !seenIdsRef.current.has(item.id)) {
             await handleIncomingNotification(item)
@@ -288,10 +260,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         }
 
         setNotifications((prev) => {
-          const existingIds = new Set(prev.map((p) => p.id))
-          const freshItems = list.filter((l) => !existingIds.has(l.id) && !dismissedIdsRef.current.has(l.id))
-          if (freshItems.length === 0) return prev
-          return [...freshItems, ...prev]
+          const prevMap = new Map(prev.map((p) => [p.id, p]))
+          let changed = prev.length !== list.length
+          const merged = list.map((item) => {
+            const existing = prevMap.get(item.id)
+            const isRead = item.read || Boolean(existing?.read) || readIdsRef.current.has(item.id)
+            if (!existing || existing.read !== isRead) changed = true
+            return { ...item, read: isRead }
+          })
+          return changed ? merged : prev
         })
       } catch {}
     }
@@ -348,10 +325,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }
 
       seenIdsRef.current.add(payload.id)
+      readIdsRef.current.add(payload.id)
       markLocalSentNotification(payload.id)
 
-      // Persist in database + send Web Push to all subscribed devices + send Realtime WebSocket
       await broadcastPushNotification(payload)
+      await markNotificationReadInDB(payload.id, user?.id)
 
       setNotifications((prev) => [
         { ...payload, read: true },
@@ -362,20 +340,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   )
 
   const markAllAsRead = useCallback(async () => {
-    notifications.forEach((n) => dismissedIdsRef.current.add(n.id))
-    saveDismissedIds(user?.id, dismissedIdsRef.current)
-    setNotifications([])
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id)
+    if (unreadIds.length === 0) return
 
-    // Sync clear state across other tabs/devices belonging to THIS user without wiping other students' announcements
-    await broadcastClearAll(activeClassId || user?.class_id, user?.id)
-  }, [activeClassId, user?.class_id, user?.id, notifications])
+    unreadIds.forEach((id) => readIdsRef.current.add(id))
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+
+    await markAllNotificationsReadInDB(unreadIds, user?.id)
+    await broadcastMarkAllRead(user?.id)
+  }, [user?.id, notifications])
 
   const markAsRead = useCallback(
     async (id: string) => {
-      dismissedIdsRef.current.add(id)
-      saveDismissedIds(user?.id, dismissedIdsRef.current)
-      setNotifications((prev) => prev.filter((n) => n.id !== id))
-      await broadcastDeleteNotification(id, user?.id)
+      readIdsRef.current.add(id)
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+
+      await markNotificationReadInDB(id, user?.id)
+      await broadcastMarkRead(id, user?.id)
     },
     [user?.id]
   )
@@ -385,7 +366,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const sample: PushNotificationPayload = {
       id: generateUUID(),
       title: `📢 ${appName} Push Test`,
-      body: 'Real background push notification is active! Even when the app is closed, alerts appear like WhatsApp.',
+      body: 'Real background push notification is active! Multiple notifications arrive independently even before opening the app.',
       category: 'announcement',
       senderName: user?.name || appName,
       senderRole: user?.role || 'super_admin',
@@ -393,7 +374,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       url: '/dashboard',
     }
 
-    // Attempt a real server-to-device Web Push for THIS device if subscribed
     const ep = await getCurrentPushEndpoint()
     if (ep) {
       const result = await dispatchWebPushApi({ ...sample, targetEndpoint: ep })
@@ -404,7 +384,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }
     }
 
-    // Fallback to foreground/SW system notification
     await triggerSystemNotification(sample)
     setActiveBanner(sample)
     setNotifications((prev) => [{ ...sample, read: false }, ...prev])
