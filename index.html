@@ -40,12 +40,16 @@
         try {
           var customName = localStorage.getItem('cb_app_name');
           var customLogo = localStorage.getItem('cb_app_logo');
+          if (customLogo && (customLogo.startsWith('data:') || customLogo.startsWith('blob:'))) {
+            localStorage.removeItem('cb_app_logo');
+            customLogo = null;
+          }
           if (customName) {
             document.title = customName;
             var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
             if (appleTitle) appleTitle.setAttribute('content', customName);
           }
-          if (customLogo && customLogo.length < 50000 && !customLogo.startsWith('data:')) {
+          if (customLogo && customLogo.length < 1000 && !customLogo.startsWith('data:') && !customLogo.startsWith('blob:')) {
             var icon = document.querySelector('link[rel="icon"]');
             if (icon) icon.setAttribute('href', customLogo);
             var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');

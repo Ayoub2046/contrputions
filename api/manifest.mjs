@@ -39,6 +39,13 @@ export default async function handler(req, res) {
     // fallback to defaults if database is unreachable
   }
 
+  // Strict sanitization: Chrome kills the renderer with RESULT_CODE_KILLED_BAD_MESSAGE
+  // if manifest icon src is a data: URL, blob: URL, or exceeds standard URL length.
+  // Icons in web app manifests MUST be valid HTTP/HTTPS or relative URLs.
+  const isSafeIcon = (url) => typeof url === 'string' && !url.startsWith('data:') && !url.startsWith('blob:') && url.length < 1000
+  const safeIcon192 = isSafeIcon(logoUrl) ? logoUrl : '/icons/icon-192.png'
+  const safeIcon512 = isSafeIcon(logo512Url) ? logo512Url : '/icons/icon-512.png'
+
   const manifest = {
     id: '/',
     name: appName,
@@ -55,25 +62,25 @@ export default async function handler(req, res) {
     display_override: ['window-controls-overlay', 'minimal-ui'],
     icons: [
       {
-        src: logoUrl,
+        src: safeIcon192,
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: logoUrl,
+        src: safeIcon192,
         sizes: '192x192',
         type: 'image/png',
         purpose: 'maskable',
       },
       {
-        src: logo512Url,
+        src: safeIcon512,
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: logo512Url,
+        src: safeIcon512,
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',

@@ -20,7 +20,9 @@ export function updateDynamicManifest(_appName?: string, _logoUrl?: string) {
       manifestLink.rel = 'manifest'
       document.head.appendChild(manifestLink)
     }
-    manifestLink.href = '/api/manifest'
+    if (manifestLink.getAttribute('href') !== '/api/manifest') {
+      manifestLink.setAttribute('href', '/api/manifest')
+    }
   } catch (err) {
     console.error('Failed to update PWA manifest link:', err)
   }
@@ -28,7 +30,7 @@ export function updateDynamicManifest(_appName?: string, _logoUrl?: string) {
 
 function isSafeIconUrl(url?: string): boolean {
   if (!url) return false
-  if (url.startsWith('data:') && url.length > 50000) return false // prevent Mojo IPC overflow
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.length > 1000) return false // prevent Mojo IPC overflow
   return true
 }
 

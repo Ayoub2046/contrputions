@@ -108,27 +108,47 @@ export function SettingsPage() {
       .upload(path, file, { upsert: true, contentType: file.type })
 
     if (uploadError) {
-      // Fallback: store as base64 data URL in app_settings
+      // Fallback: compress image to small thumbnail before saving to prevent IPC crashes
       const reader = new FileReader()
       reader.onload = async (ev) => {
-        const dataUrl = ev.target?.result as string
-        const { error: settingsError } = await supabase
-          .from('app_settings')
-          .upsert({ key: 'app_logo_url', value: dataUrl, updated_by: user?.id, updated_at: new Date().toISOString() } as never, { onConflict: 'key' })
-        if (!settingsError) {
-          setCurrentLogo(dataUrl)
-          localStorage.setItem('cb_app_logo', dataUrl)
-          updateDynamicManifest(appNameInput, dataUrl)
-          const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
-          if (iconLink) iconLink.href = dataUrl
-          const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement
-          if (appleIconLink) appleIconLink.href = dataUrl
-          window.dispatchEvent(new Event('storage'))
-          setLogoMsg('✓ Logo updated successfully.')
-        } else {
-          setLogoMsg('Failed to save logo: ' + settingsError.message)
+        const rawUrl = ev.target?.result as string
+        const img = new Image()
+        img.onload = async () => {
+          const canvas = document.createElement('canvas')
+          const maxDim = 192
+          let width = img.width
+          let height = img.height
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width)
+              width = maxDim
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height)
+              height = maxDim
+            }
+          }
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          ctx?.drawImage(img, 0, 0, width, height)
+          const compactDataUrl = canvas.toDataURL('image/png', 0.85)
+
+          const { error: settingsError } = await supabase
+            .from('app_settings')
+            .upsert({ key: 'app_logo_url', value: compactDataUrl, updated_by: user?.id, updated_at: new Date().toISOString() } as never, { onConflict: 'key' })
+          if (!settingsError) {
+            setCurrentLogo(compactDataUrl)
+            localStorage.setItem('cb_app_logo', compactDataUrl)
+            window.dispatchEvent(new Event('storage'))
+            setLogoMsg('✓ Logo updated successfully.')
+          } else {
+            setLogoMsg('Failed to save logo: ' + settingsError.message)
+          }
+          setLogoUploading(false)
         }
-        setLogoUploading(false)
+        img.src = rawUrl
       }
       reader.readAsDataURL(file)
       return
