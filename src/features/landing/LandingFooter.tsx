@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ShieldCheck, Smartphone } from 'lucide-react'
+import { ShieldCheck, Smartphone, Code2 } from 'lucide-react'
 import { AppLogo, useAppName } from '../../hooks/useAppLogo'
 
 export function LandingFooter() {
@@ -61,10 +61,24 @@ export function LandingFooter() {
 
         {/* Bottom bar */}
         <div className="pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted">
-          <p>&copy; {currentYear} ClassBank System. All rights reserved.</p>
-          <div className="flex items-center gap-6">
-            <span>Powered by Supabase & React</span>
+          <p>&copy; {currentYear} {appName}. All rights reserved.</p>
+          <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-end">
+            <span>Powered by Supabase &amp; React</span>
+            <span aria-hidden="true">&middot;</span>
             <span>Progressive Web App</span>
+            <span aria-hidden="true">&middot;</span>
+            <span className="inline-flex items-center gap-1 font-semibold text-brand-600 dark:text-brand-400">
+              <Code2 size={12} />
+              Developed by{' '}
+              <a
+                href="https://jsomtech.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline underline-offset-2"
+              >
+                jsomtech
+              </a>
+            </span>
           </div>
         </div>
       </div>

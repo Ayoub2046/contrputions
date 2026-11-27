@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useNotifications } from '../notifications/NotificationContext'
 import { useStudentDashboard } from './useStudentDashboard'
+import { StudentContributionBreakdown } from './StudentContributionBreakdown'
 import { formatCurrency, formatDate } from '../../lib/utils'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -540,6 +541,9 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           </Card>
         )}
       </div>
+
+      {/* 5.3. CYCLE & CONTRIBUTION BREAKDOWN + EXPENSES TRANSPARENCY */}
+      <StudentContributionBreakdown userId={userId} classId={classId} />
 
       {/* 5.5. CONTACT YOUR CLASS LEADERS */}
       {classLeaders.length > 0 && (
