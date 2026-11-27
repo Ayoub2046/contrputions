@@ -46,7 +46,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   const appName = useAppName()
   const { isInstalled } = usePwaInstall()
   const { data, loading } = useStudentDashboard(userId, classId)
-  const { notifications, markAsRead } = useNotifications()
+  const { notifications, markAsRead, markAsUnread } = useNotifications()
 
   const [copiedId, setCopiedId] = useState(false)
   const [showClearanceModal, setShowClearanceModal] = useState(false)
@@ -402,13 +402,28 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                       </div>
 
                       {!n.read ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markAsRead(n.id)
+                          }}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 hover:bg-emerald-600 hover:text-white dark:bg-emerald-900/50 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                        >
                           <Check size={11} /> Mark read
-                        </span>
+                        </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markAsUnread(n.id)
+                          }}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted hover:text-[#1176BC] px-2 py-0.5 rounded-md hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/20 transition-colors cursor-pointer"
+                          title="Click to mark as unread"
+                        >
                           <Check size={11} className="text-emerald-500" /> Read
-                        </span>
+                        </button>
                       )}
                     </div>
 

@@ -1,5 +1,13 @@
-// Standard Web Push Service Worker fallback
+// Standard Web Push Service Worker fallback (tag-free for independent stacking)
 /* eslint-disable no-undef */
+
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
 
 self.addEventListener('push', (event) => {
   let data = {
@@ -12,7 +20,7 @@ self.addEventListener('push', (event) => {
     if (event.data) {
       data = event.data.json()
     }
-  } catch (e) {
+  } catch {
     if (event.data) {
       data.body = event.data.text()
     }
@@ -20,17 +28,11 @@ self.addEventListener('push', (event) => {
 
   const now = Date.now()
   const title = data.title || 'ClassBank Notification'
-  const notifTag =
-    data.tag ||
-    `classbank_${data.id || 'msg'}_${now}_${Math.random().toString(36).slice(2, 6)}`
-
   const options = {
     body: data.body || 'You have a new update.',
     icon: data.icon || '/icons/notif-logo-192.png',
     badge: data.badge || '/icons/notif-badge-96.png',
-    vibrate: data.vibrate || [300, 150, 300, 150, 400],
-    tag: notifTag,
-    renotify: true,
+    vibrate: Array.isArray(data.vibrate) ? data.vibrate : [300, 150, 300, 150, 400],
     requireInteraction: false,
     silent: false,
     timestamp: typeof data.timestamp === 'number' ? data.timestamp : now,
@@ -42,7 +44,14 @@ self.addEventListener('push', (event) => {
     actions: [{ action: 'open', title: 'Open App' }],
   }
 
-  event.waitUntil(self.registration.showNotification(title, options))
+  event.waitUntil(
+    self.registration.showNotification(title, options).catch(() =>
+      self.registration.showNotification(title, {
+        body: options.body,
+        data: options.data,
+      })
+    )
+  )
 })
 
 self.addEventListener('notificationclick', (event) => {

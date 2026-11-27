@@ -18,6 +18,7 @@ import {
   Sparkles,
   Check,
   CheckCheck,
+  RefreshCw,
 } from 'lucide-react'
 import { BroadcastNotificationModal } from './BroadcastNotificationModal'
 import type { StoredNotification } from './notificationTypes'
@@ -120,10 +121,13 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
     requestPermission,
     markAllAsRead,
     markAsRead,
+    markAsUnread,
     testNotification,
+    refreshNotifications,
   } = useNotifications()
 
   const [open, setOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [showBroadcastModal, setShowBroadcastModal] = useState(false)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
@@ -156,15 +160,30 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
       }
       setOpen(false)
     }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
     if (open) {
       document.addEventListener('mousedown', handleClickOutside)
       document.addEventListener('touchstart', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('touchstart', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
     }
   }, [open])
+
+  async function handleRefresh() {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      await refreshNotifications()
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const filteredNotifications = useMemo(() => {
     return notifications.filter((n) => {
@@ -189,23 +208,12 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
   function renderNotificationItem(n: StoredNotification) {
     return (
-      <div
+      <article
         key={n.id}
-        role="button"
-        tabIndex={0}
-        onClick={() => {
-          if (!n.read) markAsRead(n.id)
-        }}
-        onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && !n.read) {
-            e.preventDefault()
-            markAsRead(n.id)
-          }
-        }}
         className={`p-3.5 sm:p-4 transition-all group relative ${
           n.read
             ? 'bg-white dark:bg-[#132033] hover:bg-[#F8FAFC] dark:hover:bg-[#101c2e]'
-            : 'bg-[#EAF4FB]/70 dark:bg-[#1176BC]/12 border-l-[3px] border-l-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/20 cursor-pointer'
+            : 'bg-[#EAF4FB]/70 dark:bg-[#1176BC]/12 border-l-[3px] border-l-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/20'
         }`}
       >
         <div className="flex items-start gap-3">
@@ -221,7 +229,12 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
           {/* Content */}
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 space-y-1">
+              <div
+                onClick={() => {
+                  if (!n.read) markAsRead(n.id)
+                }}
+                className={`min-w-0 space-y-1 flex-1 ${!n.read ? 'cursor-pointer' : ''}`}
+              >
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {!n.read && (
                     <span
@@ -244,32 +257,39 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
                 </p>
               </div>
 
-              {/* Mark as Read Action / Read Status Pill */}
+              {/* Mark as Read / Unread Toggle */}
               <div className="shrink-0 flex items-center pt-0.5">
                 {!n.read ? (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      markAsRead(n.id)
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#1176BC]/10 hover:bg-[#1176BC] text-[#1176BC] hover:text-white dark:bg-[#25A8E0]/15 dark:hover:bg-[#25A8E0] dark:text-[#38BDF8] dark:hover:text-slate-950 text-[10px] font-bold transition-all cursor-pointer active:scale-95 touch-manipulation"
+                    onClick={() => markAsRead(n.id)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1176BC]/10 hover:bg-[#1176BC] text-[#1176BC] hover:text-white dark:bg-[#25A8E0]/15 dark:hover:bg-[#25A8E0] dark:text-[#38BDF8] dark:hover:text-slate-950 text-[10px] font-bold transition-all cursor-pointer active:scale-95 touch-manipulation"
                     title="Mark as read"
                   >
                     <Check size={12} />
                     <span>Mark read</span>
                   </button>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40">
+                  <button
+                    type="button"
+                    onClick={() => markAsUnread(n.id)}
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-[#1176BC] dark:hover:text-[#38BDF8] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/20 transition-colors cursor-pointer touch-manipulation"
+                    title="Click to mark as unread"
+                  >
                     <CheckCheck size={11} />
                     <span>Read</span>
-                  </span>
+                  </button>
                 )}
               </div>
             </div>
 
             <p
+              onClick={() => {
+                if (!n.read) markAsRead(n.id)
+              }}
               className={`text-xs mt-1.5 leading-relaxed whitespace-pre-line break-words ${
+                !n.read ? 'cursor-pointer ' : ''
+              }${
                 n.read
                   ? 'text-[#6b7a90] dark:text-[#86a2c4]'
                   : 'text-[#334155] dark:text-[#cbd5e1]'
@@ -299,7 +319,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             </div>
           </div>
         </div>
-      </div>
+      </article>
     )
   }
 
@@ -340,6 +360,16 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="size-8 rounded-lg flex items-center justify-center text-[#64748b] dark:text-[#9FBBDE] hover:text-[#1176BC] dark:hover:text-[#38BDF8] hover:bg-[#EAF4FB] dark:hover:bg-[#1e3550] transition-colors cursor-pointer touch-manipulation"
+              title="Refresh notifications"
+              aria-label="Refresh notifications"
+            >
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+
             {unreadCount > 0 && (
               <button
                 type="button"

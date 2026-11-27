@@ -101,6 +101,9 @@ function normalizeSubscription(item) {
     auth,
     class_id: item.class_id || item.classId || null,
     user_id: item.user_id || item.userId || null,
+    user_agent: item.user_agent || null,
+    created_at: item.created_at || null,
+    updated_at: item.updated_at || null,
   }
 }
 
@@ -184,19 +187,44 @@ export default async function handler(req, res) {
     normalized.user_agent = req.headers?.['user-agent'] || null
     normalized.updated_at = new Date().toISOString()
 
+    const previousEndpoint = typeof body.previousEndpoint === 'string' && body.previousEndpoint.trim()
+      ? body.previousEndpoint.trim()
+      : null
+
+    const dbHeaders = getSupabaseHeaders(req, {
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    })
+
+    // If renewing in background via `pushsubscriptionchange` without auth state, inherit user_id/class_id
+    if ((!normalized.user_id || !normalized.class_id) && previousEndpoint && dbHeaders) {
+      try {
+        const prevResp = await fetch(
+          `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(previousEndpoint)}&select=user_id,class_id&limit=1`,
+          { headers: dbHeaders }
+        )
+        if (prevResp.ok) {
+          const prevRows = await prevResp.json()
+          const prev = Array.isArray(prevRows) ? prevRows[0] : null
+          if (prev) {
+            normalized.user_id = normalized.user_id || prev.user_id || null
+            normalized.class_id = normalized.class_id || prev.class_id || null
+          }
+        }
+      } catch {}
+    }
+
     // Save to local file cache (works in local dev/VPS)
     const currentSubs = getLocalSubscriptions()
-    const filtered = currentSubs.filter((s) => s.endpoint !== normalized.endpoint)
+    const filtered = currentSubs.filter(
+      (s) => s.endpoint !== normalized.endpoint && s.endpoint !== previousEndpoint
+    )
     filtered.push(normalized)
     saveLocalSubscriptions(filtered)
 
     // Persist directly to Supabase push_subscriptions table (CRITICAL for Vercel / multi-device)
     let dbSaved = false
     let dbError = null
-    const dbHeaders = getSupabaseHeaders(req, {
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=minimal',
-    })
 
     if (dbHeaders) {
       try {
@@ -225,17 +253,26 @@ export default async function handler(req, res) {
       }
     }
 
-    // Delete OLD subscriptions for the same user so only the freshest endpoint receives pushes.
-    // This prevents Android from deduplicating/collapsing multiple pushes sent to the same device
-    // through stale endpoints, which is the #1 cause of "only one notification arrives".
-    if (normalized.user_id && dbHeaders) {
-      try {
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${encodeURIComponent(normalized.user_id)}&endpoint=neq.${encodeURIComponent(normalized.endpoint)}`,
-          { method: 'DELETE', headers: dbHeaders }
-        )
-      } catch (cleanupErr) {
-        console.warn('[Supabase Push Cleanup Warning]:', cleanupErr.message)
+    // Clean up replaced previousEndpoint + stale duplicate rows on the SAME device/UA
+    // (preserving subscriptions on other devices like laptop + mobile phone)
+    if (dbHeaders) {
+      if (previousEndpoint && previousEndpoint !== normalized.endpoint) {
+        try {
+          await fetch(
+            `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(previousEndpoint)}`,
+            { method: 'DELETE', headers: dbHeaders }
+          )
+        } catch {}
+      }
+      if (normalized.user_id && normalized.user_agent) {
+        try {
+          await fetch(
+            `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${encodeURIComponent(normalized.user_id)}&user_agent=eq.${encodeURIComponent(normalized.user_agent)}&endpoint=neq.${encodeURIComponent(normalized.endpoint)}`,
+            { method: 'DELETE', headers: dbHeaders }
+          )
+        } catch (cleanupErr) {
+          console.warn('[Supabase Push Cleanup Warning]:', cleanupErr.message)
+        }
       }
     }
 
@@ -261,11 +298,11 @@ export default async function handler(req, res) {
     // Collect all subscriptions
     const allSubsMap = new Map()
 
-    // 1. From Supabase database (authoritative cross-device store)
+    // 1. From Supabase database (authoritative cross-device store, newest first)
     const readHeaders = getSupabaseHeaders(req)
     if (readHeaders) {
       try {
-        const resp = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?select=*`, {
+        const resp = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?select=*&order=updated_at.desc`, {
           headers: readHeaders,
         })
         if (resp.ok) {
@@ -292,21 +329,25 @@ export default async function handler(req, res) {
       }
     })
 
-    // Deduplicate by user_id: keep only the most-recently-updated subscription per user.
-    // This prevents sending multiple pushes to the same device (which Android collapses/blocks).
-    const userLatestMap = new Map()
-    const anonSubs = []
+    // Deduplicate by (user_id, user_agent) keeping the newest updated_at per device/browser.
+    // Preserves independent delivery to each device (phone + laptop), while eliminating stale duplicate endpoints.
+    const deviceLatestMap = new Map()
+    const unkeyedSubs = []
     for (const sub of allSubsMap.values()) {
       if (!sub.user_id) {
-        anonSubs.push(sub)
+        unkeyedSubs.push(sub)
         continue
       }
-      const existing = userLatestMap.get(sub.user_id)
-      if (!existing || (sub.updated_at || '') > (existing.updated_at || '')) {
-        userLatestMap.set(sub.user_id, sub)
+      const deviceKey = `${sub.user_id}::${sub.user_agent || sub.endpoint}`
+      const existing = deviceLatestMap.get(deviceKey)
+      const subTs = sub.updated_at || sub.created_at || ''
+      const existingTs = existing ? (existing.updated_at || existing.created_at || '') : ''
+      if (!existing || subTs > existingTs) {
+        deviceLatestMap.set(deviceKey, sub)
       }
     }
-    const deduplicatedSubs = [...userLatestMap.values(), ...anonSubs]
+    const deduplicatedSubs = [...deviceLatestMap.values(), ...unkeyedSubs]
+    const allSubs = Array.from(allSubsMap.values())
 
     // Filter targets:
     // - If targetEndpoint is supplied (e.g. single-device test push), target that endpoint.
@@ -317,10 +358,8 @@ export default async function handler(req, res) {
       return !sub.class_id || sub.class_id === targetClassId
     })
 
-    const uniqueTag = notifId
-      ? `classbank_${notifId}_${Date.now()}`
-      : `classbank_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-
+    // Intentionally DO NOT include `tag` or `renotify` in push payload so Android Chrome
+    // renders every incoming notification as an independent stacked card.
     const pushData = JSON.stringify({
       id: notifId,
       title,
@@ -332,10 +371,8 @@ export default async function handler(req, res) {
       icon: branding.notifIcon,
       badge: branding.notifBadge,
       vibrate: [300, 150, 300, 150, 400],
-      renotify: true,
       silent: false,
       requireInteraction: false,
-      tag: uniqueTag,
       timestamp: Date.now(),
     })
 
@@ -358,10 +395,7 @@ export default async function handler(req, res) {
             pushData,
             {
               TTL: 86400, // 24 hours retention on push service
-              urgency: 'high',
-              headers: {
-                Urgency: 'high',
-              },
+              urgency: 'high', // Forces immediate delivery past Android Doze mode
             }
           )
           sentCount++

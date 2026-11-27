@@ -1,5 +1,46 @@
-// Custom Service Worker scripts for ClassBank PWA
+// Custom Service Worker fallback script for ClassBank PWA
 // Pure W3C Web Push handler — delivers independent, stackable push notifications when app is closed!
+
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
+
+async function showStackableNotification(data) {
+  const now = Date.now()
+  const title = data.title || (data.appName ? `${data.appName} Notification` : 'ClassBank Notification')
+
+  // Intentionally omit `tag` and `renotify` so Android Chrome always stacks every notification independently.
+  const options = {
+    body: data.body || 'You have a new update.',
+    icon: data.icon || '/icons/notif-logo-192.png',
+    badge: data.badge || '/icons/notif-badge-96.png',
+    vibrate: Array.isArray(data.vibrate) ? data.vibrate : [300, 150, 300, 150, 400],
+    requireInteraction: false,
+    silent: false,
+    timestamp: typeof data.timestamp === 'number' ? data.timestamp : now,
+    data: {
+      url: data.url || '/dashboard',
+      id: data.id,
+      timestamp: now,
+    },
+    actions: [{ action: 'open', title: 'Open App' }],
+  }
+
+  try {
+    await self.registration.showNotification(title, options)
+  } catch {
+    try {
+      await self.registration.showNotification(title, {
+        body: options.body,
+        data: options.data,
+      })
+    } catch {}
+  }
+}
 
 self.addEventListener('push', (event) => {
   let data = {
@@ -12,37 +53,13 @@ self.addEventListener('push', (event) => {
     if (event.data) {
       data = event.data.json()
     }
-  } catch (e) {
+  } catch {
     if (event.data) {
       data.body = event.data.text()
     }
   }
 
-  const now = Date.now()
-  const title = data.title || (data.appName ? `${data.appName} Notification` : 'ClassBank Notification')
-  // ALWAYS generate a fresh unique tag so Android never collapses/replaces an earlier notification.
-  // Using data.tag here would cause reuse of the same tag across pushes → only last one survives.
-  const notifTag = `classbank_${data.id || 'msg'}_${now}_${Math.random().toString(36).slice(2, 6)}`
-
-  const options = {
-    body: data.body || 'You have a new update.',
-    icon: data.icon || '/icons/notif-logo-192.png',
-    badge: data.badge || '/icons/notif-badge-96.png',
-    vibrate: data.vibrate || [300, 150, 300, 150, 400],
-    tag: notifTag,
-    renotify: true,
-    requireInteraction: false,
-    silent: false,
-    timestamp: typeof data.timestamp === 'number' ? data.timestamp : now,
-    data: {
-      url: data.url || '/dashboard',
-      id: data.id,
-      timestamp: now,
-    },
-    actions: [{ action: 'open', title: 'Open App' }],
-  }
-
-  event.waitUntil(self.registration.showNotification(title, options))
+  event.waitUntil(showStackableNotification(data))
 })
 
 self.addEventListener('notificationclick', (event) => {
@@ -67,26 +84,9 @@ self.addEventListener('notificationclick', (event) => {
   )
 })
 
-// Listen to foreground notification messages from app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'PUSH_NOTIFICATION') {
     const payload = event.data.payload || {}
-    const now = Date.now()
-    const title = payload.title || 'ClassBank Notification'
-    const notifTag = `classbank_${payload.id || 'msg'}_${now}_${Math.random().toString(36).slice(2, 6)}`
-    const options = {
-      body: payload.body || 'New class update received.',
-      icon: payload.icon || '/icons/notif-logo-192.png',
-      badge: payload.badge || '/icons/notif-badge-96.png',
-      vibrate: [300, 150, 300, 150, 400],
-      data: { url: payload.url || '/dashboard', id: payload.id },
-      renotify: true,
-      requireInteraction: false,
-      silent: false,
-      timestamp: now,
-      tag: notifTag,
-      actions: [{ action: 'open', title: 'Open App' }],
-    }
-    event.waitUntil(self.registration.showNotification(title, options))
+    event.waitUntil(showStackableNotification(payload))
   }
 })

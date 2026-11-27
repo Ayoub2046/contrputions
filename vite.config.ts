@@ -111,36 +111,17 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       registerType: 'autoUpdate',
       devOptions: {
         enabled: true,
+        type: 'module',
       },
       includeAssets: ['icons/*.png'],
-      workbox: {
-        clientsClaim: true,
-        skipWaiting: true,
-        cleanupOutdatedCaches: true,
-        importScripts: ['/custom-sw.js'],
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,ico,json,woff2}', 'icons/notif-*.png'],
-        runtimeCaching: [
-          {
-            urlPattern: /\.(?:png|jpg|jpeg|webp)$/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'app-images',
-              expiration: { maxEntries: 50, maxAgeSeconds: 2592000 },
-            },
-          },
-          {
-            urlPattern: /^https?:\/\/.*\/rest\/v1\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-api',
-              expiration: { maxEntries: 100, maxAgeSeconds: 86400 },
-              networkTimeoutSeconds: 5,
-            },
-          },
-        ],
       },
       manifest: {
         id: '/',

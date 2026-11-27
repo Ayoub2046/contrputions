@@ -47,31 +47,68 @@ function waitForActivation(reg: ServiceWorkerRegistration, timeoutMs = 8000): Pr
   })
 }
 
+const PUSH_ENDPOINT_STORAGE_KEY = 'classbank_last_push_endpoint'
+let subscribeInFlight: Promise<PushSubscription | null> | null = null
+
+function getScriptUrl(reg: ServiceWorkerRegistration): string {
+  return (
+    reg.active?.scriptURL ||
+    reg.installing?.scriptURL ||
+    reg.waiting?.scriptURL ||
+    ''
+  )
+}
+
 export async function getActiveServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return null
   }
 
-  // 1. Check existing registrations and ensure one is activated
+  // 1. Clean up any legacy Firebase SW registrations & check existing /sw.js registration
   try {
     const registrations = await navigator.serviceWorker.getRegistrations()
-    const activeReg = registrations.find((r) => r.active)
-    if (activeReg) return activeReg
-    if (registrations.length > 0) {
-      const waited = await waitForActivation(registrations[0], 6000)
+    for (const reg of registrations) {
+      const scriptUrl = getScriptUrl(reg)
+      const isLegacyFcm = scriptUrl.includes('firebase-messaging-sw.js')
+      const isForeignOrigin = Boolean(reg.scope && !reg.scope.startsWith(window.location.origin))
+      if (isLegacyFcm || isForeignOrigin) {
+        reg.unregister().catch(() => {})
+      }
+    }
+
+    const rootSw = registrations.find(
+      (r) =>
+        getScriptUrl(r).includes('/sw.js') &&
+        (!r.scope || r.scope.startsWith(window.location.origin))
+    )
+    if (rootSw) {
+      rootSw.update().catch(() => {})
+      if (rootSw.active) return rootSw
+      const waited = await waitForActivation(rootSw, 6000)
       if (waited.active) return waited
     }
+
+    const fallbackExisting = registrations.find(
+      (r) => r.active && !getScriptUrl(r).includes('firebase-messaging-sw.js')
+    )
+    if (fallbackExisting) return fallbackExisting
   } catch {}
 
-  // 2. Register /sw.js (or fallback /custom-sw.js) and wait for activation
+  // 2. Register /sw.js with updateViaCache: 'none' (or fallback /custom-sw.js) and wait for activation
   try {
-    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    const reg = await navigator.serviceWorker.register('/sw.js', {
+      scope: '/',
+      updateViaCache: 'none',
+    })
     const activated = await waitForActivation(reg, 8000)
     if (activated.active) return activated
   } catch (err) {
     console.warn('[WebPush] /sw.js registration attempt failed, trying /custom-sw.js fallback:', err)
     try {
-      const fallbackReg = await navigator.serviceWorker.register('/custom-sw.js', { scope: '/' })
+      const fallbackReg = await navigator.serviceWorker.register('/custom-sw.js', {
+        scope: '/',
+        updateViaCache: 'none',
+      })
       const activated = await waitForActivation(fallbackReg, 6000)
       if (activated.active) return activated
     } catch (fallbackErr) {
@@ -100,7 +137,7 @@ export async function getCurrentPushEndpoint(): Promise<string | null> {
   }
 }
 
-export async function subscribeToWebPush(
+async function performWebPushSubscribe(
   userId?: string | null,
   classId?: string | null
 ): Promise<PushSubscription | null> {
@@ -124,12 +161,18 @@ export async function subscribeToWebPush(
       return null
     }
 
+    let previousEndpoint: string | null = null
+    try {
+      previousEndpoint = localStorage.getItem(PUSH_ENDPOINT_STORAGE_KEY)
+    } catch {}
+
     const expectedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     let sub = await reg.pushManager.getSubscription()
 
     // Self-heal if an existing subscription was created with a different/stale VAPID key (e.g. legacy Firebase key)
     if (sub && !keysMatch(sub.options?.applicationServerKey, expectedKey)) {
       console.info('[WebPush] Replacing stale subscription with updated VAPID key')
+      previousEndpoint = sub.endpoint || previousEndpoint
       try {
         await sub.unsubscribe()
       } catch {}
@@ -177,18 +220,14 @@ export async function subscribeToWebPush(
           )
           if (!dbErr) {
             persisted = true
-            // Delete stale subscriptions for the same user so only the freshest endpoint is kept.
-            // Multiple endpoints per user causes Android to receive 3 pushes at once → they collapse.
-            if (userId) {
+            // Remove replaced endpoint if this device rotated endpoints
+            if (previousEndpoint && previousEndpoint !== endpoint) {
               try {
                 await supabase
                   .from('push_subscriptions' as never)
                   .delete()
-                  .eq('user_id', userId)
-                  .neq('endpoint', endpoint)
-              } catch {
-                // Non-critical — stale cleanup is best-effort
-              }
+                  .eq('endpoint', previousEndpoint)
+              } catch {}
             }
           } else {
             console.warn('[WebPush Supabase Upsert Notice]:', dbErr.message)
@@ -207,6 +246,7 @@ export async function subscribeToWebPush(
           body: JSON.stringify({
             action: 'subscribe',
             subscription: subJson,
+            previousEndpoint: previousEndpoint && previousEndpoint !== endpoint ? previousEndpoint : null,
             userId: userId || null,
             classId: classId || null,
           }),
@@ -220,6 +260,10 @@ export async function subscribeToWebPush(
         console.warn('[WebPush API Subscribe Notice]:', apiErr)
       }
 
+      try {
+        localStorage.setItem(PUSH_ENDPOINT_STORAGE_KEY, endpoint)
+      } catch {}
+
       if (persisted) {
         console.log('[WebPush Success]: Device registered in database for background push alerts')
       }
@@ -229,4 +273,17 @@ export async function subscribeToWebPush(
     console.warn('[WebPush Subscribe Notice]:', err)
   }
   return null
+}
+
+export async function subscribeToWebPush(
+  userId?: string | null,
+  classId?: string | null
+): Promise<PushSubscription | null> {
+  if (subscribeInFlight) {
+    return subscribeInFlight
+  }
+  subscribeInFlight = performWebPushSubscribe(userId, classId).finally(() => {
+    subscribeInFlight = null
+  })
+  return subscribeInFlight
 }

@@ -92,9 +92,9 @@ export function BroadcastNotificationModal({ open, onClose, availableClasses = [
             <label className="block text-xs font-semibold text-text mb-1.5">Category</label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
-                { id: 'news', label: '📢 News / Announcement' },
+                { id: 'news', label: '📢 News / Update' },
                 { id: 'reminder', label: '💳 Payment Reminder' },
-                { id: 'general', label: '🔔 General Alert' },
+                { id: 'announcement', label: '🔔 Class Notice' },
               ].map((cat) => (
                 <button
                   type="button"

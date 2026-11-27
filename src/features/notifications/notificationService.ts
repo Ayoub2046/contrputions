@@ -95,20 +95,19 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
   const targetUrl =
     payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
   const now = Date.now()
-  const notifTag = payload.id ? `classbank_${payload.id}_${now}` : `classbank_${now}`
 
-  // 1. Post to active Service Worker controller
+  // 1. Post to active Service Worker controller (SW omits `tag` so notifications always stack)
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     try {
       navigator.serviceWorker.controller.postMessage({
         type: 'PUSH_NOTIFICATION',
-        payload: { ...payload, icon: iconUrl, badge: badgeUrl, url: targetUrl, id: notifTag },
+        payload: { ...payload, icon: iconUrl, badge: badgeUrl, url: targetUrl },
       })
       return
     } catch {}
   }
 
-  // 2. Try service worker ready showNotification
+  // 2. Try service worker ready showNotification (omit `tag` & `renotify` for independent stacking)
   if ('serviceWorker' in navigator) {
     try {
       const reg = await Promise.race([
@@ -120,10 +119,8 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
           body: payload.body,
           icon: iconUrl,
           badge: badgeUrl,
-          tag: notifTag,
           vibrate: [300, 150, 300, 150, 400],
           data: { url: targetUrl, id: payload.id },
-          renotify: true,
           requireInteraction: false,
           silent: false,
           timestamp: now,
@@ -139,7 +136,6 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
       body: payload.body,
       icon: iconUrl,
       badge: badgeUrl,
-      tag: notifTag,
       requireInteraction: false,
       silent: false,
     } as NotificationOptions)
@@ -257,6 +253,25 @@ export async function markNotificationReadInDB(
   } catch {}
 }
 
+export async function markNotificationUnreadInDB(
+  notificationId: string,
+  userId?: string | null
+): Promise<void> {
+  if (!notificationId) return
+  const current = loadLocalReadIds(userId)
+  current.delete(notificationId)
+  saveLocalReadIds(userId, current)
+
+  if (!userId || !isValidUUID(userId) || !isValidUUID(notificationId)) return
+  try {
+    await supabase
+      .from('notification_reads')
+      .delete()
+      .eq('notification_id', notificationId)
+      .eq('user_id', userId)
+  } catch {}
+}
+
 export async function markAllNotificationsReadInDB(
   notificationIds: string[],
   userId?: string | null
@@ -331,8 +346,7 @@ export async function fetchNotificationsList(
   return []
 }
 
-export async function broadcastMarkAllRead(userId?: string | null): Promise<void> {
-  if (!userId) return
+async function sendRealtimeReadSync(event: string, payload: Record<string, unknown>): Promise<void> {
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(
@@ -344,29 +358,25 @@ export async function broadcastMarkAllRead(userId?: string | null): Promise<void
     }
     await channel.send({
       type: 'broadcast',
-      event: 'mark_all_read',
-      payload: { userId },
+      event,
+      payload,
     })
   } catch {}
 }
 
+export async function broadcastMarkAllRead(userId?: string | null): Promise<void> {
+  if (!userId) return
+  await sendRealtimeReadSync('mark_all_read', { userId })
+}
+
 export async function broadcastMarkRead(id: string, userId?: string | null): Promise<void> {
   if (!id || !userId) return
-  try {
-    const existingChannels = supabase.getChannels()
-    let channel = existingChannels.find(
-      (c: any) => c.topic === `realtime:${NOTIFICATION_CHANNEL}` || c.name === NOTIFICATION_CHANNEL
-    )
-    if (!channel) {
-      channel = supabase.channel(NOTIFICATION_CHANNEL)
-      channel.subscribe()
-    }
-    await channel.send({
-      type: 'broadcast',
-      event: 'mark_read',
-      payload: { id, userId },
-    })
-  } catch {}
+  await sendRealtimeReadSync('mark_read', { id, userId })
+}
+
+export async function broadcastMarkUnread(id: string, userId?: string | null): Promise<void> {
+  if (!id || !userId) return
+  await sendRealtimeReadSync('mark_unread', { id, userId })
 }
 
 export async function dispatchWebPushApi(

@@ -16,27 +16,25 @@
       // ── Register PWA Service Worker immediately ──────────────────────────────
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function(reg) {
-            console.log('[PWA ServiceWorker Registered]: scope is', reg.scope);
+          // Clean up legacy /firebase-messaging-sw.js or foreign-origin SW registrations
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            regs.forEach(function(reg) {
+              var scriptUrl = (reg.active && reg.active.scriptURL) || (reg.installing && reg.installing.scriptURL) || (reg.waiting && reg.waiting.scriptURL) || '';
+              var wrongOrigin = reg.scope && !reg.scope.startsWith(location.origin);
+              var legacyFcm = scriptUrl.indexOf('firebase-messaging-sw.js') !== -1;
+              if (wrongOrigin || legacyFcm) {
+                reg.unregister().catch(function() {});
+              }
+            });
+          }).catch(function() {});
+
+          navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).then(function(reg) {
+            reg.update().catch(function() {});
           }).catch(function(err) {
             console.warn('[PWA ServiceWorker Registration Error, falling back to /custom-sw.js]:', err);
-            navigator.serviceWorker.register('/custom-sw.js', { scope: '/' }).catch(function() {});
+            navigator.serviceWorker.register('/custom-sw.js', { scope: '/', updateViaCache: 'none' }).catch(function() {});
           });
         });
-      }
-
-      // ── Service Worker cleanup ───────────────────────────────────────────────
-      // Unregister any stale SW that belongs to a different origin (e.g. after a
-      // domain change). This prevents Chrome's RESULT_CODE_KILLED_BAD_MESSAGE crash.
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(regs) {
-          regs.forEach(function(reg) {
-            // If the SW scope doesn't start with the current origin, kill it.
-            if (reg.scope && !reg.scope.startsWith(location.origin)) {
-              reg.unregister();
-            }
-          });
-        }).catch(function() {});
       }
       // ────────────────────────────────────────────────────────────────────────
 

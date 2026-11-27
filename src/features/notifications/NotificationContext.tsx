@@ -13,7 +13,9 @@ import {
   NOTIFICATION_CHANNEL,
   broadcastMarkAllRead,
   broadcastMarkRead,
+  broadcastMarkUnread,
   markNotificationReadInDB,
+  markNotificationUnreadInDB,
   markAllNotificationsReadInDB,
   loadLocalReadIds,
   saveLocalReadIds,
@@ -35,6 +37,7 @@ interface NotificationContextType {
   broadcast: (data: { title: string; body: string; category?: NotificationCategory; classId?: string | null }) => Promise<void>
   markAllAsRead: () => Promise<void>
   markAsRead: (id: string) => Promise<void>
+  markAsUnread: (id: string) => Promise<void>
   testNotification: () => Promise<void>
   refreshNotifications: () => Promise<void>
 }
@@ -51,6 +54,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const seenIdsRef = useRef<Set<string>>(new Set())
   const readIdsRef = useRef<Set<string>>(loadLocalReadIds(user?.id))
+  const initialSyncDoneRef = useRef(false)
   const userRef = useRef(user)
   const activeClassIdRef = useRef(activeClassId)
 
@@ -58,6 +62,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     userRef.current = user
     activeClassIdRef.current = activeClassId
     readIdsRef.current = loadLocalReadIds(user?.id)
+    initialSyncDoneRef.current = false
   }, [user, activeClassId])
 
   const pushScopeClassId =
@@ -119,6 +124,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       seenIdsRef.current.add(item.id)
       if (item.read) readIdsRef.current.add(item.id)
     }
+    initialSyncDoneRef.current = true
     setNotifications(list)
   }, [activeClassId, user?.class_id, user?.id, user?.role])
 
@@ -225,6 +231,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           )
         }
       })
+      .on('broadcast', { event: 'mark_unread' }, ({ payload }: any) => {
+        if (payload?.id && payload?.userId && userRef.current?.id && payload.userId === userRef.current.id) {
+          readIdsRef.current.delete(payload.id)
+          saveLocalReadIds(userRef.current?.id, readIdsRef.current)
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === payload.id ? { ...n, read: false } : n))
+          )
+        }
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('[Realtime Channel Active]: notifications hub subscribed on', NOTIFICATION_CHANNEL)
@@ -251,13 +266,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         if (!isMounted || !list || list.length === 0) return
 
         const now = Date.now()
+        const hadInitialLoad = initialSyncDoneRef.current
         for (const item of list) {
           if (item.read) readIdsRef.current.add(item.id)
           const ageMs = now - new Date(item.createdAt).getTime()
-          if (ageMs < 30 * 60 * 1000 && !seenIdsRef.current.has(item.id)) {
+          if (hadInitialLoad && ageMs < 30 * 60 * 1000 && !seenIdsRef.current.has(item.id)) {
             await handleIncomingNotification(item)
+          } else {
+            seenIdsRef.current.add(item.id)
           }
         }
+        initialSyncDoneRef.current = true
 
         setNotifications((prev) => {
           const prevMap = new Map(prev.map((p) => [p.id, p]))
@@ -361,6 +380,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     [user?.id]
   )
 
+  const markAsUnread = useCallback(
+    async (id: string) => {
+      readIdsRef.current.delete(id)
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: false } : n)))
+
+      await markNotificationUnreadInDB(id, user?.id)
+      await broadcastMarkUnread(id, user?.id)
+    },
+    [user?.id]
+  )
+
   const testNotification = useCallback(async () => {
     const appName = (typeof document !== 'undefined' && document.title) || 'ClassBank'
     const sample: PushNotificationPayload = {
@@ -405,6 +435,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         broadcast,
         markAllAsRead,
         markAsRead,
+        markAsUnread,
         testNotification,
         refreshNotifications,
       }}
