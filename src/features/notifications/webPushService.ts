@@ -177,6 +177,19 @@ export async function subscribeToWebPush(
           )
           if (!dbErr) {
             persisted = true
+            // Delete stale subscriptions for the same user so only the freshest endpoint is kept.
+            // Multiple endpoints per user causes Android to receive 3 pushes at once → they collapse.
+            if (userId) {
+              try {
+                await supabase
+                  .from('push_subscriptions' as never)
+                  .delete()
+                  .eq('user_id', userId)
+                  .neq('endpoint', endpoint)
+              } catch {
+                // Non-critical — stale cleanup is best-effort
+              }
+            }
           } else {
             console.warn('[WebPush Supabase Upsert Notice]:', dbErr.message)
           }

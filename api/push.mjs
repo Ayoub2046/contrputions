@@ -225,6 +225,20 @@ export default async function handler(req, res) {
       }
     }
 
+    // Delete OLD subscriptions for the same user so only the freshest endpoint receives pushes.
+    // This prevents Android from deduplicating/collapsing multiple pushes sent to the same device
+    // through stale endpoints, which is the #1 cause of "only one notification arrives".
+    if (normalized.user_id && dbHeaders) {
+      try {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${encodeURIComponent(normalized.user_id)}&endpoint=neq.${encodeURIComponent(normalized.endpoint)}`,
+          { method: 'DELETE', headers: dbHeaders }
+        )
+      } catch (cleanupErr) {
+        console.warn('[Supabase Push Cleanup Warning]:', cleanupErr.message)
+      }
+    }
+
     return res.status(200).json({
       ok: true,
       dbSaved,
@@ -278,12 +292,26 @@ export default async function handler(req, res) {
       }
     })
 
-    const allSubs = Array.from(allSubsMap.values())
+    // Deduplicate by user_id: keep only the most-recently-updated subscription per user.
+    // This prevents sending multiple pushes to the same device (which Android collapses/blocks).
+    const userLatestMap = new Map()
+    const anonSubs = []
+    for (const sub of allSubsMap.values()) {
+      if (!sub.user_id) {
+        anonSubs.push(sub)
+        continue
+      }
+      const existing = userLatestMap.get(sub.user_id)
+      if (!existing || (sub.updated_at || '') > (existing.updated_at || '')) {
+        userLatestMap.set(sub.user_id, sub)
+      }
+    }
+    const deduplicatedSubs = [...userLatestMap.values(), ...anonSubs]
 
     // Filter targets:
     // - If targetEndpoint is supplied (e.g. single-device test push), target that endpoint.
     // - Otherwise, if targetClassId is supplied, deliver to matching class AND any global/unscoped subscriptions (!sub.class_id).
-    const targetSubs = allSubs.filter((sub) => {
+    const targetSubs = deduplicatedSubs.filter((sub) => {
       if (targetEndpoint) return sub.endpoint === targetEndpoint
       if (!targetClassId) return true
       return !sub.class_id || sub.class_id === targetClassId

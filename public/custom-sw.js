@@ -20,9 +20,9 @@ self.addEventListener('push', (event) => {
 
   const now = Date.now()
   const title = data.title || (data.appName ? `${data.appName} Notification` : 'ClassBank Notification')
-  const notifTag =
-    data.tag ||
-    `classbank_${data.id || 'msg'}_${now}_${Math.random().toString(36).slice(2, 6)}`
+  // ALWAYS generate a fresh unique tag so Android never collapses/replaces an earlier notification.
+  // Using data.tag here would cause reuse of the same tag across pushes → only last one survives.
+  const notifTag = `classbank_${data.id || 'msg'}_${now}_${Math.random().toString(36).slice(2, 6)}`
 
   const options = {
     body: data.body || 'You have a new update.',

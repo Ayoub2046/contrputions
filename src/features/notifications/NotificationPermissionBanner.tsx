@@ -53,7 +53,10 @@ export function NotificationPermissionBanner() {
                   <Smartphone size={13} className="shrink-0" /> On iPhone/iPad: first tap Share → Add to Home Screen, then open the installed app and tap Enable Notifications.
                 </span>
               ) : (
-                'Tap Enable Notifications to receive instant push notifications on your lock screen and top status bar whenever a contribution, reminder, or announcement is sent.'
+                <>
+                  Tap <strong>Enable Notifications</strong> to receive instant push notifications on your lock screen, like WhatsApp.
+                  {' '}<span className="opacity-80">Android tip: go to <strong>Settings → Apps → Chrome → Battery → Unrestricted</strong> so notifications always arrive immediately.</span>
+                </>
               )}
             </p>
           </div>
