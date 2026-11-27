@@ -5,7 +5,6 @@ import { useAuth } from '../auth/AuthContext'
 import { supabase } from '../../lib/supabase'
 import {
   Bell,
-  CheckCheck,
   Send,
   Volume2,
   ShieldAlert,
@@ -16,6 +15,7 @@ import {
   Info,
   Trash2,
   Clock,
+  Sparkles,
 } from 'lucide-react'
 import { BroadcastNotificationModal } from './BroadcastNotificationModal'
 
@@ -41,12 +41,17 @@ function getCategoryIcon(cat?: string) {
 
 function getCategoryColor(cat?: string) {
   switch (cat) {
-    case 'contribution': return 'bg-emerald-100 dark:bg-emerald-950/60 ring-1 ring-emerald-200 dark:ring-emerald-800'
-    case 'expense': return 'bg-amber-100 dark:bg-amber-950/60 ring-1 ring-amber-200 dark:ring-amber-800'
-    case 'reminder': return 'bg-blue-100 dark:bg-blue-950/60 ring-1 ring-blue-200 dark:ring-blue-800'
+    case 'contribution':
+      return 'bg-emerald-100 dark:bg-emerald-950/60 ring-1 ring-emerald-200 dark:ring-emerald-800'
+    case 'expense':
+      return 'bg-amber-100 dark:bg-amber-950/60 ring-1 ring-amber-200 dark:ring-amber-800'
+    case 'reminder':
+      return 'bg-blue-100 dark:bg-blue-950/60 ring-1 ring-blue-200 dark:ring-blue-800'
     case 'announcement':
-    case 'news': return 'bg-indigo-100 dark:bg-indigo-950/60 ring-1 ring-indigo-200 dark:ring-indigo-800'
-    default: return 'bg-[#EAF4FB] dark:bg-[#1176BC]/20 ring-1 ring-[#9FBBDE]/30'
+    case 'news':
+      return 'bg-indigo-100 dark:bg-indigo-950/60 ring-1 ring-indigo-200 dark:ring-indigo-800'
+    default:
+      return 'bg-[#EAF4FB] dark:bg-[#1176BC]/20 ring-1 ring-[#9FBBDE]/30'
   }
 }
 
@@ -103,45 +108,63 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
-  const displayedNotifications = activeTab === 'unread'
-    ? notifications.filter((n) => !n.read)
-    : notifications
+  const displayedNotifications =
+    activeTab === 'unread' ? notifications.filter((n) => !n.read) : notifications
 
   const drawerContent = (
-    <>
+    <div className="flex flex-col h-full max-h-full">
+      {/* Mobile drag handle */}
+      <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0">
+        <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
+      </div>
+
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="size-8 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm">
+      <div className="px-4 pt-3 pb-3 border-b border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] shrink-0">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="size-8 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm shrink-0">
               <Bell size={15} className="text-white" />
             </div>
-            <div>
-              <span className="font-bold text-sm text-[#1a2332] dark:text-[#e8f0f8] block leading-tight">Notifications</span>
-              {fcmToken && (
+            <div className="min-w-0">
+              <span className="font-bold text-sm text-[#1a2332] dark:text-[#e8f0f8] block leading-tight truncate">
+                Notifications
+              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Push Active
+                  Realtime Active
                 </span>
-              )}
+                {fcmToken && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#1176BC] dark:text-[#25A8E0]">
+                    · <Sparkles size={9} /> Push Ready
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            {unreadCount > 0 && (
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Always visible Clear All button when notifications exist */}
+            {notifications.length > 0 && (
               <button
-                onClick={markAllAsRead}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1176BC] hover:text-[#0D5A8A] px-2.5 py-1 rounded-lg bg-[#EAF4FB] dark:bg-[#0d2a40] hover:bg-[#D0E9F8] dark:hover:bg-[#1176BC]/20 transition-colors cursor-pointer"
-                title="Mark all as read (clears inbox)"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  markAllAsRead()
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 hover:bg-red-100 transition-colors cursor-pointer active:scale-95"
+                title="Clear all notifications"
               >
-                <CheckCheck size={13} />
-                Clear All ({unreadCount})
+                <Trash2 size={13} />
+                <span>Clear All</span>
               </button>
             )}
+
             <button
               onClick={() => setOpen(false)}
-              className="size-7 rounded-lg flex items-center justify-center text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] hover:bg-[#EAF4FB] dark:hover:bg-[#1e3550] transition-colors cursor-pointer"
+              className="size-8 rounded-lg flex items-center justify-center text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] hover:bg-[#EAF4FB] dark:hover:bg-[#1e3550] transition-colors cursor-pointer"
+              title="Close notifications"
             >
-              <X size={16} />
+              <X size={18} />
             </button>
           </div>
         </div>
@@ -158,7 +181,9 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
                   : 'text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8]'
               }`}
             >
-              {tab === 'unread' ? `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}` : `All (${notifications.length})`}
+              {tab === 'unread'
+                ? `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}`
+                : `All (${notifications.length})`}
             </button>
           ))}
         </div>
@@ -185,7 +210,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
         <div className="px-3.5 py-2 bg-[#F5F8FA] dark:bg-[#0d1a2d] border-b border-[#ECECEC] dark:border-[#1e3550] flex items-center justify-between gap-2 shrink-0">
           <button
             onClick={testNotification}
-            className="flex items-center gap-1.5 text-xs text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] px-2.5 py-1 rounded-lg hover:bg-white dark:hover:bg-[#132033] transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] px-2.5 py-1.5 rounded-lg hover:bg-white dark:hover:bg-[#132033] transition-colors cursor-pointer"
           >
             <Volume2 size={13} className="text-emerald-500" />
             <span>Test Sound</span>
@@ -196,7 +221,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
               setOpen(false)
               setShowBroadcastModal(true)
             }}
-            className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#1176BC] to-[#25A8E0] hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+            className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#1176BC] to-[#25A8E0] hover:opacity-90 transition-opacity cursor-pointer shadow-sm active:scale-95"
           >
             <Send size={12} />
             <span>Send Push Alert</span>
@@ -217,8 +242,8 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
               </p>
               <p className="text-xs text-[#9FBBDE] mt-0.5">
                 {activeTab === 'unread'
-                  ? 'No unread notifications. Switch to "All" to see history.'
-                  : 'Class announcements and payment reminders will appear here.'}
+                  ? 'No unread notifications. Switch to "All" to view history.'
+                  : 'Announcements, contribution alerts, and reminders will appear here.'}
               </p>
             </div>
             {activeTab === 'unread' && notifications.length > 0 && (
@@ -226,7 +251,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
                 onClick={() => setActiveTab('all')}
                 className="text-xs font-semibold text-[#1176BC] hover:underline cursor-pointer"
               >
-                View all history →
+                View all notifications ({notifications.length}) →
               </button>
             )}
           </div>
@@ -235,26 +260,51 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             {displayedNotifications.map((n) => (
               <div
                 key={n.id}
-                onClick={() => markAsRead(n.id)}
-                className={`p-3.5 transition-all cursor-pointer group ${
+                className={`p-3.5 transition-all group ${
                   n.read
                     ? 'hover:bg-[#F5F8FA] dark:hover:bg-[#0d1a2d]'
                     : 'bg-[#EAF4FB]/60 dark:bg-[#1176BC]/8 border-l-2 border-l-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/15'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  {/* Icon */}
-                  <div className={`size-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${getCategoryColor(n.category)}`}>
+                  {/* Category Icon */}
+                  <div
+                    className={`size-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${getCategoryColor(
+                      n.category
+                    )}`}
+                  >
                     {getCategoryIcon(n.category)}
                   </div>
 
                   {/* Content */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <p className={`text-xs leading-snug break-words ${n.read ? 'font-medium text-[#4a5a72] dark:text-[#9FBBDE]' : 'font-bold text-[#1a2332] dark:text-[#e8f0f8]'}`}>
+                      <p
+                        className={`text-xs leading-snug break-words ${
+                          n.read
+                            ? 'font-medium text-[#4a5a72] dark:text-[#9FBBDE]'
+                            : 'font-bold text-[#1a2332] dark:text-[#e8f0f8]'
+                        }`}
+                      >
                         {n.title}
                       </p>
-                      {!n.read && <span className="size-2.5 rounded-full bg-[#1176BC] shrink-0 mt-1 ring-2 ring-[#EAF4FB] dark:ring-[#132033]" />}
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!n.read && (
+                          <span className="size-2 rounded-full bg-[#1176BC] ring-2 ring-[#EAF4FB] dark:ring-[#132033]" />
+                        )}
+                        {/* Individual Delete / Dismiss Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markAsRead(n.id)
+                          }}
+                          className="size-6 rounded-md flex items-center justify-center text-[#9FBBDE] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                          title="Dismiss notification"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
 
                     <p className="text-xs text-[#4a5a72] dark:text-[#9FBBDE] mt-1 leading-relaxed break-words">
@@ -267,13 +317,10 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
                       {n.senderName && (
                         <>
                           <span className="text-[#9FBBDE] text-[10px]">·</span>
-                          <span className="text-[10px] text-[#9FBBDE] font-medium truncate">{n.senderName}</span>
+                          <span className="text-[10px] text-[#9FBBDE] font-medium truncate">
+                            {n.senderName}
+                          </span>
                         </>
-                      )}
-                      {!n.read && (
-                        <span className="ml-auto text-[10px] font-semibold text-[#1176BC] group-hover:underline">
-                          Tap to dismiss
-                        </span>
                       )}
                     </div>
                   </div>
@@ -284,19 +331,22 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
         )}
       </div>
 
-      {/* Footer — only if there are read notifications to fully clear */}
-      {notifications.some((n) => n.read) && (
-        <div className="p-3 border-t border-[#ECECEC] dark:border-[#1e3550] bg-[#F5F8FA] dark:bg-[#0d1a2d] shrink-0 flex items-center justify-center">
+      {/* Footer for quick dismissal when multiple items exist */}
+      {notifications.length > 0 && (
+        <div className="p-2.5 border-t border-[#ECECEC] dark:border-[#1e3550] bg-[#F5F8FA] dark:bg-[#0d1a2d] shrink-0 flex items-center justify-between px-4">
+          <span className="text-[11px] text-[#9FBBDE]">
+            {notifications.length} notification{notifications.length === 1 ? '' : 's'}
+          </span>
           <button
             onClick={markAllAsRead}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#9FBBDE] hover:text-red-500 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1176BC] hover:text-red-500 transition-colors cursor-pointer"
           >
             <Trash2 size={12} />
-            Clear all read notifications
+            Clear all
           </button>
         </div>
       )}
-    </>
+    </div>
   )
 
   // Desktop flyout for sidebar placement (>= lg)
@@ -308,13 +358,13 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
       {/* Bell Trigger Button */}
       <button
         onClick={() => setOpen(!open)}
-        className="relative flex items-center justify-center size-8 sm:size-9 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer shadow-sm"
+        className="relative flex items-center justify-center size-8 sm:size-9 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer shadow-sm active:scale-95"
         title="Notifications"
         aria-label="Notifications"
       >
         <Bell size={17} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#1176BC] px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-[#132033]">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#1176BC] px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-[#132033] animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -322,25 +372,23 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
       {/* 1. Desktop Sidebar Anchored Flyout */}
       {open && placement === 'sidebar' && (
-        <div className={sidebarFlyoutClasses}>
-          {drawerContent}
-        </div>
+        <div className={sidebarFlyoutClasses}>{drawerContent}</div>
       )}
 
-      {/* 2. Mobile & Header Centered Overlay (via Body Portal) */}
+      {/* 2. Responsive Bottom Sheet for Mobile & Modal for Desktop/Tablet */}
       {open &&
         placement !== 'sidebar' &&
         typeof document !== 'undefined' &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-start justify-center pt-14 sm:pt-16 px-3 pointer-events-auto animate-in fade-in duration-150">
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-start justify-center sm:pt-14 p-0 sm:px-3 pointer-events-auto animate-in fade-in duration-150">
             {/* Dimmed Backdrop */}
             <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+              className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
               onClick={() => setOpen(false)}
             />
 
-            {/* Floating Notification Panel */}
-            <div className="relative w-full max-w-md max-h-[85vh] rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 z-10">
+            {/* Mobile Bottom Sheet (< sm) or Centered Modal (>= sm) */}
+            <div className="relative w-full sm:max-w-md h-[88vh] sm:h-auto sm:max-h-[82vh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-top-4 duration-200 z-10 pb-safe">
               {drawerContent}
             </div>
           </div>,

@@ -40,7 +40,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
       await triggerSystemNotification({
         id: generateUUID(),
         title: '🔔 ClassBank Notifications Enabled',
-        body: 'You will now receive WhatsApp-style alerts for class news, contributions, and reminders before opening the app.',
+        body: 'You will now receive alerts for class news, contributions, and reminders in real time.',
         category: 'system',
         createdAt: new Date().toISOString(),
       })
@@ -143,7 +143,7 @@ export async function persistNotification(payload: PushNotificationPayload): Pro
     )
 
     if (error) {
-      console.error('[Supabase DB Notification Error]:', error.message)
+      console.warn('[Supabase DB Notification Error]:', error.message)
     } else {
       console.log('[Supabase DB Notification Saved]:', payload.title, notifId)
     }
@@ -156,24 +156,27 @@ export async function persistNotification(payload: PushNotificationPayload): Pro
 
 export async function fetchNotificationsList(classId?: string | null): Promise<StoredNotification[]> {
   try {
-    let query = supabase
+    const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(60)
 
-    if (classId && isValidUUID(classId)) {
-      query = query.or(`class_id.eq.${classId},class_id.is.null`)
-    }
-
-    const { data, error } = await query
     if (error) {
       console.warn('[Supabase DB Notifications Fetch Error]:', error.message)
       return []
     }
 
     if (data && data.length > 0) {
-      return data.map((d: any) => ({
+      // Filter in memory for 100% reliable matching across all devices
+      const userClass = classId && isValidUUID(classId) ? classId : null
+      const filtered = data.filter((d: any) => {
+        if (!d.class_id) return true // Global alert (visible to all classes)
+        if (!userClass) return true // Admin / Super Admin (sees all classes)
+        return d.class_id === userClass // Specific to user's class
+      })
+
+      return filtered.map((d: any) => ({
         id: d.id,
         title: d.title,
         body: d.body,
@@ -195,23 +198,24 @@ export async function fetchNotificationsList(classId?: string | null): Promise<S
 export async function deleteNotificationFromDB(id: string): Promise<void> {
   if (!id || !isValidUUID(id)) return
   try {
-    await supabase.from('notifications').delete().eq('id', id)
+    const { error } = await supabase.from('notifications').delete().eq('id', id)
+    if (error) {
+      console.warn('[Database Notifications Delete Error]:', error.message)
+    }
   } catch (err) {
-    console.error('[Supabase DB Notification Delete Error]:', err)
+    console.error('[Database Notifications Delete Exception]:', err)
   }
 }
 
 export async function clearAllNotificationsFromDB(classId?: string | null): Promise<void> {
   try {
-    let query = supabase.from('notifications').delete()
     if (classId && isValidUUID(classId)) {
-      query = (query as any).or(`class_id.eq.${classId},class_id.is.null`)
-    } else {
-      query = (query as any).neq('id', '00000000-0000-0000-0000-000000000000') // delete all
+      await supabase.from('notifications').delete().eq('class_id', classId)
     }
-    await query
+    // Also delete any global notifications
+    await supabase.from('notifications').delete().is('class_id', null)
   } catch (err) {
-    console.error('[Supabase DB Notifications Clear Error]:', err)
+    console.error('[Database Notifications Clear Exception]:', err)
   }
 }
 
@@ -226,9 +230,10 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
   }
 
   // 1. Save directly into Supabase database table
+  // This triggers postgres_changes event to all devices subscribed in realtime!
   await persistNotification(cleanPayload)
 
-  // 2. Broadcast to all active users via Supabase Realtime WebSocket
+  // 2. Broadcast to all active users via Supabase Realtime WebSocket for immediate auditory chime
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(
@@ -241,16 +246,15 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
         channel!.subscribe((status) => {
           if (status === 'SUBSCRIBED') resolve()
         })
-        setTimeout(resolve, 2000)
+        setTimeout(resolve, 1500)
       })
     }
 
-    const sendStatus = await channel.send({
+    await channel.send({
       type: 'broadcast',
       event: 'push_event',
       payload: cleanPayload,
     })
-    console.log('[Realtime Broadcast Delivered]:', sendStatus, cleanPayload.title)
   } catch (err) {
     console.warn('Realtime broadcast transmission notice:', err)
   }

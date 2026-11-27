@@ -8,7 +8,6 @@ import {
   triggerSystemNotification,
   broadcastPushNotification,
   fetchNotificationsList,
-  persistNotification,
   deleteNotificationFromDB,
   clearAllNotificationsFromDB,
   generateUUID,
@@ -48,6 +47,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Track notifications already shown to avoid duplicate popups/chimes
   const seenIdsRef = useRef<Set<string>>(new Set())
+  // Track notifications explicitly dismissed by the user in this session
+  const dismissedIdsRef = useRef<Set<string>>(new Set())
 
   // Initialize permission status & FCM Token if granted
   useEffect(() => {
@@ -83,8 +84,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Fetch notifications initially and populate seen IDs
   const refreshNotifications = useCallback(async () => {
     const list = await fetchNotificationsList(activeClassId || user?.class_id)
-    setNotifications(list)
-    for (const item of list) {
+    // Filter out any dismissed IDs
+    const active = list.filter((n) => !dismissedIdsRef.current.has(n.id))
+    setNotifications(active)
+    for (const item of active) {
       seenIdsRef.current.add(item.id)
     }
   }, [activeClassId, user?.class_id])
@@ -98,14 +101,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     async (notif: PushNotificationPayload) => {
       if (!notif || !notif.id) return
 
+      // Don't show if dismissed by user
+      if (dismissedIdsRef.current.has(notif.id)) return
+
       // Don't show duplicate popup if already seen
       if (seenIdsRef.current.has(notif.id)) return
       seenIdsRef.current.add(notif.id)
-
-      // If user is the author who sent it, don't popup on their own device
-      if (notif.senderId && user?.id && notif.senderId === user.id) {
-        return
-      }
 
       // Filter by class if specific target class is set and user is in a class
       const userClass = activeClassId || user?.class_id
@@ -119,8 +120,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       // 2. Show in-app floating banner
       setActiveBanner(notif)
 
-      // 3. Save to storage & state
-      await persistNotification(notif)
+      // 3. Update in-memory state
       setNotifications((prev) => [
         { ...notif, read: false },
         ...prev.filter((p) => p.id !== notif.id),
@@ -129,34 +129,68 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     [activeClassId, user]
   )
 
-  // Realtime subscription for incoming broadcast notifications (Immediate WebSocket delivery)
+  // Realtime subscription: postgres_changes on notifications table + WebSocket broadcast
   useEffect(() => {
+    const channelName = 'realtime_notifications_hub'
     const existing = supabase
       .getChannels()
-      .find((c: any) => c.topic === 'realtime:classbank_push_channel' || c.name === 'classbank_push_channel')
+      .find((c: any) => c.topic === `realtime:${channelName}` || c.name === channelName)
     if (existing) {
       supabase.removeChannel(existing)
     }
 
-    const channel = supabase.channel('classbank_push_channel')
-
-    channel
-      .on('broadcast', { event: 'push_event' }, async ({ payload }) => {
-        const notif = payload as PushNotificationPayload
-        if (notif) {
-          await handleIncomingNotification(notif)
+    const channel = supabase
+      .channel(channelName)
+      // 1. Live Postgres replication for newly inserted notifications
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        async (payload: any) => {
+          const row = payload.new
+          if (row && row.id) {
+            const notif: PushNotificationPayload = {
+              id: row.id,
+              title: row.title,
+              body: row.body,
+              category: row.type || 'announcement',
+              senderName: row.sender_name,
+              senderRole: row.sender_role,
+              classId: row.class_id,
+              createdAt: row.created_at,
+            }
+            await handleIncomingNotification(notif)
+          }
+        }
+      )
+      // 2. Live Postgres replication for deleted notifications
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notifications' },
+        (payload: any) => {
+          const deletedId = payload.old?.id
+          if (deletedId) {
+            setNotifications((prev) => prev.filter((n) => n.id !== deletedId))
+          } else {
+            refreshNotifications()
+          }
+        }
+      )
+      // 3. Client-to-client broadcast backup
+      .on('broadcast', { event: 'push_event' }, async ({ payload }: any) => {
+        if (payload) {
+          await handleIncomingNotification(payload as PushNotificationPayload)
         }
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          console.log('[Realtime Channel Active]: classbank_push_channel ready')
+          console.log('[Realtime Channel Active]: notifications hub subscribed')
         }
       })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [handleIncomingNotification])
+  }, [handleIncomingNotification, refreshNotifications])
 
   // Periodic and Visibility-Change Database Sync (Guaranteed delivery if phone was locked or offline)
   useEffect(() => {
@@ -165,37 +199,27 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     async function syncDatabaseNotifications() {
       try {
         const userClass = activeClassId || user?.class_id
-        let query = supabase
-          .from('notifications')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(10)
+        const list = await fetchNotificationsList(userClass)
+        if (!isMounted || !list || list.length === 0) return
 
-        if (userClass) {
-          query = query.or(`class_id.eq.${userClass},class_id.is.null`)
-        }
+        const now = Date.now()
+        for (const item of list) {
+          if (dismissedIdsRef.current.has(item.id)) continue
 
-        const { data, error } = await query
-        if (!error && data && data.length > 0 && isMounted) {
-          const now = Date.now()
-          for (const row of data) {
-            // Check if created within last 20 minutes and not yet seen
-            const ageMs = now - new Date(row.created_at).getTime()
-            if (ageMs < 20 * 60 * 1000 && !seenIdsRef.current.has(row.id)) {
-              const payload: PushNotificationPayload = {
-                id: row.id,
-                title: row.title,
-                body: row.body,
-                category: row.type || 'announcement',
-                senderName: row.sender_name,
-                senderRole: row.sender_role,
-                classId: row.class_id,
-                createdAt: row.created_at,
-              }
-              await handleIncomingNotification(payload)
-            }
+          const ageMs = now - new Date(item.createdAt).getTime()
+          // If within last 30 minutes and not yet popped up on this device
+          if (ageMs < 30 * 60 * 1000 && !seenIdsRef.current.has(item.id)) {
+            await handleIncomingNotification(item)
           }
         }
+
+        // Keep state aligned with database
+        setNotifications((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id))
+          const freshItems = list.filter((l) => !existingIds.has(l.id) && !dismissedIdsRef.current.has(l.id))
+          if (freshItems.length === 0) return prev
+          return [...freshItems, ...prev]
+        })
       } catch {}
     }
 
@@ -208,8 +232,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('focus', syncDatabaseNotifications)
 
-    // Sync every 12 seconds in background
-    const timer = setInterval(syncDatabaseNotifications, 12000)
+    // Sync every 8 seconds in background for guaranteed delivery
+    const timer = setInterval(syncDatabaseNotifications, 8000)
 
     return () => {
       isMounted = false
@@ -247,7 +271,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         createdAt: new Date().toISOString(),
       }
 
-      // Mark as seen on sender device so sender doesn't get duplicate alert
+      // Mark as seen on this sender device
       seenIdsRef.current.add(payload.id)
 
       // Broadcast to all other devices & save to Supabase
@@ -263,16 +287,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   )
 
   const markAllAsRead = useCallback(async () => {
-    // Remove all notifications from local state (inbox becomes empty)
+    // Collect all notification IDs and register as dismissed in session
+    notifications.forEach((n) => dismissedIdsRef.current.add(n.id))
     setNotifications([])
-    // Also delete them from Supabase database so they don't reload
+
+    // Delete from Supabase database
     await clearAllNotificationsFromDB(activeClassId || user?.class_id)
-  }, [activeClassId, user?.class_id])
+  }, [activeClassId, user?.class_id, notifications])
 
   const markAsRead = useCallback(async (id: string) => {
-    // Remove just this notification from local state
+    dismissedIdsRef.current.add(id)
     setNotifications((prev) => prev.filter((n) => n.id !== id))
-    // Delete from Supabase database
     await deleteNotificationFromDB(id)
   }, [])
 
@@ -280,16 +305,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const sample: PushNotificationPayload = {
       id: generateUUID(),
       title: '📢 ClassBank Notice',
-      body: 'Live push notification test! You will see alerts like this before opening the application.',
+      body: 'Live push notification test! You will see alerts like this in real time across all devices.',
       category: 'announcement',
-      senderName: 'ClassBank System',
-      senderRole: 'super_admin',
+      senderName: user?.name || 'ClassBank System',
+      senderRole: user?.role || 'super_admin',
       createdAt: new Date().toISOString(),
     }
     await triggerSystemNotification(sample)
     setActiveBanner(sample)
     setNotifications((prev) => [{ ...sample, read: false }, ...prev])
-  }, [])
+  }, [user])
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
