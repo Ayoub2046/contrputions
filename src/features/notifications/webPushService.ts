@@ -1,7 +1,9 @@
+import { supabase } from '../../lib/supabase'
+
 export const VAPID_PUBLIC_KEY =
   'BIQ74Oz-r2eA4OauixHmwq8IWIGoEynmNUQ65D4cebpBe0p_JKdPkAk6oMjwxnHC1XdG4Z8zk1UzhmznPf8mCvk'
 
-function urlBase64ToUint8Array(base64String: string) {
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
   const rawData = window.atob(base64)
@@ -12,52 +14,87 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray
 }
 
+function keysMatch(existingKeyBuffer: ArrayBuffer | null | undefined, expectedKey: Uint8Array): boolean {
+  if (!existingKeyBuffer) return false
+  const existing = new Uint8Array(existingKeyBuffer)
+  if (existing.length !== expectedKey.length) return false
+  for (let i = 0; i < existing.length; i++) {
+    if (existing[i] !== expectedKey[i]) return false
+  }
+  return true
+}
+
+function waitForActivation(reg: ServiceWorkerRegistration, timeoutMs = 8000): Promise<ServiceWorkerRegistration> {
+  if (reg.active) return Promise.resolve(reg)
+  return new Promise((resolve) => {
+    const worker = reg.installing || reg.waiting
+    const timer = setTimeout(() => resolve(reg), timeoutMs)
+    if (!worker) {
+      navigator.serviceWorker.ready.then((readyReg) => {
+        clearTimeout(timer)
+        resolve(readyReg)
+      }).catch(() => resolve(reg))
+      return
+    }
+    const onStateChange = () => {
+      if (worker.state === 'activated' || reg.active) {
+        worker.removeEventListener('statechange', onStateChange)
+        clearTimeout(timer)
+        resolve(reg)
+      }
+    }
+    worker.addEventListener('statechange', onStateChange)
+  })
+}
+
 export async function getActiveServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return null
   }
 
-  // 1. Check existing active registrations first
+  // 1. Check existing registrations and ensure one is activated
   try {
     const registrations = await navigator.serviceWorker.getRegistrations()
-    for (const r of registrations) {
-      if (r.active) return r
+    const activeReg = registrations.find((r) => r.active)
+    if (activeReg) return activeReg
+    if (registrations.length > 0) {
+      const waited = await waitForActivation(registrations[0], 6000)
+      if (waited.active) return waited
     }
-    if (registrations.length > 0) return registrations[0]
   } catch {}
 
-  // 2. Try registering /sw.js with activation wait
+  // 2. Register /sw.js (or fallback /custom-sw.js) and wait for activation
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
-    if (reg.active) return reg
-    if (reg.installing || reg.waiting) {
-      await new Promise<void>((resolve) => {
-        const worker = reg.installing || reg.waiting
-        if (worker) {
-          worker.addEventListener('statechange', () => {
-            if (worker.state === 'activated') resolve()
-          })
-        }
-        setTimeout(resolve, 1500)
-      })
-      return reg
-    }
-    return reg
+    const activated = await waitForActivation(reg, 8000)
+    if (activated.active) return activated
   } catch (err) {
     console.warn('[WebPush] /sw.js registration attempt failed, trying /custom-sw.js fallback:', err)
     try {
-      return await navigator.serviceWorker.register('/custom-sw.js', { scope: '/' })
+      const fallbackReg = await navigator.serviceWorker.register('/custom-sw.js', { scope: '/' })
+      const activated = await waitForActivation(fallbackReg, 6000)
+      if (activated.active) return activated
     } catch (fallbackErr) {
       console.warn('[WebPush] Fallback registration failed:', fallbackErr)
     }
   }
 
-  // 3. Race against navigator.serviceWorker.ready with a 3.5s timeout so client never hangs
+  // 3. Final fallback: race navigator.serviceWorker.ready
   try {
     return await Promise.race([
       navigator.serviceWorker.ready,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
     ])
+  } catch {
+    return null
+  }
+}
+
+export async function getCurrentPushEndpoint(): Promise<string | null> {
+  try {
+    const reg = await getActiveServiceWorker()
+    const sub = await reg?.pushManager?.getSubscription()
+    return sub?.endpoint || null
   } catch {
     return null
   }
@@ -70,58 +107,109 @@ export async function subscribeToWebPush(
   if (
     typeof window === 'undefined' ||
     !('serviceWorker' in navigator) ||
-    !('PushManager' in window)
+    !('PushManager' in window) ||
+    !('Notification' in window)
   ) {
     return null
   }
 
-  // Only attempt if permission is granted
   if (Notification.permission !== 'granted') {
     return null
   }
 
   try {
     const reg = await getActiveServiceWorker()
-    if (!reg || !reg.pushManager) {
-      console.warn('[WebPush] No active PushManager found')
+    if (!reg || !reg.active || !reg.pushManager) {
+      console.warn('[WebPush] Active ServiceWorker PushManager not ready yet')
       return null
     }
 
-    const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    const expectedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     let sub = await reg.pushManager.getSubscription()
 
-    if (!sub) {
+    // Self-heal if an existing subscription was created with a different/stale VAPID key (e.g. legacy Firebase key)
+    if (sub && !keysMatch(sub.options?.applicationServerKey, expectedKey)) {
+      console.info('[WebPush] Replacing stale subscription with updated VAPID key')
       try {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey,
-        })
-      } catch (err) {
-        console.warn('[WebPush] Subscription error, attempting clean resubscribe:', err)
-        // If an old subscription existed with a different key, unsubscribe first
-        try {
-          const oldSub = await reg.pushManager.getSubscription()
-          if (oldSub) await oldSub.unsubscribe()
-        } catch {}
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey,
-        })
-      }
+        await sub.unsubscribe()
+      } catch {}
+      sub = null
+    }
+
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: expectedKey.buffer as ArrayBuffer,
+      })
     }
 
     if (sub) {
       const subJson = sub.toJSON()
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subscription: subJson,
-          userId: userId || null,
-          classId: classId || null,
-        }),
-      })
-      console.log('[WebPush Success]: Mobile device registered for background push notifications')
+      const endpoint = subJson.endpoint
+      const p256dh = subJson.keys?.p256dh
+      const auth = subJson.keys?.auth
+
+      if (!endpoint || !p256dh || !auth) return null
+
+      // Grab auth token if logged in so both API & Supabase RLS work seamlessly
+      let accessToken: string | null = null
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        accessToken = sessionData.session?.access_token || null
+      } catch {}
+
+      let persisted = false
+
+      // 1. Direct authenticated upsert into Supabase push_subscriptions (guaranteed persistence)
+      if (accessToken) {
+        try {
+          const { error: dbErr } = await supabase.from('push_subscriptions').upsert(
+            {
+              endpoint,
+              p256dh,
+              auth,
+              user_id: userId || null,
+              class_id: classId || null,
+              user_agent: navigator.userAgent,
+              updated_at: new Date().toISOString(),
+            } as never,
+            { onConflict: 'endpoint' }
+          )
+          if (!dbErr) {
+            persisted = true
+          } else {
+            console.warn('[WebPush Supabase Upsert Notice]:', dbErr.message)
+          }
+        } catch {}
+      }
+
+      // 2. Also register with serverless API (/api/push?action=subscribe works directly on Vercel & local dev)
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+
+        const resp = await fetch('/api/push?action=subscribe', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            action: 'subscribe',
+            subscription: subJson,
+            userId: userId || null,
+            classId: classId || null,
+          }),
+        })
+        const contentType = resp.headers.get('content-type') || ''
+        if (resp.ok && contentType.includes('application/json')) {
+          const resJson = await resp.json()
+          if (resJson?.ok && resJson?.dbSaved) persisted = true
+        }
+      } catch (apiErr) {
+        console.warn('[WebPush API Subscribe Notice]:', apiErr)
+      }
+
+      if (persisted) {
+        console.log('[WebPush Success]: Device registered in database for background push alerts')
+      }
       return sub
     }
   } catch (err) {

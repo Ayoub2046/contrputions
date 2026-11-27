@@ -45,12 +45,19 @@ export function PwaInstallButton({ className = '', size = 'md' }: PwaInstallButt
     <>
       <button
         onClick={handleClick}
-        className={`inline-flex items-center gap-2 rounded-xl font-semibold transition-all shadow-sm cursor-pointer bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white hover:opacity-95 active:scale-95 ${sizeClasses} ${className}`}
+        className={`inline-flex items-center gap-1.5 sm:gap-2 rounded-xl font-semibold transition-all shadow-sm cursor-pointer bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-white hover:opacity-95 active:scale-95 ${sizeClasses} ${className}`}
         title={`Install ${appName} PWA App on your device`}
       >
-        <Smartphone size={size === 'sm' ? 14 : 16} className="text-white" />
-        <span>{installSuccess ? 'App Installed!' : 'Install App'}</span>
-        <Download size={size === 'sm' ? 13 : 14} className="opacity-80" />
+        <Smartphone size={size === 'sm' ? 14 : 16} className="text-white shrink-0" />
+        {size === 'sm' ? (
+          <>
+            <span className="sm:hidden">{installSuccess ? 'Installed' : 'Install'}</span>
+            <span className="hidden sm:inline">{installSuccess ? 'App Installed!' : 'Install App'}</span>
+          </>
+        ) : (
+          <span>{installSuccess ? 'App Installed!' : 'Install App'}</span>
+        )}
+        <Download size={size === 'sm' ? 13 : 14} className="opacity-80 hidden sm:inline shrink-0" />
       </button>
 
       {/* PWA Installation Instructions Modal */}

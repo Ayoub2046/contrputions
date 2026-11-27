@@ -121,8 +121,16 @@ export default defineConfig(({ mode }) => {
         skipWaiting: true,
         cleanupOutdatedCaches: true,
         importScripts: ['/custom-sw.js'],
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,json,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,ico,json,woff2}', 'icons/notif-*.png'],
         runtimeCaching: [
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|webp)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'app-images',
+              expiration: { maxEntries: 50, maxAgeSeconds: 2592000 },
+            },
+          },
           {
             urlPattern: /^https?:\/\/.*\/rest\/v1\/.*/i,
             handler: 'NetworkFirst',

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNotifications } from './NotificationContext'
 import { useAuth } from '../auth/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { AppLogo, useAppName } from '../../hooks/useAppLogo'
 import {
   Bell,
   Send,
@@ -68,11 +69,12 @@ function timeAgo(dateStr: string) {
 
 export function NotificationBell({ placement = 'header' }: NotificationBellProps) {
   const { user } = useAuth()
+  const appName = useAppName()
   const {
     notifications,
     unreadCount,
     permission,
-    fcmToken,
+    webPushReady,
     requestPermission,
     markAllAsRead,
     markAsRead,
@@ -132,24 +134,28 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
       {/* Header */}
       <div className="px-4 pt-3 pb-3 border-b border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] shrink-0">
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="size-8 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm shrink-0">
-              <Bell size={15} className="text-white" />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="size-9 rounded-xl bg-white dark:bg-[#0d1a2d] p-1 border border-[#ECECEC] dark:border-[#1e3550] flex items-center justify-center shadow-sm shrink-0">
+              <AppLogo className="size-full object-contain" alt={appName} />
             </div>
             <div className="min-w-0">
               <span className="font-bold text-sm text-[#1a2332] dark:text-[#e8f0f8] block leading-tight truncate">
-                Notifications
+                {appName} Notifications
               </span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Realtime Active
                 </span>
-                {fcmToken && (
+                {webPushReady ? (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#1176BC] dark:text-[#25A8E0]">
                     · <Sparkles size={9} /> Push Ready
                   </span>
-                )}
+                ) : permission === 'granted' ? (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                    · Connecting Push...
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -210,14 +216,20 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
         <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200/50 dark:border-amber-900/50 flex items-center justify-between gap-2 text-xs shrink-0">
           <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 min-w-0">
             <ShieldAlert size={15} className="shrink-0 text-amber-600" />
-            <span className="truncate">Enable notifications for real-time class alerts</span>
+            <span className="leading-snug">
+              {permission === 'denied'
+                ? 'Push alerts are blocked. Enable notifications in your browser site settings.'
+                : 'Allow push alerts to receive messages before opening the app'}
+            </span>
           </div>
-          <button
-            onClick={requestPermission}
-            className="shrink-0 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
-          >
-            Allow
-          </button>
+          {permission !== 'denied' && (
+            <button
+              onClick={requestPermission}
+              className="shrink-0 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+            >
+              Allow
+            </button>
+          )}
         </div>
       )}
 
@@ -229,7 +241,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             className="flex items-center gap-1.5 text-xs text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] px-2.5 py-1.5 rounded-lg hover:bg-white dark:hover:bg-[#132033] transition-colors cursor-pointer"
           >
             <Volume2 size={13} className="text-emerald-500" />
-            <span>Test Sound</span>
+            <span>Test Push</span>
           </button>
 
           <button

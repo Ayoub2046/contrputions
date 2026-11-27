@@ -1,5 +1,5 @@
 -- Migration: 021_push_subscriptions.sql
--- Table to store Web Push / FCM device subscriptions for background notifications
+-- Table to store Web Push device subscriptions for background notifications
 
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -18,7 +18,7 @@ CREATE INDEX IF NOT EXISTS idx_push_sub_user_id ON public.push_subscriptions(use
 
 ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 
--- Allow any user (authenticated or anonymous) to insert/upsert their subscription
+-- Allow authenticated or public devices to register & refresh their push endpoint
 DROP POLICY IF EXISTS "push_subs_insert_all" ON public.push_subscriptions;
 CREATE POLICY "push_subs_insert_all" ON public.push_subscriptions
   FOR INSERT TO public
@@ -27,7 +27,8 @@ CREATE POLICY "push_subs_insert_all" ON public.push_subscriptions
 DROP POLICY IF EXISTS "push_subs_update_all" ON public.push_subscriptions;
 CREATE POLICY "push_subs_update_all" ON public.push_subscriptions
   FOR UPDATE TO public
-  USING (true);
+  USING (true)
+  WITH CHECK (true);
 
 DROP POLICY IF EXISTS "push_subs_read_all" ON public.push_subscriptions;
 CREATE POLICY "push_subs_read_all" ON public.push_subscriptions

@@ -4,6 +4,18 @@ import type { PushNotificationPayload, StoredNotification } from './notification
 
 export const NOTIFICATION_CHANNEL = 'classbank_live_notifications'
 
+// Track IDs sent from THIS exact browser tab so this tab doesn't double-alert itself,
+// while all other users AND other devices receive notifications normally.
+const localSentIds = new Set<string>()
+
+export function isLocalSentNotification(id?: string): boolean {
+  return Boolean(id && localSentIds.has(id))
+}
+
+export function markLocalSentNotification(id: string): void {
+  if (id) localSentIds.add(id)
+}
+
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     try {
@@ -31,16 +43,35 @@ export function getNotificationPermission(): NotificationPermission {
   return Notification.permission
 }
 
+function resolveNotificationAppLogo(): string {
+  if (typeof document !== 'undefined') {
+    const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null
+    const href = iconLink?.getAttribute('href') || ''
+    if (
+      href &&
+      href !== '/custom-logo.png' &&
+      href !== '/icons/icon-192.png' &&
+      href !== '/classBankLogo.png' &&
+      !href.startsWith('data:') &&
+      !href.startsWith('blob:')
+    ) {
+      return href
+    }
+  }
+  // Default fast-loading 192x192 crisp PNG derived from application logo
+  return '/icons/notif-logo-192.png'
+}
+
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (!isNotificationSupported()) return 'denied'
   try {
     const perm = await Notification.requestPermission()
     if (perm === 'granted') {
-      // Show confirmation push notification
+      const appName = (typeof document !== 'undefined' && document.title) || 'ClassBank'
       await triggerSystemNotification({
         id: generateUUID(),
-        title: '🔔 ClassBank Notifications Enabled',
-        body: 'You will now receive alerts for class news, contributions, and reminders in real time.',
+        title: `🔔 ${appName} Notifications Enabled`,
+        body: 'You will now receive instant alerts on this device even before opening the app.',
         category: 'system',
         createdAt: new Date().toISOString(),
       })
@@ -53,22 +84,17 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 export async function triggerSystemNotification(payload: PushNotificationPayload): Promise<void> {
-  // Always play WhatsApp chime for instant auditory notification
+  // Always play chime for instant foreground audio alert
   playWhatsAppChime()
 
   if (!isNotificationSupported() || Notification.permission !== 'granted') {
     return
   }
 
-  // Use custom-logo.png (the app's actual branded icon) and transparent badge for mobile status bar
-  const iconUrl = '/custom-logo.png'
-  const badgeUrl = '/icons/badge-96.png'
-  const imageUrl = '/custom-logo.png'
-  const targetUrl = payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
-
-  // Resolve app name for notification title prefix
-  const appName = document.title || 'ClassBank'
-
+  const iconUrl = resolveNotificationAppLogo()
+  const badgeUrl = '/icons/notif-badge-96.png'
+  const targetUrl =
+    payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
   const notifTag = payload.id ? `classbank_${payload.id}` : `classbank_${Date.now()}`
 
   // 1. Post to active Service Worker controller
@@ -76,7 +102,7 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
     try {
       navigator.serviceWorker.controller.postMessage({
         type: 'PUSH_NOTIFICATION',
-        payload: { ...payload, url: targetUrl, appName, id: notifTag },
+        payload: { ...payload, icon: iconUrl, badge: badgeUrl, url: targetUrl, id: notifTag },
       })
       return
     } catch {}
@@ -85,13 +111,15 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
   // 2. Try service worker ready showNotification
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.ready
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>((res) => setTimeout(() => res(null), 2500)),
+      ])
       if (reg && reg.showNotification) {
         await reg.showNotification(payload.title, {
           body: payload.body,
           icon: iconUrl,
           badge: badgeUrl,
-          image: imageUrl,
           tag: notifTag,
           vibrate: [300, 150, 300, 150, 400],
           data: { url: targetUrl, id: payload.id },
@@ -176,7 +204,6 @@ export async function fetchNotificationsList(classId?: string | null): Promise<S
     }
 
     if (data && data.length > 0) {
-      // Filter in memory for 100% reliable matching across all devices
       const userClass = classId && isValidUUID(classId) ? classId : null
       const filtered = data.filter((d: any) => {
         if (!d.class_id) return true // Global alert (visible to all classes)
@@ -220,14 +247,13 @@ export async function clearAllNotificationsFromDB(classId?: string | null): Prom
     if (classId && isValidUUID(classId)) {
       await supabase.from('notifications').delete().eq('class_id', classId)
     }
-    // Also delete any global notifications
     await supabase.from('notifications').delete().is('class_id', null)
   } catch (err) {
     console.error('[Database Notifications Clear Exception]:', err)
   }
 }
 
-export async function broadcastClearAll(classId?: string | null): Promise<void> {
+export async function broadcastClearAll(classId?: string | null, userId?: string | null): Promise<void> {
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(
@@ -240,14 +266,14 @@ export async function broadcastClearAll(classId?: string | null): Promise<void> 
     await channel.send({
       type: 'broadcast',
       event: 'clear_all',
-      payload: { classId },
+      payload: { classId, userId },
     })
   } catch (err) {
     console.warn('[Broadcast Clear All Notice]:', err)
   }
 }
 
-export async function broadcastDeleteNotification(id: string): Promise<void> {
+export async function broadcastDeleteNotification(id: string, userId?: string | null): Promise<void> {
   if (!id) return
   try {
     const existingChannels = supabase.getChannels()
@@ -261,41 +287,77 @@ export async function broadcastDeleteNotification(id: string): Promise<void> {
     await channel.send({
       type: 'broadcast',
       event: 'delete_notification',
-      payload: { id },
+      payload: { id, userId },
     })
   } catch (err) {
     console.warn('[Broadcast Delete Notice]:', err)
   }
 }
 
+export async function dispatchWebPushApi(
+  payload: PushNotificationPayload & { targetEndpoint?: string | null }
+): Promise<{ sent: number; totalTargets: number } | null> {
+  try {
+    let accessToken: string | null = null
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      accessToken = sessionData.session?.access_token || null
+    } catch {}
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+
+    const resp = await fetch('/api/push', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...payload,
+        url: payload.url || '/dashboard',
+      }),
+    })
+
+    const ct = resp.headers.get('content-type') || ''
+    if (resp.ok && ct.includes('application/json')) {
+      const resData = await resp.json()
+      console.log('[WebPush API Result]:', resData)
+      return { sent: resData.sent ?? 0, totalTargets: resData.totalTargets ?? 0 }
+    }
+  } catch (err: any) {
+    console.warn('[WebPush Dispatch Notice]:', err?.message || err)
+  }
+  return null
+}
+
 export async function broadcastPushNotification(payload: PushNotificationPayload): Promise<void> {
   const notifId = isValidUUID(payload.id) ? payload.id! : generateUUID()
   const validClassId = isValidUUID(payload.classId) ? payload.classId : null
 
+  let senderId = payload.senderId
+  if (!senderId) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      senderId = sessionData.session?.user?.id
+    } catch {}
+  }
+
   const cleanPayload: PushNotificationPayload = {
     ...payload,
     id: notifId,
+    senderId,
     classId: validClassId,
+    url: payload.url || '/dashboard',
   }
 
-  // 1. Save directly into Supabase database table
-  // This triggers postgres_changes event to all devices subscribed in realtime!
+  // Prevent this exact sender tab from self-popping on its own broadcast
+  markLocalSentNotification(notifId)
+
+  // 1. Save directly into Supabase database table (triggers postgres_changes to open tabs)
   await persistNotification(cleanPayload)
 
-  // 2. Dispatch Mobile Background Web Push (Delivers popup to phones even when app is closed)
-  try {
-    fetch('/api/push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanPayload),
-    }).catch((err) => {
-      console.warn('[WebPush Dispatch Notice]:', err.message)
-    })
-  } catch (err) {
-    console.warn('[WebPush Dispatch Warning]:', err)
-  }
+  // 2. Dispatch Mobile & Desktop Background Web Push (wakes closed phones BEFORE app opens!)
+  await dispatchWebPushApi(cleanPayload)
 
-  // 3. Broadcast to all active users via Supabase Realtime WebSocket for immediate auditory chime
+  // 3. Broadcast via Supabase Realtime WebSocket for instant foreground chime on other open devices
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(

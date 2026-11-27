@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNotifications } from './NotificationContext'
-import { Bell, X, Sparkles } from 'lucide-react'
+import { usePwaInstall } from '../../hooks/usePwaInstall'
+import { Bell, X, Sparkles, Smartphone } from 'lucide-react'
 
 export function NotificationPermissionBanner() {
   const { permission, isSupported, requestPermission } = useNotifications()
+  const { isIos, isInstalled } = usePwaInstall()
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    const isDismissed = localStorage.getItem('classbank_notif_banner_dismissed') === 'true'
+    const isDismissed = sessionStorage.getItem('classbank_notif_banner_dismissed') === 'true'
     if (isDismissed) setDismissed(true)
   }, [])
 
@@ -17,7 +19,7 @@ export function NotificationPermissionBanner() {
 
   function handleDismiss() {
     setDismissed(true)
-    localStorage.setItem('classbank_notif_banner_dismissed', 'true')
+    sessionStorage.setItem('classbank_notif_banner_dismissed', 'true')
   }
 
   async function handleEnable() {
@@ -29,7 +31,6 @@ export function NotificationPermissionBanner() {
 
   return (
     <div className="mb-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white p-4 sm:p-5 shadow-lg relative overflow-hidden">
-      {/* Background ambient accent */}
       <div className="absolute -right-6 -bottom-6 size-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
 
       <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -43,11 +44,17 @@ export function NotificationPermissionBanner() {
                 <Sparkles size={11} /> Live Push Alerts
               </span>
             </div>
-            <h3 className="text-sm sm:text-base font-bold">
-              Get News & Contribution Alerts Before Opening the App
+            <h3 className="text-sm sm:text-base font-bold text-white">
+              Get Alerts Before Opening the App (Like WhatsApp)
             </h3>
             <p className="text-xs text-emerald-100 max-w-xl leading-relaxed">
-              Enable push notifications to receive real-time popup alerts on your device whenever an announcement, payment reminder, or contribution is made.
+              {isIos && !isInstalled ? (
+                <span className="inline-flex items-center gap-1">
+                  <Smartphone size={13} className="shrink-0" /> On iPhone/iPad: first tap Share → Add to Home Screen, then open the installed app and tap Enable Notifications.
+                </span>
+              ) : (
+                'Tap Enable Notifications to receive instant push notifications on your lock screen and top status bar whenever a contribution, reminder, or announcement is sent.'
+              )}
             </p>
           </div>
         </div>

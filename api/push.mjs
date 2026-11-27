@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const SUB_STORE_DIR = resolve(__dirname, '..', '.data')
 const SUB_STORE_FILE = resolve(SUB_STORE_DIR, 'push_subscriptions.json')
 
-// VAPID credentials for Web Push standard (Chrome Android, Safari iOS, Edge, Firefox)
+// VAPID credentials for Web Push standard (Chrome Android, Safari iOS PWA, Edge, Firefox)
 export const VAPID_PUBLIC_KEY =
   process.env.VAPID_PUBLIC_KEY ||
   'BIQ74Oz-r2eA4OauixHmwq8IWIGoEynmNUQ65D4cebpBe0p_JKdPkAk6oMjwxnHC1XdG4Z8zk1UzhmznPf8mCvk'
@@ -26,8 +26,48 @@ try {
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
+const ANON_KEY =
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_PUBLISHABLE_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
-// In-memory fallback subscriptions
+function getSupabaseHeaders(req, extra = {}) {
+  const callerAuth = req.headers?.authorization || req.headers?.Authorization
+  const apiKey = SERVICE_ROLE_KEY || ANON_KEY
+  const auth = SERVICE_ROLE_KEY ? `Bearer ${SERVICE_ROLE_KEY}` : callerAuth || (ANON_KEY ? `Bearer ${ANON_KEY}` : '')
+  if (!SUPABASE_URL || !apiKey) return null
+  return {
+    Authorization: auth,
+    apikey: apiKey,
+    ...extra,
+  }
+}
+
+async function parseJsonBody(req) {
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+    return req.body
+  }
+  if (typeof req.body === 'string' && req.body.trim()) {
+    try {
+      return JSON.parse(req.body)
+    } catch {
+      return {}
+    }
+  }
+  try {
+    const chunks = []
+    for await (const chunk of req) {
+      chunks.push(chunk)
+    }
+    const raw = Buffer.concat(chunks).toString('utf-8').trim()
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+// Local file cache fallback (used when running locally via Vite / Node)
 function getLocalSubscriptions() {
   try {
     if (existsSync(SUB_STORE_FILE)) {
@@ -44,8 +84,8 @@ function saveLocalSubscriptions(subs) {
       mkdirSync(SUB_STORE_DIR, { recursive: true })
     }
     writeFileSync(SUB_STORE_FILE, JSON.stringify(subs, null, 2), 'utf-8')
-  } catch (err) {
-    console.warn('[Push Local Cache Save Error]:', err.message)
+  } catch {
+    // Expected on read-only serverless filesystems (e.g. Vercel)
   }
 }
 
@@ -64,6 +104,47 @@ function normalizeSubscription(item) {
   }
 }
 
+async function fetchAppBranding(req) {
+  const defaults = {
+    appName: 'ClassBank',
+    notifIcon: '/icons/notif-logo-192.png',
+    notifBadge: '/icons/notif-badge-96.png',
+  }
+  const headers = getSupabaseHeaders(req)
+  if (!headers) return defaults
+
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 2000)
+    const resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/app_settings?select=key,value&key=in.(app_name,app_logo_url)`,
+      { headers, signal: controller.signal }
+    )
+    clearTimeout(timeout)
+
+    if (resp.ok) {
+      const rows = await resp.json()
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          if (row.key === 'app_name' && row.value?.trim()) {
+            defaults.appName = row.value.trim()
+          }
+          if (row.key === 'app_logo_url' && row.value?.trim()) {
+            const val = row.value.trim()
+            // Use fast optimized 192x192 PNG when pointing to bundled /custom-logo.png or /classBankLogo.png
+            if (val === '/custom-logo.png') {
+              defaults.notifIcon = '/icons/notif-logo-192.png'
+            } else if (!val.startsWith('data:') && !val.startsWith('blob:') && val.length < 800) {
+              defaults.notifIcon = val
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+  return defaults
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -74,17 +155,23 @@ export default async function handler(req, res) {
     return res.end()
   }
 
-  const url = new URL(req.url, 'http://localhost:5173')
+  const url = new URL(req.url || '/api/push', 'http://localhost:5173')
   const pathname = url.pathname
+  const action = url.searchParams.get('action')
 
   // 1. GET /api/push/vapid - Returns the public VAPID key for client subscriptions
   if (req.method === 'GET' && (pathname === '/api/push/vapid' || pathname === '/api/push')) {
     return res.status(200).json({ publicKey: VAPID_PUBLIC_KEY })
   }
 
-  // 2. POST /api/push/subscribe - Registers a mobile device / browser push subscription
-  if (req.method === 'POST' && pathname === '/api/push/subscribe') {
-    const body = req.body || {}
+  const body = req.method === 'POST' ? await parseJsonBody(req) : {}
+
+  // 2. Subscribe endpoint: supports /api/push?action=subscribe, /api/push/subscribe, or { action: 'subscribe' }
+  const isSubscribeRequest =
+    req.method === 'POST' &&
+    (pathname.endsWith('/subscribe') || action === 'subscribe' || body.action === 'subscribe')
+
+  if (isSubscribeRequest) {
     const rawSub = body.subscription || body
     const normalized = normalizeSubscription(rawSub)
 
@@ -94,69 +181,78 @@ export default async function handler(req, res) {
 
     normalized.class_id = body.classId || body.class_id || null
     normalized.user_id = body.userId || body.user_id || null
+    normalized.user_agent = req.headers?.['user-agent'] || null
     normalized.updated_at = new Date().toISOString()
 
-    // Save to local file cache
+    // Save to local file cache (works in local dev/VPS)
     const currentSubs = getLocalSubscriptions()
     const filtered = currentSubs.filter((s) => s.endpoint !== normalized.endpoint)
     filtered.push(normalized)
     saveLocalSubscriptions(filtered)
 
-    // Also persist to Supabase if available
-    if (SUPABASE_URL && SERVICE_ROLE_KEY) {
+    // Persist directly to Supabase push_subscriptions table (CRITICAL for Vercel / multi-device)
+    let dbSaved = false
+    let dbError = null
+    const dbHeaders = getSupabaseHeaders(req, {
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    })
+
+    if (dbHeaders) {
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions`, {
+        const upsertResp = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?on_conflict=endpoint`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-            apikey: SERVICE_ROLE_KEY,
-            'Content-Type': 'application/json',
-            Prefer: 'resolution=merge-duplicates',
-          },
+          headers: dbHeaders,
           body: JSON.stringify({
             endpoint: normalized.endpoint,
             p256dh: normalized.p256dh,
             auth: normalized.auth,
             class_id: normalized.class_id,
             user_id: normalized.user_id,
+            user_agent: normalized.user_agent,
             updated_at: normalized.updated_at,
           }),
         })
+        if (upsertResp.ok) {
+          dbSaved = true
+        } else {
+          dbError = await upsertResp.text()
+          console.warn('[Supabase Push Subscription Upsert Error]:', upsertResp.status, dbError)
+        }
       } catch (err) {
+        dbError = err.message
         console.warn('[Supabase Push Subscription Upsert Warning]:', err.message)
       }
     }
 
-    return res.status(200).json({ ok: true, message: 'Device push subscription registered' })
+    return res.status(200).json({
+      ok: true,
+      dbSaved,
+      dbError,
+      message: 'Device push subscription registered',
+    })
   }
 
   // 3. POST /api/push or /api/push/send - Dispatches background push notifications to devices
   if (req.method === 'POST') {
-    const payload = req.body || {}
-    const title = payload.title || '📢 ClassBank Notification'
-    const body = payload.body || 'New announcement available.'
-    const category = payload.category || 'announcement'
-    const targetClassId = payload.classId || payload.class_id || null
-    const targetUrl = payload.url || '/dashboard'
-    const notifId = payload.id || `push_${Date.now()}`
+    const branding = await fetchAppBranding(req)
+    const title = body.title || `📢 ${branding.appName} Notification`
+    const messageBody = body.body || 'New announcement available.'
+    const category = body.category || 'announcement'
+    const targetClassId = body.classId || body.class_id || null
+    const targetEndpoint = body.targetEndpoint || null
+    const targetUrl = body.url || '/dashboard'
+    const notifId = body.id || `push_${Date.now()}`
 
     // Collect all subscriptions
     const allSubsMap = new Map()
 
-    // 1. From local file cache
-    getLocalSubscriptions().forEach((s) => {
-      const norm = normalizeSubscription(s)
-      if (norm) allSubsMap.set(norm.endpoint, norm)
-    })
-
-    // 2. From Supabase table
-    if (SUPABASE_URL && SERVICE_ROLE_KEY) {
+    // 1. From Supabase database (authoritative cross-device store)
+    const readHeaders = getSupabaseHeaders(req)
+    if (readHeaders) {
       try {
         const resp = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?select=*`, {
-          headers: {
-            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-            apikey: SERVICE_ROLE_KEY,
-          },
+          headers: readHeaders,
         })
         if (resp.ok) {
           const dbSubs = await resp.json()
@@ -166,16 +262,29 @@ export default async function handler(req, res) {
               if (norm) allSubsMap.set(norm.endpoint, norm)
             })
           }
+        } else {
+          console.warn('[Fetch DB Push Subscriptions Error]:', resp.status, await resp.text())
         }
       } catch (err) {
         console.warn('[Fetch DB Push Subscriptions Warning]:', err.message)
       }
     }
 
+    // 2. Merge local file cache (for local dev environment)
+    getLocalSubscriptions().forEach((s) => {
+      const norm = normalizeSubscription(s)
+      if (norm && !allSubsMap.has(norm.endpoint)) {
+        allSubsMap.set(norm.endpoint, norm)
+      }
+    })
+
     const allSubs = Array.from(allSubsMap.values())
 
-    // Filter by class if specified: send to this class AND any global (class_id is null) subscriptions
+    // Filter targets:
+    // - If targetEndpoint is supplied (e.g. single-device test push), target that endpoint.
+    // - Otherwise, if targetClassId is supplied, deliver to matching class AND any global/unscoped subscriptions (!sub.class_id).
     const targetSubs = allSubs.filter((sub) => {
+      if (targetEndpoint) return sub.endpoint === targetEndpoint
       if (!targetClassId) return true
       return !sub.class_id || sub.class_id === targetClassId
     })
@@ -183,13 +292,13 @@ export default async function handler(req, res) {
     const pushData = JSON.stringify({
       id: notifId,
       title,
-      body,
+      body: messageBody,
+      appName: branding.appName,
       category,
       classId: targetClassId,
       url: targetUrl,
-      icon: '/custom-logo.png',
-      badge: '/icons/badge-96.png',
-      image: '/custom-logo.png',
+      icon: branding.notifIcon,
+      badge: branding.notifBadge,
       vibrate: [300, 150, 300, 150, 400],
       renotify: true,
       silent: false,
@@ -201,6 +310,7 @@ export default async function handler(req, res) {
     let sentCount = 0
     let failedCount = 0
     const staleEndpoints = []
+    const errors = []
 
     await Promise.all(
       targetSubs.map(async (sub) => {
@@ -229,39 +339,40 @@ export default async function handler(req, res) {
           if (err.statusCode === 410 || err.statusCode === 404) {
             staleEndpoints.push(sub.endpoint)
           } else {
-            console.warn('[WebPush Dispatch Single Error]:', err.message)
+            errors.push({ statusCode: err.statusCode, message: err.message })
+            console.warn('[WebPush Dispatch Single Error]:', err.statusCode, err.message)
           }
         }
       })
     )
 
-    // Clean up stale endpoints
+    // Clean up expired/unsubscribed endpoints
     if (staleEndpoints.length > 0) {
       const remaining = allSubs.filter((s) => !staleEndpoints.includes(s.endpoint))
       saveLocalSubscriptions(remaining)
 
-      if (SUPABASE_URL && SERVICE_ROLE_KEY) {
+      if (readHeaders) {
         try {
           for (const ep of staleEndpoints) {
             await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(ep)}`, {
               method: 'DELETE',
-              headers: {
-                Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-                apikey: SERVICE_ROLE_KEY,
-              },
+              headers: readHeaders,
             })
           }
         } catch {}
       }
     }
 
-    console.log(`[WebPush Broadcast Completed]: Sent ${sentCount} notifications (${failedCount} failed, ${targetSubs.length} total targets)`)
+    console.log(
+      `[WebPush Broadcast Completed]: Sent ${sentCount} notifications (${failedCount} failed, ${targetSubs.length} total targets)`
+    )
 
     return res.status(200).json({
       ok: true,
       sent: sentCount,
       failed: failedCount,
       totalTargets: targetSubs.length,
+      errors: errors.slice(0, 3),
     })
   }
 
