@@ -20,15 +20,18 @@ self.addEventListener('push', (event) => {
   }
 
   const title = data.title || 'ClassBank Notification'
+  const notifTag = data.tag || (data.id ? `classbank_${data.id}` : `classbank_${Date.now()}`)
+
   const options = {
     body: data.body || 'You have a new announcement from ClassBank.',
     icon: data.icon || '/custom-logo.png',
-    badge: '/icons/badge-96.png',
+    badge: '/icons/badge-96.png', // Transparent monochrome icon for Android status bar
     image: data.image || '/custom-logo.png',
-    vibrate: [200, 100, 200, 100, 200],
-    tag: data.id || 'classbank_push_' + Date.now(),
+    vibrate: data.vibrate || [300, 150, 300, 150, 400],
+    tag: notifTag,
     renotify: true,
     requireInteraction: true,
+    silent: false,
     data: {
       url: data.url || '/dashboard',
       id: data.id,
@@ -79,22 +82,27 @@ try {
   const messaging = firebase.messaging()
 
   messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Background push received:', payload)
-
     const notificationTitle = payload.notification?.title || payload.data?.title || 'ClassBank Notification'
+    const notifTag = payload.data?.id || `classbank_fcm_${Date.now()}`
     const notificationOptions = {
       body: payload.notification?.body || payload.data?.body || 'New message from ClassBank',
       icon: '/custom-logo.png',
-      badge: '/custom-logo.png',
-      tag: payload.data?.id || 'classbank_fcm_' + Date.now(),
+      badge: '/icons/badge-96.png',
+      image: '/custom-logo.png',
+      tag: notifTag,
       data: {
         url: payload.data?.url || '/dashboard'
       },
-      vibrate: [200, 100, 200],
-      renotify: true
+      vibrate: [300, 150, 300, 150, 400],
+      renotify: true,
+      requireInteraction: true,
+      silent: false,
+      actions: [
+        { action: 'open', title: 'Open ClassBank' }
+      ]
     }
 
-    self.registration.showNotification(notificationTitle, notificationOptions)
+    return self.registration.showNotification(notificationTitle, notificationOptions)
   })
 } catch (e) {
   // Offline

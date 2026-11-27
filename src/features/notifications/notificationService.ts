@@ -69,12 +69,14 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
   // Resolve app name for notification title prefix
   const appName = document.title || 'ClassBank'
 
+  const notifTag = payload.id ? `classbank_${payload.id}` : `classbank_${Date.now()}`
+
   // 1. Post to active Service Worker controller
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     try {
       navigator.serviceWorker.controller.postMessage({
         type: 'PUSH_NOTIFICATION',
-        payload: { ...payload, url: targetUrl, appName },
+        payload: { ...payload, url: targetUrl, appName, id: notifTag },
       })
       return
     } catch {}
@@ -90,10 +92,12 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
           icon: iconUrl,
           badge: badgeUrl,
           image: imageUrl,
-          tag: payload.id,
-          vibrate: [200, 100, 200],
-          data: { url: targetUrl },
+          tag: notifTag,
+          vibrate: [300, 150, 300, 150, 400],
+          data: { url: targetUrl, id: payload.id },
           renotify: true,
+          requireInteraction: true,
+          silent: false,
         } as NotificationOptions)
         return
       }
@@ -106,7 +110,9 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
       body: payload.body,
       icon: iconUrl,
       badge: badgeUrl,
-      tag: payload.id,
+      tag: notifTag,
+      requireInteraction: true,
+      silent: false,
     } as NotificationOptions)
     notif.onclick = () => {
       window.focus()

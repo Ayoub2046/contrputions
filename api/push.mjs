@@ -190,6 +190,11 @@ export default async function handler(req, res) {
       icon: '/custom-logo.png',
       badge: '/icons/badge-96.png',
       image: '/custom-logo.png',
+      vibrate: [300, 150, 300, 150, 400],
+      renotify: true,
+      silent: false,
+      requireInteraction: true,
+      tag: notifId ? `classbank_${notifId}` : `classbank_${Date.now()}`,
       timestamp: Date.now(),
     })
 
@@ -212,6 +217,10 @@ export default async function handler(req, res) {
             {
               TTL: 86400, // 24 hours retention on push service
               urgency: 'high',
+              topic: 'announcement',
+              headers: {
+                Urgency: 'high',
+              },
             }
           )
           sentCount++

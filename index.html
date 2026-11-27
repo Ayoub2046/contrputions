@@ -13,6 +13,18 @@
     <meta name="description" content="Class Contribution Transparency System" />
     <title>ClassBank</title>
     <script>
+      // ── Register PWA Service Worker immediately ──────────────────────────────
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function(reg) {
+            console.log('[PWA ServiceWorker Registered]: scope is', reg.scope);
+          }).catch(function(err) {
+            console.warn('[PWA ServiceWorker Registration Error, falling back to /custom-sw.js]:', err);
+            navigator.serviceWorker.register('/custom-sw.js', { scope: '/' }).catch(function() {});
+          });
+        });
+      }
+
       // ── Service Worker cleanup ───────────────────────────────────────────────
       // Unregister any stale SW that belongs to a different origin (e.g. after a
       // domain change). This prevents Chrome's RESULT_CODE_KILLED_BAD_MESSAGE crash.

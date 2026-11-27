@@ -112,6 +112,9 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
       registerType: 'autoUpdate',
+      devOptions: {
+        enabled: true,
+      },
       includeAssets: ['icons/*.png'],
       workbox: {
         clientsClaim: true,

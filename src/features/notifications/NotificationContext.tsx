@@ -245,10 +245,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         syncDatabaseNotifications()
+        if (Notification.permission === 'granted') {
+          subscribeToWebPush(user?.id, activeClassId || user?.class_id).catch(() => {})
+        }
+      }
+    }
+    const onWindowFocus = () => {
+      syncDatabaseNotifications()
+      if (Notification.permission === 'granted') {
+        subscribeToWebPush(user?.id, activeClassId || user?.class_id).catch(() => {})
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('focus', syncDatabaseNotifications)
+    window.addEventListener('focus', onWindowFocus)
 
     // Sync every 8 seconds in background for guaranteed delivery
     const timer = setInterval(syncDatabaseNotifications, 8000)
@@ -256,7 +265,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     return () => {
       isMounted = false
       document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('focus', syncDatabaseNotifications)
+      window.removeEventListener('focus', onWindowFocus)
       clearInterval(timer)
     }
   }, [activeClassId, user, handleIncomingNotification])
