@@ -22,8 +22,9 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'ClassBank Notification'
   const options = {
     body: data.body || 'You have a new announcement from ClassBank.',
-    icon: '/custom-logo.png',
-    badge: '/custom-logo.png',
+    icon: data.icon || '/custom-logo.png',
+    badge: '/icons/badge-96.png',
+    image: data.image || '/custom-logo.png',
     vibrate: [200, 100, 200, 100, 200],
     tag: data.id || 'classbank_push_' + Date.now(),
     renotify: true,

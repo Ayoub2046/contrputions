@@ -376,19 +376,30 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
   return (
     <div className="relative inline-block" ref={dropdownRef}>
-      {/* Bell Trigger Button */}
+      {/* Bell Trigger Button - High Visibility & Modern Styling */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="relative flex items-center justify-center size-8 sm:size-9 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer shadow-sm active:scale-95 touch-manipulation"
-        title="Notifications"
+        className={`relative flex items-center justify-center size-9 sm:size-10 rounded-xl sm:rounded-2xl transition-all cursor-pointer shadow-sm active:scale-95 touch-manipulation group ${
+          unreadCount > 0
+            ? 'bg-gradient-to-br from-[#EAF4FB] to-[#D5E9F8] dark:from-[#132c48] dark:to-[#0f233a] border-2 border-[#1176BC] dark:border-[#25A8E0] text-[#1176BC] dark:text-[#38BDF8] shadow-md ring-2 ring-[#1176BC]/20'
+            : 'bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#1c2e47] border border-[#CCDCEE] dark:border-[#223956] text-[#1176BC] dark:text-[#60A5FA]'
+        }`}
+        title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}` : 'Notifications'}
         aria-label="Notifications"
       >
-        <Bell size={17} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#1176BC] px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-[#132033] animate-pulse">
+        <Bell
+          size={19}
+          className={`transition-transform group-hover:scale-110 ${
+            unreadCount > 0 ? 'text-[#1176BC] dark:text-[#38BDF8]' : ''
+          }`}
+        />
+        {unreadCount > 0 ? (
+          <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-gradient-to-r from-red-600 to-rose-500 px-1.5 text-[10px] font-extrabold text-white shadow-md ring-2 ring-white dark:ring-[#132033] animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
+        ) : (
+          <span className="absolute top-1 right-1 size-1.5 rounded-full bg-emerald-500/80 ring-1 ring-white dark:ring-[#132033]" />
         )}
       </button>
 

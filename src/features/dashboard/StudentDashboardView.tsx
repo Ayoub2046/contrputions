@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useNotifications } from '../notifications/NotificationContext'
+import { NotificationBell } from '../notifications/NotificationBell'
 import { useStudentDashboard } from './useStudentDashboard'
 import { StudentContributionBreakdown } from './StudentContributionBreakdown'
 import { formatCurrency, formatDate } from '../../lib/utils'
@@ -170,6 +171,9 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Prominent Visible Notification Bell */}
+          <NotificationBell />
+
           {/* Copy Student ID Pill */}
           <button
             onClick={copyStudentId}

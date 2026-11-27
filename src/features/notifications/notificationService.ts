@@ -60,9 +60,10 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
     return
   }
 
-  // Use custom-logo.png (the app's actual branded icon)
+  // Use custom-logo.png (the app's actual branded icon) and transparent badge for mobile status bar
   const iconUrl = '/custom-logo.png'
-  const badgeUrl = '/custom-logo.png'
+  const badgeUrl = '/icons/badge-96.png'
+  const imageUrl = '/custom-logo.png'
   const targetUrl = payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
 
   // Resolve app name for notification title prefix
@@ -88,6 +89,7 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
           body: payload.body,
           icon: iconUrl,
           badge: badgeUrl,
+          image: imageUrl,
           tag: payload.id,
           vibrate: [200, 100, 200],
           data: { url: targetUrl },

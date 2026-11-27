@@ -188,7 +188,8 @@ export default async function handler(req, res) {
       classId: targetClassId,
       url: targetUrl,
       icon: '/custom-logo.png',
-      badge: '/custom-logo.png',
+      badge: '/icons/badge-96.png',
+      image: '/custom-logo.png',
       timestamp: Date.now(),
     })
 
