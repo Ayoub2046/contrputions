@@ -3,8 +3,6 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
 import type { AdminMessage, Profile } from '../../lib/types'
 
-const LOCAL_STORAGE_KEY = 'classbank_admin_messages'
-
 export function useAdminCommunications() {
   const { user } = useAuth()
   const [messages, setMessages] = useState<AdminMessage[]>([])
@@ -71,11 +69,7 @@ export function useAdminCommunications() {
         .order('created_at', { ascending: false })
 
       if (err) {
-        // Fallback to local cache if table not ready or offline
-        try {
-          const cached = localStorage.getItem(LOCAL_STORAGE_KEY)
-          if (cached) setMessages(JSON.parse(cached))
-        } catch {}
+        setError(err.message)
       } else if (data) {
         const mapped: AdminMessage[] = data.map((item: any) => ({
           id: item.id,
@@ -88,9 +82,6 @@ export function useAdminCommunications() {
           sender_phone: item.profiles?.phone ?? '',
         }))
         setMessages(mapped)
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mapped))
-        } catch {}
       }
     } catch (e: any) {
       setError(e.message)
@@ -134,14 +125,9 @@ export function useAdminCommunications() {
 
       // Optimistic update
       setMessages((prev) => [newMsg, ...prev])
-      try {
-        const current = [newMsg, ...messages]
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(current))
-      } catch {}
-
       setSubmitting(false)
       if (err) {
-        return null // Kept in local state
+        return err.message
       }
       return null
     } catch (e: any) {
@@ -154,10 +140,6 @@ export function useAdminCommunications() {
     try {
       await supabase.from('admin_messages').delete().eq('id', id)
       setMessages((prev) => prev.filter((m) => m.id !== id))
-      try {
-        const updated = messages.filter((m) => m.id !== id)
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated))
-      } catch {}
       return null
     } catch (e: any) {
       return e.message || 'Failed to delete message'

@@ -73,31 +73,8 @@ export const DEFAULT_LANDING_SETTINGS: LandingPageSettings = {
   ],
 }
 
-const LOCAL_STORAGE_KEY = 'classbank_landing_settings'
-
-function safeSaveToLocalStorage(data: LandingPageSettings) {
-  try {
-    const toStore: LandingPageSettings = { ...data }
-    // If the image is a base64 data URL, avoid blowing up localStorage's 5MB quota
-    if (toStore.hero_bg_image && toStore.hero_bg_image.startsWith('data:') && toStore.hero_bg_image.length > 200000) {
-      toStore.hero_bg_image = ''
-    }
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(toStore))
-  } catch (err) {
-    console.warn('LocalStorage quota exceeded or restricted; skipping local cache:', err)
-  }
-}
-
 export function useLandingSettings() {
-  const [settings, setSettings] = useState<LandingPageSettings>(() => {
-    try {
-      const cached = localStorage.getItem(LOCAL_STORAGE_KEY)
-      if (cached) return JSON.parse(cached)
-    } catch {
-      // ignore
-    }
-    return DEFAULT_LANDING_SETTINGS
-  })
+  const [settings, setSettings] = useState<LandingPageSettings>(DEFAULT_LANDING_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -124,13 +101,6 @@ export function useLandingSettings() {
             : DEFAULT_LANDING_SETTINGS.stats_data,
         }
         setSettings(merged)
-        safeSaveToLocalStorage(merged)
-      } else {
-        // Fallback to cached or defaults
-        try {
-          const cached = localStorage.getItem(LOCAL_STORAGE_KEY)
-          if (cached) setSettings(JSON.parse(cached))
-        } catch {}
       }
     } catch (e: any) {
       setError(e.message)
@@ -159,19 +129,16 @@ export function useLandingSettings() {
         .upsert(payload as never)
 
       setSettings(payload)
-      safeSaveToLocalStorage(payload)
       setSaving(false)
 
       if (err) {
-        return `Saved locally (Database notice: ${err.message})`
+        return `Failed to save: ${err.message}`
       }
 
       return null
     } catch (e: any) {
-      setSettings(payload)
-      safeSaveToLocalStorage(payload)
       setSaving(false)
-      return e.message || 'Saved locally with warning'
+      return e.message || 'Failed to save settings'
     }
   }
 

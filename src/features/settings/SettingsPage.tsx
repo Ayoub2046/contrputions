@@ -27,22 +27,18 @@ export function SettingsPage() {
   const [pwError, setPwError] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
 
-  // App Identity & Branding state (super_admin only)
-  const [appNameInput, setAppNameInput] = useState<string>(() => {
-    return localStorage.getItem('cb_app_name') || DEFAULT_APP_NAME
-  })
+  // App Identity & Branding state (super_admin only) - sourced exclusively from database
+  const [appNameInput, setAppNameInput] = useState<string>(DEFAULT_APP_NAME)
   const [appNameSaving, setAppNameSaving] = useState(false)
   const [appNameMsg, setAppNameMsg] = useState('')
 
-  const [currentLogo, setCurrentLogo] = useState<string>(() => {
-    return localStorage.getItem('cb_app_logo') || DEFAULT_LOGO
-  })
+  const [currentLogo, setCurrentLogo] = useState<string>(DEFAULT_LOGO)
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoMsg, setLogoMsg] = useState('')
   const logoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    // Load current app name and logo URL from app_settings
+    // Load current app name and logo URL directly from Supabase app_settings table
     supabase
       .from('app_settings')
       .select('key, value')
@@ -52,11 +48,9 @@ export function SettingsPage() {
           data.forEach((row) => {
             if (row.key === 'app_logo_url' && row.value) {
               setCurrentLogo(row.value)
-              localStorage.setItem('cb_app_logo', row.value)
             }
             if (row.key === 'app_name' && row.value) {
               setAppNameInput(row.value)
-              localStorage.setItem('cb_app_name', row.value)
             }
           })
         }
@@ -78,7 +72,6 @@ export function SettingsPage() {
       )
 
     if (!settingsError) {
-      localStorage.setItem('cb_app_name', val)
       document.title = val
       const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
       if (meta) meta.setAttribute('content', val)
@@ -140,8 +133,6 @@ export function SettingsPage() {
             .upsert({ key: 'app_logo_url', value: compactDataUrl, updated_by: user?.id, updated_at: new Date().toISOString() } as never, { onConflict: 'key' })
           if (!settingsError) {
             setCurrentLogo(compactDataUrl)
-            localStorage.setItem('cb_app_logo', compactDataUrl)
-            window.dispatchEvent(new Event('storage'))
             setLogoMsg('✓ Logo updated successfully.')
           } else {
             setLogoMsg('Failed to save logo: ' + settingsError.message)
@@ -164,13 +155,11 @@ export function SettingsPage() {
 
     if (!settingsError) {
       setCurrentLogo(publicUrl)
-      localStorage.setItem('cb_app_logo', publicUrl)
       updateDynamicManifest(appNameInput, publicUrl)
       const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
       if (iconLink) iconLink.href = publicUrl
       const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement
       if (appleIconLink) appleIconLink.href = publicUrl
-      window.dispatchEvent(new Event('storage'))
       setLogoMsg('✓ Logo updated successfully across all dashboards and student install screens!')
     } else {
       setLogoMsg('Failed to save logo URL: ' + settingsError.message)

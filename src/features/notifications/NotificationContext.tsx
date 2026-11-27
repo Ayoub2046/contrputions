@@ -8,7 +8,6 @@ import {
   triggerSystemNotification,
   broadcastPushNotification,
   fetchNotificationsList,
-  saveLocalStoredNotifications,
   persistNotification,
 } from './notificationService'
 import {
@@ -254,19 +253,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   )
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => {
-      const updated = prev.map((n) => ({ ...n, read: true }))
-      saveLocalStoredNotifications(updated)
-      return updated
-    })
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
   }, [])
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) => {
-      const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-      saveLocalStoredNotifications(updated)
-      return updated
-    })
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
   }, [])
 
   const testNotification = useCallback(async () => {

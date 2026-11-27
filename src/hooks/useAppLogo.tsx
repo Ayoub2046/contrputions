@@ -3,13 +3,11 @@ import { supabase } from '../lib/supabase'
 
 export const DEFAULT_LOGO = '/classBankLogo.png'
 export const DEFAULT_APP_NAME = 'ClassBank'
-const LOGO_CACHE_KEY = 'cb_app_logo'
-const NAME_CACHE_KEY = 'cb_app_name'
 
 /**
  * Updates the Web App Manifest link in the DOM.
  * Directs to the dynamic /api/manifest serverless endpoint to safely load custom app name and logo
- * without using blob: URLs (which trigger Chrome RESULT_CODE_KILLED_BAD_MESSAGE IPC process termination).
+ * from the database without using blob: URLs.
  */
 export function updateDynamicManifest(_appName?: string, _logoUrl?: string) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
@@ -30,29 +28,18 @@ export function updateDynamicManifest(_appName?: string, _logoUrl?: string) {
 
 function isSafeIconUrl(url?: string): boolean {
   if (!url) return false
-  if (url.startsWith('data:') || url.startsWith('blob:') || url.length > 1000) return false // prevent Mojo IPC overflow
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.length > 1000) return false
   return true
 }
 
 /**
  * Hook to retrieve and reactively update the application name.
- * Caches in localStorage for instant rendering and syncs with Supabase app_settings.
+ * Strictly sources all values from Supabase app_settings in the database (never from localStorage).
  */
 export function useAppName(): string {
-  const [appName, setAppName] = useState<string>(() => {
-    return localStorage.getItem(NAME_CACHE_KEY) || DEFAULT_APP_NAME
-  })
+  const [appName, setAppName] = useState<string>(DEFAULT_APP_NAME)
 
   useEffect(() => {
-    // Sync document title and meta tag initially from cached state
-    if (appName) {
-      document.title = appName
-      const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
-      if (meta) meta.setAttribute('content', appName)
-      const currentLogo = localStorage.getItem(LOGO_CACHE_KEY) || DEFAULT_LOGO
-      updateDynamicManifest(appName, currentLogo)
-    }
-
     supabase
       .from('app_settings')
       .select('value')
@@ -62,40 +49,47 @@ export function useAppName(): string {
         if (data?.value && data.value.trim().length > 0) {
           const val = data.value.trim()
           setAppName(val)
-          localStorage.setItem(NAME_CACHE_KEY, val)
           document.title = val
           const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
           if (meta) meta.setAttribute('content', val)
-          const currentLogo = localStorage.getItem(LOGO_CACHE_KEY) || DEFAULT_LOGO
-          updateDynamicManifest(val, currentLogo)
         }
       })
-  }, [appName])
+
+    // Listen for realtime database changes to app_name
+    const channel = supabase
+      .channel('realtime_app_name')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.app_name' },
+        (payload: any) => {
+          const newVal = payload.new?.value
+          if (newVal && newVal.trim().length > 0) {
+            const val = newVal.trim()
+            setAppName(val)
+            document.title = val
+            const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+            if (meta) meta.setAttribute('content', val)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   return appName
 }
 
 /**
  * Hook to retrieve and reactively update the application logo URL.
- * Automatically updates browser favicon, apple-touch-icon, and PWA manifest.
+ * Strictly sources all values from Supabase app_settings in the database (never from localStorage).
  */
 export function useAppLogo(): string {
-  const [logoUrl, setLogoUrl] = useState<string>(() => {
-    return localStorage.getItem(LOGO_CACHE_KEY) || DEFAULT_LOGO
-  })
+  const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_LOGO)
 
   useEffect(() => {
-    // Update favicon & apple-touch-icon link tags in DOM safely
-    const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
-    if (iconLink && isSafeIconUrl(logoUrl)) {
-      iconLink.href = logoUrl
-    }
-    const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement
-    if (appleIconLink && isSafeIconUrl(logoUrl)) {
-      appleIconLink.href = logoUrl
-    }
-    updateDynamicManifest()
-
     supabase
       .from('app_settings')
       .select('value')
@@ -103,14 +97,39 @@ export function useAppLogo(): string {
       .maybeSingle()
       .then(({ data }) => {
         if (data?.value) {
-          setLogoUrl(data.value)
-          localStorage.setItem(LOGO_CACHE_KEY, data.value)
-          if (iconLink && isSafeIconUrl(data.value)) iconLink.href = data.value
-          if (appleIconLink && isSafeIconUrl(data.value)) appleIconLink.href = data.value
-          updateDynamicManifest()
+          const val = data.value.trim()
+          setLogoUrl(val)
+          const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
+          if (iconLink && isSafeIconUrl(val)) iconLink.href = val
+          const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement
+          if (appleIconLink && isSafeIconUrl(val)) appleIconLink.href = val
         }
       })
-  }, [logoUrl])
+
+    // Listen for realtime database changes to app_logo_url
+    const channel = supabase
+      .channel('realtime_app_logo')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.app_logo_url' },
+        (payload: any) => {
+          const newVal = payload.new?.value
+          if (newVal) {
+            const val = newVal.trim()
+            setLogoUrl(val)
+            const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
+            if (iconLink && isSafeIconUrl(val)) iconLink.href = val
+            const appleIconLink = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement
+            if (appleIconLink && isSafeIconUrl(val)) appleIconLink.href = val
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   return logoUrl
 }

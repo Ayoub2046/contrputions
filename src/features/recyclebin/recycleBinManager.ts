@@ -13,23 +13,6 @@ export interface RecycleBinItem {
   deleted_by?: string | null
 }
 
-const STORAGE_KEY = 'classbank_recycle_bin_items'
-
-export function getLocalRecycleBin(): RecycleBinItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
-  }
-}
-
-export function saveLocalRecycleBin(items: RecycleBinItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch {}
-}
-
 export async function moveToRecycleBin(
   item_type: RecycleItemType,
   item_id: string,
@@ -47,12 +30,7 @@ export async function moveToRecycleBin(
     deleted_at: new Date().toISOString(),
   }
 
-  // 1. Save to local storage cache immediately
-  const localItems = getLocalRecycleBin()
-  const updated = [item, ...localItems.filter((x) => x.item_id !== item_id)]
-  saveLocalRecycleBin(updated)
-
-  // 2. Attempt saving to Supabase recycle_bin table
+  // Persist directly to Supabase recycle_bin database table
   try {
     await supabase.from('recycle_bin').insert({
       id: item.id,
@@ -64,32 +42,24 @@ export async function moveToRecycleBin(
       deleted_at: item.deleted_at,
     } as never)
   } catch (err) {
-    console.warn('Recycle bin table insert notice:', err)
+    console.warn('Recycle bin database insert notice:', err)
   }
 }
 
 export async function fetchRecycleBinItems(classId?: string | null): Promise<RecycleBinItem[]> {
-  const localItems = getLocalRecycleBin()
-
   try {
     let query = supabase.from('recycle_bin').select('*').order('deleted_at', { ascending: false })
     if (classId) query = query.eq('class_id', classId)
     const { data, error } = await query
 
-    if (!error && data && data.length > 0) {
-      // Merge with local items avoiding duplicates
-      const ids = new Set(data.map((d: any) => d.id))
-      const combined = [...data, ...localItems.filter((l) => !ids.has(l.id))]
-      saveLocalRecycleBin(combined)
-      return combined
+    if (!error && Array.isArray(data)) {
+      return data as RecycleBinItem[]
     }
-  } catch {}
-
-  // Filter local items if classId specified
-  if (classId) {
-    return localItems.filter((i) => !i.class_id || i.class_id === classId)
+  } catch (err) {
+    console.warn('Failed to fetch recycle bin items from database:', err)
   }
-  return localItems
+
+  return []
 }
 
 export async function restoreRecycleItem(item: RecycleBinItem): Promise<string | null> {
@@ -128,13 +98,11 @@ export async function restoreRecycleItem(item: RecycleBinItem): Promise<string |
       if (error) return error.message
     }
 
-    // Remove from recycle_bin table & local cache
+    // Remove from recycle_bin database table
     try {
       await supabase.from('recycle_bin').delete().eq('id', item.id)
     } catch {}
 
-    const localItems = getLocalRecycleBin().filter((x) => x.id !== item.id)
-    saveLocalRecycleBin(localItems)
     return null
   } catch (err: any) {
     return err.message || 'Failed to restore item'
@@ -151,12 +119,11 @@ export async function permanentDeleteRecycleItem(item: RecycleBinItem): Promise<
       await supabase.from('profiles').delete().eq('id', item.item_id)
     }
 
+    // Permanently remove from recycle_bin database table
     try {
       await supabase.from('recycle_bin').delete().eq('id', item.id)
     } catch {}
 
-    const localItems = getLocalRecycleBin().filter((x) => x.id !== item.id)
-    saveLocalRecycleBin(localItems)
     return null
   } catch (err: any) {
     return err.message || 'Failed to delete permanently'

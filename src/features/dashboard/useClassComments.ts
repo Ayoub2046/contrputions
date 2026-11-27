@@ -5,8 +5,6 @@ import { broadcastPushNotification } from '../notifications/notificationService'
 import { getValidAuthToken } from '../../lib/admin-api'
 import type { ClassComment } from '../../lib/types'
 
-const LOCAL_STORAGE_KEY_PREFIX = 'classbank_comments_'
-
 export function useClassComments(classId: string | null) {
   const { user } = useAuth()
   const [comments, setComments] = useState<ClassComment[]>([])
@@ -16,7 +14,6 @@ export function useClassComments(classId: string | null) {
 
   const isSuperAdmin = user?.role === 'super_admin'
   const canViewAll = isSuperAdmin || user?.role === 'finance_manager'
-  const cacheKey = classId ? `${LOCAL_STORAGE_KEY_PREFIX}${classId}` : `${LOCAL_STORAGE_KEY_PREFIX}all`
 
   const fetchComments = useCallback(async () => {
     if (!classId && !canViewAll) {
@@ -43,11 +40,6 @@ export function useClassComments(classId: string | null) {
             const apiData: ClassComment[] = await res.json()
             if (Array.isArray(apiData)) {
               setComments(apiData)
-              if (cacheKey) {
-                try {
-                  localStorage.setItem(cacheKey, JSON.stringify(apiData))
-                } catch {}
-              }
               setLoading(false)
               return
             }
@@ -82,16 +74,7 @@ export function useClassComments(classId: string | null) {
       const { data, error: err } = await query
 
       if (err) {
-        // 3. Fallback to local cache if offline
-        if (cacheKey) {
-          try {
-            const cached = localStorage.getItem(cacheKey)
-            if (cached) {
-              const parsed = JSON.parse(cached)
-              if (Array.isArray(parsed)) setComments(parsed)
-            }
-          } catch {}
-        }
+        setError(err.message)
       } else if (Array.isArray(data)) {
         const mapped: ClassComment[] = data.map((item: any) => ({
           id: item.id,
@@ -105,18 +88,13 @@ export function useClassComments(classId: string | null) {
           author_student_id: item.profiles?.student_id ?? (user && item.user_id === user.id ? user.student_id : ''),
         }))
         setComments(mapped)
-        if (cacheKey) {
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify(mapped))
-          } catch {}
-        }
       }
     } catch (e: any) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [classId, cacheKey, isSuperAdmin, user])
+  }, [classId, isSuperAdmin, user])
 
   // Initial load and Realtime sync
   useEffect(() => {
@@ -164,14 +142,8 @@ export function useClassComments(classId: string | null) {
     }
 
     try {
-      // Optimistically update state and cache immediately (0ms delay)
+      // Optimistically update state immediately (0ms delay)
       setComments((prev) => [newComment, ...prev])
-      if (cacheKey) {
-        try {
-          const current = [newComment, ...comments]
-          localStorage.setItem(cacheKey, JSON.stringify(current))
-        } catch {}
-      }
 
       // Broadcast live popup notification to all students and admins
       broadcastPushNotification({
@@ -218,7 +190,6 @@ export function useClassComments(classId: string | null) {
 
       setSubmitting(false)
       if (err) {
-        // Still kept in local cache
         return null
       }
       return null
@@ -231,12 +202,6 @@ export function useClassComments(classId: string | null) {
   const deleteComment = async (id: string): Promise<string | null> => {
     // Instant optimistic deletion from UI (0ms delay)
     setComments((prev) => prev.filter((c) => c.id !== id))
-    if (cacheKey) {
-      try {
-        const updated = comments.filter((c) => c.id !== id)
-        localStorage.setItem(cacheKey, JSON.stringify(updated))
-      } catch {}
-    }
 
     try {
       const token = await getValidAuthToken()

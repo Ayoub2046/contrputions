@@ -2,7 +2,6 @@ import { supabase } from '../../lib/supabase'
 import { playWhatsAppChime } from './notificationAudio'
 import type { PushNotificationPayload, StoredNotification } from './notificationTypes'
 
-const STORAGE_KEY = 'classbank_stored_notifications_v1'
 const CHANNEL_NAME = 'classbank_push_channel'
 
 export function isNotificationSupported(): boolean {
@@ -92,33 +91,13 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
   }
 }
 
-export function getLocalStoredNotifications(): StoredNotification[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
-  }
-}
-
-export function saveLocalStoredNotifications(items: StoredNotification[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, 50)))
-  } catch {}
-}
-
 export async function persistNotification(payload: PushNotificationPayload): Promise<StoredNotification> {
   const item: StoredNotification = {
     ...payload,
     read: false,
   }
 
-  // 1. Save to local storage
-  const current = getLocalStoredNotifications()
-  const updated = [item, ...current.filter((x) => x.id !== payload.id)]
-  saveLocalStoredNotifications(updated)
-
-  // 2. Persist to Supabase if table exists
+  // Persist directly to Supabase notifications database table
   try {
     await supabase.from('notifications').insert({
       id: payload.id,
@@ -136,17 +115,14 @@ export async function persistNotification(payload: PushNotificationPayload): Pro
 }
 
 export async function fetchNotificationsList(classId?: string | null): Promise<StoredNotification[]> {
-  const local = getLocalStoredNotifications()
-
   try {
-    let query = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(30)
+    let query = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(40)
     if (classId) {
       query = query.or(`class_id.eq.${classId},class_id.is.null`)
     }
     const { data, error } = await query
     if (!error && data && data.length > 0) {
-      const readIds = new Set(local.filter((l) => l.read).map((l) => l.id))
-      const fromDb: StoredNotification[] = data.map((d: any) => ({
+      return data.map((d: any) => ({
         id: d.id,
         title: d.title,
         body: d.body,
@@ -155,25 +131,16 @@ export async function fetchNotificationsList(classId?: string | null): Promise<S
         senderRole: d.sender_role,
         classId: d.class_id,
         createdAt: d.created_at,
-        read: readIds.has(d.id),
+        read: false,
       }))
-
-      // Merge avoiding duplicates
-      const dbIds = new Set(fromDb.map((x) => x.id))
-      const merged = [...fromDb, ...local.filter((l) => !dbIds.has(l.id))]
-      saveLocalStoredNotifications(merged)
-      return merged
     }
   } catch {}
 
-  if (classId) {
-    return local.filter((x) => !x.classId || x.classId === classId)
-  }
-  return local
+  return []
 }
 
 export async function broadcastPushNotification(payload: PushNotificationPayload): Promise<void> {
-  // 1. Save locally and in Supabase database
+  // 1. Save directly in Supabase database
   await persistNotification(payload)
 
   // 2. Broadcast publicly to all connected users via Supabase Realtime
