@@ -7,7 +7,7 @@ import { Input } from '../../components/ui/Input'
 import { adminCreateUser } from '../../lib/admin-api'
 import { supabase } from '../../lib/supabase'
 import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2, Type, Sparkles, User } from 'lucide-react'
-import { DEFAULT_APP_NAME, DEFAULT_LOGO, updateDynamicManifest } from '../../hooks/useAppLogo'
+import { DEFAULT_APP_NAME, DEFAULT_LOGO, updateDynamicManifest, notifyAppBrandingChanged } from '../../hooks/useAppLogo'
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation()
@@ -98,6 +98,7 @@ export function SettingsPage() {
       const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
       if (meta) meta.setAttribute('content', val)
       updateDynamicManifest(val, currentLogo)
+      notifyAppBrandingChanged(val, undefined)
       setAppNameMsg(`✓ Application name updated to "${val}"!`)
       window.dispatchEvent(new Event('storage'))
     } else {
@@ -155,6 +156,7 @@ export function SettingsPage() {
             .upsert({ key: 'app_logo_url', value: compactDataUrl, updated_by: user?.id, updated_at: new Date().toISOString() } as never, { onConflict: 'key' })
           if (!settingsError) {
             setCurrentLogo(compactDataUrl)
+            notifyAppBrandingChanged(undefined, compactDataUrl)
             setLogoMsg('✓ Logo updated successfully.')
           } else {
             setLogoMsg('Failed to save logo: ' + settingsError.message)
@@ -177,6 +179,7 @@ export function SettingsPage() {
 
     if (!settingsError) {
       setCurrentLogo(publicUrl)
+      notifyAppBrandingChanged(undefined, publicUrl)
       updateDynamicManifest(appNameInput, publicUrl)
       const iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement
       if (iconLink) iconLink.href = publicUrl

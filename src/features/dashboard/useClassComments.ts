@@ -100,9 +100,10 @@ export function useClassComments(classId: string | null) {
   useEffect(() => {
     fetchComments()
 
-    // Subscribe to live comment additions & deletions across the class
+    // Subscribe to live comment additions & deletions across the class with unique channel ID
+    const channelName = `class_comments_${classId || 'all'}_${Math.random().toString(36).slice(2, 9)}`
     const channel = supabase
-      .channel(`class_comments_realtime_${classId || 'all'}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {

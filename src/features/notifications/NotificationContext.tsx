@@ -128,6 +128,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Realtime subscription for incoming broadcast notifications (Immediate WebSocket delivery)
   useEffect(() => {
+    const existing = supabase
+      .getChannels()
+      .find((c: any) => c.topic === 'realtime:classbank_push_channel' || c.name === 'classbank_push_channel')
+    if (existing) {
+      supabase.removeChannel(existing)
+    }
+
     const channel = supabase.channel('classbank_push_channel')
 
     channel
