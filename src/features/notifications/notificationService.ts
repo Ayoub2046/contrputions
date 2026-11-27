@@ -42,15 +42,21 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
     return
   }
 
-  const iconUrl = '/icons/icon-192.png'
+  // Use custom-logo.png (the app's actual branded icon, stored as a static file to avoid IPC crashes)
+  // Fallback chain: custom-logo.png → classBankLogo.png → icon-192.png
+  const iconUrl = '/custom-logo.png'
+  const badgeUrl = '/icons/icon-192.png'
   const targetUrl = payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
+
+  // Resolve app name for notification title prefix
+  const appName = document.title || 'ClassBank'
 
   // 1. Post to active Service Worker controller
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     try {
       navigator.serviceWorker.controller.postMessage({
         type: 'PUSH_NOTIFICATION',
-        payload: { ...payload, url: targetUrl },
+        payload: { ...payload, url: targetUrl, appName },
       })
       return
     } catch {}
@@ -64,7 +70,7 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
         await reg.showNotification(payload.title, {
           body: payload.body,
           icon: iconUrl,
-          badge: iconUrl,
+          badge: badgeUrl,
           tag: payload.id,
           vibrate: [200, 100, 200],
           data: { url: targetUrl },
@@ -80,8 +86,9 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
     const notif = new Notification(payload.title, {
       body: payload.body,
       icon: iconUrl,
+      badge: badgeUrl,
       tag: payload.id,
-    })
+    } as NotificationOptions)
     notif.onclick = () => {
       window.focus()
       notif.close()

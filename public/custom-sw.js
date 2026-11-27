@@ -38,8 +38,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/custom-logo.png',
+    badge: '/custom-logo.png',
     vibrate: [200, 100, 200],
     data: { url: data.url || '/dashboard' },
     renotify: true,
@@ -56,8 +56,8 @@ self.addEventListener('message', (event) => {
     const title = payload.title || 'ClassBank Notification'
     const options = {
       body: payload.body || 'New class announcement received.',
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/custom-logo.png',
+      badge: '/custom-logo.png',
       vibrate: [200, 100, 200],
       data: { url: payload.url || '/dashboard' },
       renotify: true,

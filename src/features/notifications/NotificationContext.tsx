@@ -252,12 +252,27 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     [user]
   )
 
-  const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-  }, [])
+  const markAllAsRead = useCallback(async () => {
+    // Remove all notifications from local state (inbox becomes empty)
+    setNotifications([])
+    // Also delete them from Supabase so they don't reload
+    try {
+      const userClass = activeClassId || user?.class_id
+      let query = supabase.from('notifications').delete()
+      if (userClass) {
+        query = (query as any).or(`class_id.eq.${userClass},class_id.is.null`)
+      }
+      await query
+    } catch {}
+  }, [activeClassId, user?.class_id])
 
-  const markAsRead = useCallback((id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+  const markAsRead = useCallback(async (id: string) => {
+    // Remove just this notification from local state
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    // Delete from Supabase
+    try {
+      await supabase.from('notifications').delete().eq('id', id)
+    } catch {}
   }, [])
 
   const testNotification = useCallback(async () => {

@@ -3,9 +3,21 @@ import { createPortal } from 'react-dom'
 import { useNotifications } from './NotificationContext'
 import { useAuth } from '../auth/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Bell, CheckCheck, Send, Volume2, ShieldAlert, X, Wallet, Receipt, MessageSquare, Info } from 'lucide-react'
+import {
+  Bell,
+  CheckCheck,
+  Send,
+  Volume2,
+  ShieldAlert,
+  X,
+  Wallet,
+  Receipt,
+  MessageSquare,
+  Info,
+  Trash2,
+  Clock,
+} from 'lucide-react'
 import { BroadcastNotificationModal } from './BroadcastNotificationModal'
-import { formatDate } from '../../lib/utils'
 
 interface NotificationBellProps {
   placement?: 'sidebar' | 'header'
@@ -21,10 +33,32 @@ function getCategoryIcon(cat?: string) {
       return <Bell size={15} className="text-blue-500" />
     case 'announcement':
     case 'news':
-      return <MessageSquare size={15} className="text-emerald-500" />
+      return <MessageSquare size={15} className="text-indigo-500" />
     default:
-      return <Info size={15} className="text-brand-500" />
+      return <Info size={15} className="text-[#1176BC]" />
   }
+}
+
+function getCategoryColor(cat?: string) {
+  switch (cat) {
+    case 'contribution': return 'bg-emerald-100 dark:bg-emerald-950/60 ring-1 ring-emerald-200 dark:ring-emerald-800'
+    case 'expense': return 'bg-amber-100 dark:bg-amber-950/60 ring-1 ring-amber-200 dark:ring-amber-800'
+    case 'reminder': return 'bg-blue-100 dark:bg-blue-950/60 ring-1 ring-blue-200 dark:ring-blue-800'
+    case 'announcement':
+    case 'news': return 'bg-indigo-100 dark:bg-indigo-950/60 ring-1 ring-indigo-200 dark:ring-indigo-800'
+    default: return 'bg-[#EAF4FB] dark:bg-[#1176BC]/20 ring-1 ring-[#9FBBDE]/30'
+  }
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
 }
 
 export function NotificationBell({ placement = 'header' }: NotificationBellProps) {
@@ -43,6 +77,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
   const [open, setOpen] = useState(false)
   const [showBroadcastModal, setShowBroadcastModal] = useState(false)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
+  const [activeTab, setActiveTab] = useState<'unread' | 'all'>('unread')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
@@ -68,50 +103,64 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
-  // Desktop flyout for sidebar placement (>= lg)
-  const sidebarFlyoutClasses =
-    'hidden lg:flex flex-col absolute z-50 top-0 left-full ml-3 w-96 md:w-[420px] max-h-[85vh] rounded-2xl bg-bg-card border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+  const displayedNotifications = activeTab === 'unread'
+    ? notifications.filter((n) => !n.read)
+    : notifications
 
   const drawerContent = (
     <>
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-bg-elevated/50 shrink-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <Bell size={16} className="text-emerald-600 dark:text-emerald-400" />
-            <span className="font-bold text-sm text-text">Notifications</span>
+      <div className="px-4 pt-4 pb-3 border-b border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="size-8 rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shadow-sm">
+              <Bell size={15} className="text-white" />
+            </div>
+            <div>
+              <span className="font-bold text-sm text-[#1a2332] dark:text-[#e8f0f8] block leading-tight">Notifications</span>
+              {fcmToken && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live Push Active
+                </span>
+              )}
+            </div>
           </div>
-          {fcmToken && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full"
-              title="Firebase Cloud Messaging active"
-            >
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" /> FCM Live
-            </span>
-          )}
-          {unreadCount > 0 && (
-            <span className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
-              {unreadCount} new
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {unreadCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1176BC] hover:text-[#0D5A8A] px-2.5 py-1 rounded-lg bg-[#EAF4FB] dark:bg-[#0d2a40] hover:bg-[#D0E9F8] dark:hover:bg-[#1176BC]/20 transition-colors cursor-pointer"
+                title="Mark all as read (clears inbox)"
+              >
+                <CheckCheck size={13} />
+                Clear All ({unreadCount})
+              </button>
+            )}
             <button
-              onClick={markAllAsRead}
-              className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1 font-semibold cursor-pointer"
-              title="Mark all as read"
+              onClick={() => setOpen(false)}
+              className="size-7 rounded-lg flex items-center justify-center text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] hover:bg-[#EAF4FB] dark:hover:bg-[#1e3550] transition-colors cursor-pointer"
             >
-              <CheckCheck size={14} /> Mark read
+              <X size={16} />
             </button>
-          )}
-          <button
-            onClick={() => setOpen(false)}
-            className="text-muted hover:text-text p-1.5 rounded-full hover:bg-bg-elevated transition-colors cursor-pointer"
-            title="Close"
-          >
-            <X size={17} />
-          </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 p-0.5 bg-[#F5F8FA] dark:bg-[#0d1a2d] rounded-lg">
+          {(['unread', 'all'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                activeTab === tab
+                  ? 'bg-white dark:bg-[#132033] text-[#1176BC] shadow-sm'
+                  : 'text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8]'
+              }`}
+            >
+              {tab === 'unread' ? `Unread${unreadCount > 0 ? ` (${unreadCount})` : ''}` : `All (${notifications.length})`}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -119,24 +168,24 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
       {permission !== 'granted' && (
         <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200/50 dark:border-amber-900/50 flex items-center justify-between gap-2 text-xs shrink-0">
           <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 min-w-0">
-            <ShieldAlert size={16} className="shrink-0 text-amber-600" />
-            <span className="truncate sm:whitespace-normal">Enable notifications for real-time class alerts</span>
+            <ShieldAlert size={15} className="shrink-0 text-amber-600" />
+            <span className="truncate">Enable notifications for real-time class alerts</span>
           </div>
           <button
             onClick={requestPermission}
-            className="shrink-0 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-btn text-[11px] font-bold transition-colors cursor-pointer shadow-xs"
+            className="shrink-0 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
           >
             Allow
           </button>
         </div>
       )}
 
-      {/* Quick Action Bar — Admin Only */}
+      {/* Admin Quick Actions */}
       {isAdmin && (
-        <div className="px-3.5 py-2 bg-bg-card border-b border-border/60 flex items-center justify-between gap-2 shrink-0">
+        <div className="px-3.5 py-2 bg-[#F5F8FA] dark:bg-[#0d1a2d] border-b border-[#ECECEC] dark:border-[#1e3550] flex items-center justify-between gap-2 shrink-0">
           <button
             onClick={testNotification}
-            className="flex items-center gap-1.5 text-xs text-secondary hover:text-text px-2.5 py-1 rounded-btn hover:bg-bg-elevated transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] px-2.5 py-1 rounded-lg hover:bg-white dark:hover:bg-[#132033] transition-colors cursor-pointer"
           >
             <Volume2 size={13} className="text-emerald-500" />
             <span>Test Sound</span>
@@ -147,7 +196,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
               setOpen(false)
               setShowBroadcastModal(true)
             }}
-            className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 px-3 py-1 rounded-btn bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#1176BC] to-[#25A8E0] hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
           >
             <Send size={12} />
             <span>Send Push Alert</span>
@@ -156,72 +205,116 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
       )}
 
       {/* Notification Items List */}
-      <div className="overflow-y-auto divide-y divide-border/40 flex-1 overscroll-contain">
-        {notifications.length === 0 ? (
-          <div className="py-12 text-center text-muted space-y-1.5">
-            <Bell size={28} className="mx-auto opacity-30 mb-2" />
-            <p className="text-xs font-semibold text-text">No notifications yet</p>
-            <p className="text-[11px] text-muted">You will see class announcements and payment reminders here.</p>
+      <div className="overflow-y-auto flex-1 overscroll-contain">
+        {displayedNotifications.length === 0 ? (
+          <div className="py-14 text-center space-y-3 px-4">
+            <div className="size-16 rounded-2xl bg-[#F5F8FA] dark:bg-[#0d1a2d] flex items-center justify-center mx-auto">
+              <Bell size={28} className="text-[#9FBBDE] opacity-50" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8]">
+                {activeTab === 'unread' ? 'All caught up! 🎉' : 'No notifications yet'}
+              </p>
+              <p className="text-xs text-[#9FBBDE] mt-0.5">
+                {activeTab === 'unread'
+                  ? 'No unread notifications. Switch to "All" to see history.'
+                  : 'Class announcements and payment reminders will appear here.'}
+              </p>
+            </div>
+            {activeTab === 'unread' && notifications.length > 0 && (
+              <button
+                onClick={() => setActiveTab('all')}
+                className="text-xs font-semibold text-[#1176BC] hover:underline cursor-pointer"
+              >
+                View all history →
+              </button>
+            )}
           </div>
         ) : (
-          notifications.map((n) => (
-            <div
-              key={n.id}
-              onClick={() => markAsRead(n.id)}
-              className={`p-3.5 transition-colors cursor-pointer flex items-start gap-3 ${
-                n.read ? 'hover:bg-bg-elevated/40' : 'bg-emerald-50/40 dark:bg-emerald-950/20 hover:bg-emerald-50/70'
-              }`}
-            >
-              <div className="size-8 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                {getCategoryIcon(n.category)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className={`text-xs break-words leading-snug ${n.read ? 'font-medium text-text' : 'font-bold text-text'}`}>
-                    {n.title}
-                  </p>
-                  {!n.read && <span className="size-2 rounded-full bg-emerald-500 shrink-0 mt-1" />}
-                </div>
+          <div className="divide-y divide-[#ECECEC] dark:divide-[#1e3550]">
+            {displayedNotifications.map((n) => (
+              <div
+                key={n.id}
+                onClick={() => markAsRead(n.id)}
+                className={`p-3.5 transition-all cursor-pointer group ${
+                  n.read
+                    ? 'hover:bg-[#F5F8FA] dark:hover:bg-[#0d1a2d]'
+                    : 'bg-[#EAF4FB]/60 dark:bg-[#1176BC]/8 border-l-2 border-l-[#1176BC] hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/15'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Icon */}
+                  <div className={`size-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${getCategoryColor(n.category)}`}>
+                    {getCategoryIcon(n.category)}
+                  </div>
 
-                {/* Full notification body with text wrapping */}
-                <p className="text-xs text-secondary mt-1 leading-relaxed break-words whitespace-pre-wrap">
-                  {n.body}
-                </p>
+                  {/* Content */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-xs leading-snug break-words ${n.read ? 'font-medium text-[#4a5a72] dark:text-[#9FBBDE]' : 'font-bold text-[#1a2332] dark:text-[#e8f0f8]'}`}>
+                        {n.title}
+                      </p>
+                      {!n.read && <span className="size-2.5 rounded-full bg-[#1176BC] shrink-0 mt-1 ring-2 ring-[#EAF4FB] dark:ring-[#132033]" />}
+                    </div>
 
-                <div className="flex items-center justify-between mt-2 text-[10px] text-muted">
-                  <span className="font-medium">{n.senderName ? `From: ${n.senderName}` : 'ClassBank'}</span>
-                  <span>{formatDate(n.createdAt)}</span>
+                    <p className="text-xs text-[#4a5a72] dark:text-[#9FBBDE] mt-1 leading-relaxed break-words">
+                      {n.body}
+                    </p>
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <Clock size={10} className="text-[#9FBBDE] shrink-0" />
+                      <span className="text-[10px] text-[#9FBBDE]">{timeAgo(n.createdAt)}</span>
+                      {n.senderName && (
+                        <>
+                          <span className="text-[#9FBBDE] text-[10px]">·</span>
+                          <span className="text-[10px] text-[#9FBBDE] font-medium truncate">{n.senderName}</span>
+                        </>
+                      )}
+                      {!n.read && (
+                        <span className="ml-auto text-[10px] font-semibold text-[#1176BC] group-hover:underline">
+                          Tap to dismiss
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Mobile-only Bottom Close Bar */}
-      <div className="sm:hidden p-2.5 bg-bg-elevated/60 border-t border-border flex justify-center shrink-0">
-        <button
-          onClick={() => setOpen(false)}
-          className="w-full py-2 rounded-btn bg-bg-card border border-border text-xs font-semibold text-secondary hover:text-text transition-colors"
-        >
-          Close Drawer
-        </button>
-      </div>
+      {/* Footer — only if there are read notifications to fully clear */}
+      {notifications.some((n) => n.read) && (
+        <div className="p-3 border-t border-[#ECECEC] dark:border-[#1e3550] bg-[#F5F8FA] dark:bg-[#0d1a2d] shrink-0 flex items-center justify-center">
+          <button
+            onClick={markAllAsRead}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#9FBBDE] hover:text-red-500 transition-colors cursor-pointer"
+          >
+            <Trash2 size={12} />
+            Clear all read notifications
+          </button>
+        </div>
+      )}
     </>
   )
+
+  // Desktop flyout for sidebar placement (>= lg)
+  const sidebarFlyoutClasses =
+    'hidden lg:flex flex-col absolute z-50 top-0 left-full ml-3 w-96 md:w-[420px] max-h-[85vh] rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
 
   return (
     <div className="relative inline-block" ref={dropdownRef}>
       {/* Bell Trigger Button */}
       <button
         onClick={() => setOpen(!open)}
-        className="relative flex items-center justify-center size-8 sm:size-9 rounded-btn border border-border bg-bg-card hover:bg-bg-elevated text-secondary hover:text-text transition-colors cursor-pointer"
+        className="relative flex items-center justify-center size-8 sm:size-9 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer shadow-sm"
         title="Notifications"
         aria-label="Notifications"
       >
         <Bell size={17} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-bg-main animate-pulse">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#1176BC] px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-[#132033]">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -234,20 +327,20 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
         </div>
       )}
 
-      {/* 2. Mobile & Header Centered Overlay (via Body Portal to eliminate any layout clipping) */}
+      {/* 2. Mobile & Header Centered Overlay (via Body Portal) */}
       {open &&
         placement !== 'sidebar' &&
         typeof document !== 'undefined' &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex items-start justify-center pt-14 sm:pt-16 px-3 pointer-events-auto animate-in fade-in duration-200">
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-14 sm:pt-16 px-3 pointer-events-auto animate-in fade-in duration-150">
             {/* Dimmed Backdrop */}
             <div
-              className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
               onClick={() => setOpen(false)}
             />
 
-            {/* Perfectly Centered Floating Modal Drawer */}
-            <div className="relative w-full max-w-md max-h-[82vh] rounded-2xl bg-bg-card border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 z-10">
+            {/* Floating Notification Panel */}
+            <div className="relative w-full max-w-md max-h-[85vh] rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 z-10">
               {drawerContent}
             </div>
           </div>,

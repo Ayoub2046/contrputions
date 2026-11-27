@@ -22,8 +22,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || payload.data?.title || 'ClassBank Notification'
   const notificationOptions = {
     body: payload.notification?.body || payload.data?.body || 'New message from ClassBank',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/custom-logo.png',
+    badge: '/custom-logo.png',
     tag: payload.data?.id || 'classbank_fcm_' + Date.now(),
     data: {
       url: payload.data?.url || '/dashboard'

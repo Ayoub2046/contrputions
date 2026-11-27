@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { adminCreateUser } from '../../lib/admin-api'
 import { supabase } from '../../lib/supabase'
-import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2, Type, Sparkles } from 'lucide-react'
+import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2, Type, Sparkles, User } from 'lucide-react'
 import { DEFAULT_APP_NAME, DEFAULT_LOGO, updateDynamicManifest } from '../../hooks/useAppLogo'
 
 export function SettingsPage() {
@@ -26,6 +26,11 @@ export function SettingsPage() {
   const [pwMessage, setPwMessage] = useState('')
   const [pwError, setPwError] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
+
+  // Super admin profile update (name)
+  const [displayName, setDisplayName] = useState(user?.name || '')
+  const [nameMsg, setNameMsg] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
 
   // App Identity & Branding state (super_admin only) - sourced exclusively from database
   const [appNameInput, setAppNameInput] = useState<string>(DEFAULT_APP_NAME)
@@ -56,6 +61,23 @@ export function SettingsPage() {
         }
       })
   }, [])
+
+  async function handleSaveDisplayName(e: React.FormEvent) {
+    e.preventDefault()
+    if (!displayName.trim() || !user?.id) return
+    setNameSaving(true)
+    setNameMsg('')
+    const { error } = await supabase
+      .from('profiles')
+      .update({ name: displayName.trim() })
+      .eq('id', user.id)
+    if (error) {
+      setNameMsg('Failed to update name: ' + error.message)
+    } else {
+      setNameMsg('✓ Display name updated successfully!')
+    }
+    setNameSaving(false)
+  }
 
   async function handleSaveAppName(e: React.FormEvent) {
     e.preventDefault()
@@ -386,6 +408,62 @@ export function SettingsPage() {
           </div>
         )}
 
+        {/* My Profile — name update (super admin) */}
+        {isSuperAdmin && (
+          <div className="border-t border-[#ECECEC] dark:border-[#1e3550]">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="size-9 rounded-lg bg-[#EAF4FB] dark:bg-[#0d2a40] flex items-center justify-center shrink-0 mt-0.5">
+                  <User size={18} className="text-[#1176BC]" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h2 className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8]">My Profile</h2>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                      Super Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#9FBBDE] mb-3">
+                    Update your display name shown across the platform, admin directory, and notification sender name.
+                  </p>
+                  <form onSubmit={handleSaveDisplayName} className="space-y-3 max-w-md">
+                    <div>
+                      <label className="text-xs font-semibold text-[#9FBBDE] block mb-1">Display Name</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={displayName}
+                          onChange={(e) => setDisplayName(e.target.value)}
+                          placeholder="Your full name"
+                          required
+                          className="flex-1 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] px-3 py-2 text-sm text-[#1a2332] dark:text-[#e8f0f8] focus:outline-none focus:ring-2 focus:ring-[#25A8E0]/30"
+                        />
+                        <button
+                          type="submit"
+                          disabled={nameSaving || !displayName.trim()}
+                          className="px-4 py-2 rounded-xl bg-[#1176BC] text-white text-xs sm:text-sm font-semibold hover:bg-[#0D5A8A] transition-colors cursor-pointer disabled:opacity-60 shrink-0"
+                        >
+                          {nameSaving ? 'Saving…' : 'Save Name'}
+                        </button>
+                      </div>
+                    </div>
+                    {nameMsg && (
+                      <p className={`text-xs font-medium flex items-center gap-1.5 p-2 rounded-xl border ${
+                        nameMsg.startsWith('✓')
+                          ? 'text-[#0C9B5E] bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
+                          : 'text-red-500 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800'
+                      }`}>
+                        {nameMsg.startsWith('✓') && <CheckCircle2 size={13} />}
+                        {nameMsg}
+                      </p>
+                    )}
+                  </form>
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        )}
+
         {/* Password Change */}
         <div className="border-t border-[#ECECEC] dark:border-[#1e3550]">
           <CardContent className="p-5">
@@ -394,8 +472,7 @@ export function SettingsPage() {
                 <KeyRound size={18} className="text-[#1176BC]" />
               </div>
               <div className="flex-1">
-                <h2 className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8] mb-3">{t('auth.changePassword.title')}</h2>
-                <form onSubmit={handlePasswordChange} className="space-y-3 max-w-md">
+                <h2 className="text-sm font-semibold text-[#1a2332] dark:text-[#e8f0f8] mb-3">{t('auth.changePassword.title')}</h2>                <form onSubmit={handlePasswordChange} className="space-y-3 max-w-md">
                   <Input
                     id="currentPassword"
                     label={t('auth.changePassword.currentPassword')}

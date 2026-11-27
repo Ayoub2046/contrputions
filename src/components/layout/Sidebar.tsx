@@ -14,7 +14,6 @@ import {
   Sun,
   Moon,
   Trash2,
-  ExternalLink,
   MessageSquare,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -128,20 +127,6 @@ export function Sidebar({ role, onSignOut }: SidebarProps) {
 
       <div className="p-4 border-t border-border space-y-2">
         <PwaInstallButton className="w-full justify-center mb-1" size="sm" />
-        <a
-          href="/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-between rounded-btn px-3 py-2 text-xs font-semibold text-secondary hover:bg-bg-elevated hover:text-text transition-colors"
-        >
-          <span className="flex items-center gap-2">
-            <ExternalLink size={14} />
-            {t('nav.viewLandingPage')}
-          </span>
-          <span className="text-[10px] font-bold text-brand-600 bg-brand-50 dark:bg-brand-900/30 px-1.5 py-0.5 rounded uppercase">
-            Live
-          </span>
-        </a>
 
         <div className="flex items-center gap-2">
           <Globe size={16} className="text-muted shrink-0" />
