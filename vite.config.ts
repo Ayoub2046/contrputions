@@ -83,6 +83,12 @@ function apiDevServerPlugin(): Plugin {
             return await handler(req, enhancedRes)
           }
 
+          if (pathname.startsWith('/api/push')) {
+            // @ts-ignore
+            const { default: handler } = await import('./api/push.mjs')
+            return await handler(req, enhancedRes)
+          }
+
           enhancedRes.status(404).json({ error: 'API route not found' })
         } catch (err: any) {
           console.error(`[api-dev] Error handling ${pathname}:`, err)

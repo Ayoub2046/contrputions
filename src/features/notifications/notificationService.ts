@@ -274,7 +274,20 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
   // This triggers postgres_changes event to all devices subscribed in realtime!
   await persistNotification(cleanPayload)
 
-  // 2. Broadcast to all active users via Supabase Realtime WebSocket for immediate auditory chime
+  // 2. Dispatch Mobile Background Web Push (Delivers popup to phones even when app is closed)
+  try {
+    fetch('/api/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cleanPayload),
+    }).catch((err) => {
+      console.warn('[WebPush Dispatch Notice]:', err.message)
+    })
+  } catch (err) {
+    console.warn('[WebPush Dispatch Warning]:', err)
+  }
+
+  // 3. Broadcast to all active users via Supabase Realtime WebSocket for immediate auditory chime
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(

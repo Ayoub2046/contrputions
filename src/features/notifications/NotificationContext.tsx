@@ -20,6 +20,7 @@ import {
   getStoredFcmToken,
   setupFcmForegroundListener,
 } from './firebaseMessaging'
+import { subscribeToWebPush } from './webPushService'
 import type { PushNotificationPayload, StoredNotification, NotificationCategory } from './notificationTypes'
 
 interface NotificationContextType {
@@ -60,11 +61,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setPermission(currentPerm)
 
     if (currentPerm === 'granted') {
+      subscribeToWebPush(user?.id, activeClassId || user?.class_id)
       requestFcmToken(user?.id).then((token) => {
         if (token) setFcmToken(token)
       })
     }
-  }, [user?.id])
+  }, [user?.id, activeClassId, user?.class_id])
 
   // Setup Firebase foreground listener
   useEffect(() => {
@@ -267,11 +269,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const perm = await requestNotificationPermission()
     setPermission(perm)
     if (perm === 'granted') {
+      await subscribeToWebPush(user?.id, activeClassId || user?.class_id)
       const token = await requestFcmToken(user?.id)
       if (token) setFcmToken(token)
     }
     return perm
-  }, [user?.id])
+  }, [user?.id, activeClassId, user?.class_id])
 
   const broadcast = useCallback(
     async (data: { title: string; body: string; category?: NotificationCategory; classId?: string | null }) => {

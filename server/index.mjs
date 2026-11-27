@@ -4,6 +4,7 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import commentsHandler from '../api/comments.mjs'
 import manifestHandler from '../api/manifest.mjs'
+import pushHandler from '../api/push.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = resolve(__dirname, '..', '.env')
@@ -325,6 +326,33 @@ const server = createServer(async (req, res) => {
         } catch (e) {
           json(res, 500, { error: e.message })
         }
+      })
+    } else if (path.startsWith('/api/push')) {
+      let body = ''
+      req.on('data', (c) => (body += c))
+      req.on('end', async () => {
+        if (body) {
+          try {
+            req.body = JSON.parse(body)
+          } catch {
+            req.body = {}
+          }
+        } else {
+          req.body = {}
+        }
+
+        const enhancedRes = Object.assign(res, {
+          status(code) {
+            res.statusCode = code
+            return this
+          },
+          json(data) {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(data))
+          },
+        })
+
+        await pushHandler(req, enhancedRes)
       })
     } else {
       json(res, 404, { error: 'Not found' })

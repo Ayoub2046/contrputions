@@ -1,31 +1,13 @@
 // Custom Service Worker scripts for ClassBank PWA
-// Handles notification click and background interactions
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close()
-
-  const targetUrl = event.notification.data?.url || '/dashboard'
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If a window is already open, focus it
-      for (const client of windowClients) {
-        if ('focus' in client) {
-          if (client.url.includes(targetUrl)) {
-            return client.focus()
-          }
-        }
-      }
-      // If no window is open or focusing specific URL, open new window
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl)
-      }
-    })
-  )
-})
+// Handles background push notifications when browser/app is closed!
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'ClassBank Alert', body: 'New class update available.', url: '/dashboard' }
+  let data = {
+    title: 'ClassBank Alert',
+    body: 'New class update available.',
+    url: '/dashboard',
+  }
+
   try {
     if (event.data) {
       data = event.data.json()
@@ -36,20 +18,47 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  const title = data.title || 'ClassBank Notification'
   const options = {
-    body: data.body,
+    body: data.body || 'You have a new announcement from ClassBank.',
     icon: '/custom-logo.png',
     badge: '/custom-logo.png',
-    vibrate: [200, 100, 200],
-    data: { url: data.url || '/dashboard' },
-    renotify: true,
+    vibrate: [200, 100, 200, 100, 200],
     tag: data.id || 'classbank_push_' + Date.now(),
+    renotify: true,
+    requireInteraction: true,
+    data: {
+      url: data.url || '/dashboard',
+      id: data.id,
+      timestamp: Date.now(),
+    },
+    actions: [
+      { action: 'open', title: 'Open ClassBank' }
+    ]
   }
 
-  event.waitUntil(self.registration.showNotification(data.title, options))
+  event.waitUntil(self.registration.showNotification(title, options))
 })
 
-// Listen to messages from app to trigger system notifications
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const targetUrl = event.notification.data?.url || '/dashboard'
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus()
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl)
+      }
+    })
+  )
+})
+
+// Listen to messages from app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'PUSH_NOTIFICATION') {
     const payload = event.data.payload || {}
@@ -66,3 +75,33 @@ self.addEventListener('message', (event) => {
     event.waitUntil(self.registration.showNotification(title, options))
   }
 })
+
+// Initialize Firebase messaging compat in service worker if online
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js')
+  importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js')
+  firebase.initializeApp({
+    apiKey: "AIzaSyCl15fU_i_oe4cln4_P8JYDyMmfAw9sUGk",
+    authDomain: "gen-lang-client-0499661664.firebaseapp.com",
+    projectId: "gen-lang-client-0499661664",
+    storageBucket: "gen-lang-client-0499661664.firebasestorage.app",
+    messagingSenderId: "582138858269",
+    appId: "1:582138858269:web:8bce82576766298b2a6ff4"
+  })
+  const messaging = firebase.messaging()
+  messaging.onBackgroundMessage((payload) => {
+    const title = payload.notification?.title || payload.data?.title || 'ClassBank Notification'
+    const options = {
+      body: payload.notification?.body || payload.data?.body || 'New message from ClassBank',
+      icon: '/custom-logo.png',
+      badge: '/custom-logo.png',
+      tag: payload.data?.id || 'classbank_fcm_' + Date.now(),
+      data: { url: payload.data?.url || '/dashboard' },
+      vibrate: [200, 100, 200],
+      renotify: true
+    }
+    return self.registration.showNotification(title, options)
+  })
+} catch (e) {
+  // Offline or blocked script
+}

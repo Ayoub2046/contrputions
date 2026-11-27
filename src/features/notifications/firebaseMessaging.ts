@@ -12,11 +12,14 @@ export async function requestFcmToken(userId?: string | null): Promise<string | 
     const messaging = await getFirebaseMessaging()
     if (!messaging) return null
 
-    // Register firebase service worker if supported
+    // Obtain active service worker registration
     let swRegistration: ServiceWorkerRegistration | undefined
     if ('serviceWorker' in navigator) {
       try {
-        swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        swRegistration = await navigator.serviceWorker.ready.catch(() => undefined)
+        if (!swRegistration) {
+          swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        }
       } catch (e) {
         console.warn('Service worker registration error:', e)
       }
@@ -29,6 +32,16 @@ export async function requestFcmToken(userId?: string | null): Promise<string | 
 
     if (currentToken) {
       localStorage.setItem(FCM_TOKEN_STORAGE_KEY, currentToken)
+
+      // Register with push server
+      fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: currentToken,
+          userId,
+        }),
+      }).catch(() => {})
 
       // Optionally save to Supabase user profile
       if (userId) {
