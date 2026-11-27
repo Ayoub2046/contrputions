@@ -84,6 +84,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<'unread' | 'all'>('unread')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const portalRef = useRef<HTMLDivElement>(null)
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
 
@@ -95,17 +96,27 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
     }
   }, [isAdmin])
 
-  // Close dropdown on click outside for desktop view
+  // Close dropdown on click outside for desktop and mobile
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false)
+    function handleClickOutside(e: MouseEvent | TouchEvent) {
+      const target = e.target as Node
+      // If click/touch is inside the bell trigger button or inside the drawer, do not close
+      if (
+        (dropdownRef.current && dropdownRef.current.contains(target)) ||
+        (portalRef.current && portalRef.current.contains(target))
+      ) {
+        return
       }
+      setOpen(false)
     }
     if (open) {
       document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('touchstart', handleClickOutside)
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
   }, [open])
 
   const displayedNotifications =
@@ -147,11 +158,12 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             {/* Always visible Clear All button when notifications exist */}
             {notifications.length > 0 && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation()
                   markAllAsRead()
                 }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 hover:bg-red-100 transition-colors cursor-pointer active:scale-95"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:text-red-700 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 hover:bg-red-100 transition-colors cursor-pointer active:scale-95 touch-manipulation"
                 title="Clear all notifications"
               >
                 <Trash2 size={13} />
@@ -160,8 +172,12 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             )}
 
             <button
-              onClick={() => setOpen(false)}
-              className="size-8 rounded-lg flex items-center justify-center text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] hover:bg-[#EAF4FB] dark:hover:bg-[#1e3550] transition-colors cursor-pointer"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpen(false)
+              }}
+              className="size-8 rounded-lg flex items-center justify-center text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] hover:bg-[#EAF4FB] dark:hover:bg-[#1e3550] transition-colors cursor-pointer touch-manipulation"
               title="Close notifications"
             >
               <X size={18} />
@@ -295,11 +311,12 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
                         )}
                         {/* Individual Delete / Dismiss Button */}
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation()
                             markAsRead(n.id)
                           }}
-                          className="size-6 rounded-md flex items-center justify-center text-[#9FBBDE] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                          className="size-6 rounded-md flex items-center justify-center text-[#9FBBDE] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer touch-manipulation"
                           title="Dismiss notification"
                         >
                           <Trash2 size={12} />
@@ -338,8 +355,12 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             {notifications.length} notification{notifications.length === 1 ? '' : 's'}
           </span>
           <button
-            onClick={markAllAsRead}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1176BC] hover:text-red-500 transition-colors cursor-pointer"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              markAllAsRead()
+            }}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1176BC] hover:text-red-500 transition-colors cursor-pointer touch-manipulation"
           >
             <Trash2 size={12} />
             Clear all
@@ -357,8 +378,9 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
     <div className="relative inline-block" ref={dropdownRef}>
       {/* Bell Trigger Button */}
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="relative flex items-center justify-center size-8 sm:size-9 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer shadow-sm active:scale-95"
+        className="relative flex items-center justify-center size-8 sm:size-9 rounded-xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1176BC] transition-colors cursor-pointer shadow-sm active:scale-95 touch-manipulation"
         title="Notifications"
         aria-label="Notifications"
       >
@@ -372,7 +394,13 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
       {/* 1. Desktop Sidebar Anchored Flyout */}
       {open && placement === 'sidebar' && (
-        <div className={sidebarFlyoutClasses}>{drawerContent}</div>
+        <div
+          ref={portalRef}
+          onClick={(e) => e.stopPropagation()}
+          className={sidebarFlyoutClasses}
+        >
+          {drawerContent}
+        </div>
       )}
 
       {/* 2. Responsive Bottom Sheet for Mobile & Modal for Desktop/Tablet */}
@@ -388,7 +416,12 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             />
 
             {/* Mobile Bottom Sheet (< sm) or Centered Modal (>= sm) */}
-            <div className="relative w-full sm:max-w-md h-[88vh] sm:h-auto sm:max-h-[82vh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-top-4 duration-200 z-10 pb-safe">
+            <div
+              ref={portalRef}
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              className="relative w-full sm:max-w-md h-[88vh] sm:h-auto sm:max-h-[82vh] rounded-t-3xl sm:rounded-2xl bg-white dark:bg-[#132033] border border-[#ECECEC] dark:border-[#1e3550] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-top-4 duration-200 z-10 pb-safe"
+            >
               {drawerContent}
             </div>
           </div>,

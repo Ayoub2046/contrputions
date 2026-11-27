@@ -38,7 +38,7 @@
 
         // Clean up any legacy cached data from localStorage so everything is sourced strictly from database
         try {
-          ['cb_app_logo', 'cb_app_name', 'classbank_landing_settings', 'classbank_recycle_bin_items'].forEach(function(k) {
+          ['cb_app_logo', 'cb_app_name', 'classbank_landing_settings', 'classbank_recycle_bin_items', 'classbank_auth'].forEach(function(k) {
             localStorage.removeItem(k);
           });
         } catch(e) {}

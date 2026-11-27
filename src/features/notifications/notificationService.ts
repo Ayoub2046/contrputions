@@ -2,7 +2,7 @@ import { supabase } from '../../lib/supabase'
 import { playWhatsAppChime } from './notificationAudio'
 import type { PushNotificationPayload, StoredNotification } from './notificationTypes'
 
-const CHANNEL_NAME = 'classbank_push_channel'
+export const NOTIFICATION_CHANNEL = 'classbank_live_notifications'
 
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -219,6 +219,47 @@ export async function clearAllNotificationsFromDB(classId?: string | null): Prom
   }
 }
 
+export async function broadcastClearAll(classId?: string | null): Promise<void> {
+  try {
+    const existingChannels = supabase.getChannels()
+    let channel = existingChannels.find(
+      (c: any) => c.topic === `realtime:${NOTIFICATION_CHANNEL}` || c.name === NOTIFICATION_CHANNEL
+    )
+    if (!channel) {
+      channel = supabase.channel(NOTIFICATION_CHANNEL)
+      channel.subscribe()
+    }
+    await channel.send({
+      type: 'broadcast',
+      event: 'clear_all',
+      payload: { classId },
+    })
+  } catch (err) {
+    console.warn('[Broadcast Clear All Notice]:', err)
+  }
+}
+
+export async function broadcastDeleteNotification(id: string): Promise<void> {
+  if (!id) return
+  try {
+    const existingChannels = supabase.getChannels()
+    let channel = existingChannels.find(
+      (c: any) => c.topic === `realtime:${NOTIFICATION_CHANNEL}` || c.name === NOTIFICATION_CHANNEL
+    )
+    if (!channel) {
+      channel = supabase.channel(NOTIFICATION_CHANNEL)
+      channel.subscribe()
+    }
+    await channel.send({
+      type: 'broadcast',
+      event: 'delete_notification',
+      payload: { id },
+    })
+  } catch (err) {
+    console.warn('[Broadcast Delete Notice]:', err)
+  }
+}
+
 export async function broadcastPushNotification(payload: PushNotificationPayload): Promise<void> {
   const notifId = isValidUUID(payload.id) ? payload.id! : generateUUID()
   const validClassId = isValidUUID(payload.classId) ? payload.classId : null
@@ -237,11 +278,11 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
   try {
     const existingChannels = supabase.getChannels()
     let channel = existingChannels.find(
-      (c: any) => c.topic === `realtime:${CHANNEL_NAME}` || c.name === CHANNEL_NAME
+      (c: any) => c.topic === `realtime:${NOTIFICATION_CHANNEL}` || c.name === NOTIFICATION_CHANNEL
     )
 
     if (!channel) {
-      channel = supabase.channel(CHANNEL_NAME)
+      channel = supabase.channel(NOTIFICATION_CHANNEL)
       await new Promise<void>((resolve) => {
         channel!.subscribe((status) => {
           if (status === 'SUBSCRIBED') resolve()
@@ -255,6 +296,7 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
       event: 'push_event',
       payload: cleanPayload,
     })
+    console.log('[Realtime Broadcast Sent]:', cleanPayload.title)
   } catch (err) {
     console.warn('Realtime broadcast transmission notice:', err)
   }

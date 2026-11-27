@@ -11,6 +11,9 @@ import {
   deleteNotificationFromDB,
   clearAllNotificationsFromDB,
   generateUUID,
+  NOTIFICATION_CHANNEL,
+  broadcastClearAll,
+  broadcastDeleteNotification,
 } from './notificationService'
 import {
   requestFcmToken,
@@ -131,16 +134,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Realtime subscription: postgres_changes on notifications table + WebSocket broadcast
   useEffect(() => {
-    const channelName = 'realtime_notifications_hub'
     const existing = supabase
       .getChannels()
-      .find((c: any) => c.topic === `realtime:${channelName}` || c.name === channelName)
+      .find((c: any) => c.topic === `realtime:${NOTIFICATION_CHANNEL}` || c.name === NOTIFICATION_CHANNEL)
     if (existing) {
       supabase.removeChannel(existing)
     }
 
     const channel = supabase
-      .channel(channelName)
+      .channel(NOTIFICATION_CHANNEL)
       // 1. Live Postgres replication for newly inserted notifications
       .on(
         'postgres_changes',
@@ -175,22 +177,36 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           }
         }
       )
-      // 3. Client-to-client broadcast backup
+      // 3. Client-to-client broadcast for instant cross-device notification alerts
       .on('broadcast', { event: 'push_event' }, async ({ payload }: any) => {
         if (payload) {
           await handleIncomingNotification(payload as PushNotificationPayload)
         }
       })
+      // 4. Instant Realtime synchronization for clearing all notifications
+      .on('broadcast', { event: 'clear_all' }, ({ payload }: any) => {
+        const targetClass = payload?.classId
+        const userClass = activeClassId || user?.class_id
+        if (!targetClass || targetClass === userClass || user?.role === 'super_admin') {
+          setNotifications([])
+        }
+      })
+      // 5. Instant Realtime synchronization for individual deleted notification
+      .on('broadcast', { event: 'delete_notification' }, ({ payload }: any) => {
+        if (payload?.id) {
+          setNotifications((prev) => prev.filter((n) => n.id !== payload.id))
+        }
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          console.log('[Realtime Channel Active]: notifications hub subscribed')
+          console.log('[Realtime Channel Active]: notifications hub subscribed on', NOTIFICATION_CHANNEL)
         }
       })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [handleIncomingNotification, refreshNotifications])
+  }, [handleIncomingNotification, refreshNotifications, activeClassId, user])
 
   // Periodic and Visibility-Change Database Sync (Guaranteed delivery if phone was locked or offline)
   useEffect(() => {
@@ -291,14 +307,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     notifications.forEach((n) => dismissedIdsRef.current.add(n.id))
     setNotifications([])
 
+    const targetClass = activeClassId || user?.class_id
     // Delete from Supabase database
-    await clearAllNotificationsFromDB(activeClassId || user?.class_id)
+    await clearAllNotificationsFromDB(targetClass)
+    // Synchronize in real time with all other tabs and devices
+    await broadcastClearAll(targetClass)
   }, [activeClassId, user?.class_id, notifications])
 
   const markAsRead = useCallback(async (id: string) => {
     dismissedIdsRef.current.add(id)
     setNotifications((prev) => prev.filter((n) => n.id !== id))
+    // Delete from Supabase database
     await deleteNotificationFromDB(id)
+    // Synchronize in real time with all other tabs and devices
+    await broadcastDeleteNotification(id)
   }, [])
 
   const testNotification = useCallback(async () => {

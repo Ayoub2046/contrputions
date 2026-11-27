@@ -186,9 +186,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAdminClassIds([])
       setAdminClasses([])
       try {
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+          const key = sessionStorage.key(i)
+          if (key && (key.startsWith('classbank_auth') || key.includes('supabase.auth.token') || key.startsWith('sb-'))) {
+            sessionStorage.removeItem(key)
+          }
+        }
         for (let i = localStorage.length - 1; i >= 0; i--) {
           const key = localStorage.key(i)
-          if (key && (key.startsWith('classbank_auth') || key.includes('supabase.auth.token'))) {
+          if (key && (key.startsWith('classbank_auth') || key.includes('supabase.auth.token') || key.startsWith('sb-'))) {
             localStorage.removeItem(key)
           }
         }

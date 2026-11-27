@@ -11,7 +11,17 @@ export async function getValidAuthToken(): Promise<string | null> {
     if (refreshed.session?.access_token) return refreshed.session.access_token
   } catch {}
 
-  // 3. Fallback: inspect localStorage for Supabase auth token
+  // 3. Fallback: inspect sessionStorage first (for tab isolation), then localStorage
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i)
+      if (key && (key.startsWith('sb-') || key.startsWith('classbank_auth'))) {
+        const item = JSON.parse(sessionStorage.getItem(key) || '{}')
+        if (item?.access_token) return item.access_token
+      }
+    }
+  } catch {}
+
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
