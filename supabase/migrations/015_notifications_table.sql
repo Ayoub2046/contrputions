@@ -1,5 +1,6 @@
 -- Migration: 015_notifications_table.sql
 -- Push Notifications & Announcements Table
+-- Stores all class announcements, payment reminders, and contribution notices in the database
 
 CREATE TABLE IF NOT EXISTS public.notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -17,16 +18,37 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Read policy: Any authenticated user can read notifications (global or for their class)
+-- 1. Read Policy: Any authenticated user can read notifications
 DROP POLICY IF EXISTS "notifications_read_all" ON public.notifications;
 CREATE POLICY "notifications_read_all"
   ON public.notifications FOR SELECT TO authenticated
   USING (true);
 
--- Insert policy: Admins and Super Admins can insert notifications
+-- 2. Insert Policy: Authenticated users can insert notifications
 DROP POLICY IF EXISTS "notifications_insert_admin" ON public.notifications;
-CREATE POLICY "notifications_insert_admin"
+DROP POLICY IF EXISTS "notifications_insert_all" ON public.notifications;
+CREATE POLICY "notifications_insert_all"
   ON public.notifications FOR INSERT TO authenticated
-  WITH CHECK (EXISTS (
-    SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin')
-  ));
+  WITH CHECK (true);
+
+-- 3. Delete Policy: Authenticated users can clear/delete notifications
+DROP POLICY IF EXISTS "notifications_delete_all" ON public.notifications;
+CREATE POLICY "notifications_delete_all"
+  ON public.notifications FOR DELETE TO authenticated
+  USING (true);
+
+-- 4. Enable Supabase Realtime for notifications table
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'notifications'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END $$;

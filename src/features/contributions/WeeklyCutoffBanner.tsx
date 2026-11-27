@@ -9,7 +9,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { getCurrentWeekCycle } from '../../lib/weekCycle'
-import { broadcastPushNotification } from '../notifications/notificationService'
+import { broadcastPushNotification, generateUUID } from '../notifications/notificationService'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { formatCurrency } from '../../lib/utils'
@@ -60,7 +60,7 @@ export function WeeklyCutoffBanner({
       if ((modalType === 'both' || modalType === 'congrats') && paidStudents.length > 0) {
         tasks.push(
           broadcastPushNotification({
-            id: `congrats_${Date.now()}_${classId || 'all'}`,
+            id: generateUUID(),
             title: '🎉 Congratulations: Weekly Contribution Completed!',
             body: congratsMsg,
             category: 'contribution',
@@ -74,7 +74,7 @@ export function WeeklyCutoffBanner({
       if ((modalType === 'both' || modalType === 'reminder') && unpaidStudents.length > 0) {
         tasks.push(
           broadcastPushNotification({
-            id: `remind_${Date.now()}_${classId || 'all'}`,
+            id: generateUUID(),
             title: `⏰ Weekly Reminder: Friday Collection Cutoff (${cycle.shortLabel})`,
             body: reminderMsg,
             category: 'announcement',

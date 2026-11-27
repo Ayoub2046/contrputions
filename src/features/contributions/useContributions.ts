@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
-import { broadcastPushNotification } from '../notifications/notificationService'
+import { broadcastPushNotification, generateUUID } from '../notifications/notificationService'
 import type { Contribution } from '../../lib/types'
 
 export interface ContributionWithStudent extends Contribution {
@@ -39,7 +39,7 @@ export function useContributions(classId?: string | null) {
     if (!error) {
       fetch()
       broadcastPushNotification({
-        id: `contrib_${Date.now()}`,
+        id: generateUUID(),
         title: '💰 Contribution Received',
         body: `A contribution of $${amount} was recorded.`,
         category: 'contribution',
