@@ -14,13 +14,16 @@ if (existsSync(envPath)) {
   try {
     fileEnv = Object.fromEntries(
       readFileSync(envPath, 'utf-8')
-        .split('\n')
-        .filter(Boolean)
+        .split(/\r?\n/)
+        .filter((l) => l && !l.trim().startsWith('#') && l.includes('='))
         .map((l) => {
           const i = l.indexOf('=')
           return [l.slice(0, i).trim(), l.slice(i + 1).trim()]
         }),
     )
+    for (const [k, v] of Object.entries(fileEnv)) {
+      if (!process.env[k] && v) process.env[k] = v
+    }
   } catch (err) {
     console.warn('Could not read .env file:', err.message)
   }

@@ -1,4 +1,4 @@
-// Standard Web Push Service Worker fallback (tag-free for independent stacking)
+// Standard Web Push Service Worker fallback with unique per-event notification tags
 /* eslint-disable no-undef */
 
 self.addEventListener('install', () => {
@@ -27,7 +27,13 @@ self.addEventListener('push', (event) => {
   }
 
   const now = Date.now()
+  const rawEventId =
+    (data.id && String(data.id).trim()) ||
+    (data.tag && String(data.tag).trim()) ||
+    (self.crypto?.randomUUID ? self.crypto.randomUUID() : `${now}-${Math.random().toString(36).slice(2)}`)
+  const uniqueTag = rawEventId.startsWith('cb-') ? rawEventId : `cb-${rawEventId}`
   const title = data.title || 'ClassBank Notification'
+
   const options = {
     body: data.body || 'You have a new update.',
     icon: data.icon || '/icons/notif-logo-192.png',
@@ -35,10 +41,12 @@ self.addEventListener('push', (event) => {
     vibrate: Array.isArray(data.vibrate) ? data.vibrate : [300, 150, 300, 150, 400],
     requireInteraction: false,
     silent: false,
+    tag: uniqueTag,
+    renotify: true,
     timestamp: typeof data.timestamp === 'number' ? data.timestamp : now,
     data: {
       url: data.url || '/dashboard',
-      id: data.id,
+      id: data.id || rawEventId,
       timestamp: now,
     },
     actions: [{ action: 'open', title: 'Open App' }],
@@ -48,6 +56,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(title, options).catch(() =>
       self.registration.showNotification(title, {
         body: options.body,
+        tag: uniqueTag,
+        renotify: true,
         data: options.data,
       })
     )
@@ -60,14 +70,17 @@ self.addEventListener('notificationclick', (event) => {
   const targetUrl = new URL(rawUrl, self.location.origin).href
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          if ('navigate' in client && !client.url.includes(rawUrl)) {
+            return client.navigate(targetUrl).then((c) => (c ? c.focus() : client.focus()))
+          }
           return client.focus()
         }
       }
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl)
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl)
       }
     })
   )

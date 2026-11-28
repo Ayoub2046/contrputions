@@ -1,7 +1,15 @@
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
+import { randomUUID } from 'crypto'
+import { dispatchPushNotification } from './push.mjs'
+
+function getEnv() {
+  return {
+    SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
+    SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
+  }
+}
 
 async function verifyAuth(req) {
+  const { SUPABASE_URL, SERVICE_ROLE_KEY } = getEnv()
   const authHeader = req.headers.authorization || req.headers.Authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { ok: false, status: 401, error: 'Unauthorized: Missing bearer authentication token' }
@@ -72,6 +80,7 @@ async function verifyAuth(req) {
 }
 
 export default async function handler(req, res) {
+  const { SUPABASE_URL, SERVICE_ROLE_KEY } = getEnv()
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -157,7 +166,7 @@ export default async function handler(req, res) {
     // ----------------------------------------------------
     if (req.method === 'POST') {
       const body = req.body || {}
-      const { content, class_id } = body
+      const { content, class_id, id: requestedId } = body
 
       if (!content || !String(content).trim()) {
         return res.status(400).json({ error: 'Comment content cannot be empty' })
@@ -178,14 +187,15 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Forbidden: You do not manage this class' })
       }
 
-      const newId = crypto.randomUUID ? crypto.randomUUID() : undefined
+      const isUuid = typeof requestedId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedId)
+      const newId = isUuid ? requestedId : randomUUID()
 
       const insertPayload = {
+        id: newId,
         class_id: targetClassId,
         user_id: caller.id,
         content: String(content).trim(),
       }
-      if (newId) insertPayload.id = newId
 
       const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/class_comments`, {
         method: 'POST',
@@ -206,14 +216,57 @@ export default async function handler(req, res) {
       const createdRows = await insertRes.json()
       const created = createdRows?.[0] || insertPayload
 
+      // Persist notification + dispatch independent background Web Push directly from backend
+      const commentId = created.id || newId
+      const notifTitle = `💬 ${caller.name} commented in class`
+      const notifBody = String(content).trim()
+      const notifCreatedAt = created.created_at || new Date().toISOString()
+
+      await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+          apikey: SERVICE_ROLE_KEY,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({
+          id: commentId,
+          title: notifTitle,
+          body: notifBody,
+          type: 'news',
+          sender_name: caller.name || null,
+          sender_role: caller.role || null,
+          class_id: created.class_id || targetClassId,
+          created_at: notifCreatedAt,
+        }),
+      }).catch(() => {})
+
+      let pushResult = null
+      try {
+        pushResult = await dispatchPushNotification(req, {
+          id: commentId,
+          title: notifTitle,
+          body: notifBody,
+          category: 'news',
+          classId: created.class_id || targetClassId,
+          url: '/dashboard',
+          senderName: caller.name,
+          senderRole: caller.role,
+        })
+      } catch (pushErr) {
+        console.warn('[Comments Backend Push Warning]:', pushErr.message)
+      }
+
       return res.status(201).json({
         ok: true,
+        notificationDispatched: Boolean(pushResult),
         comment: {
-          id: created.id,
+          id: commentId,
           class_id: created.class_id,
           user_id: created.user_id,
           content: created.content,
-          created_at: created.created_at || new Date().toISOString(),
+          created_at: notifCreatedAt,
           author_name: caller.name,
           author_role: caller.role,
           author_student_id: caller.student_id,

@@ -151,6 +151,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const alreadyRead = readIdsRef.current.has(notif.id)
 
     if (isLocalSentNotification(notif.id)) {
+      setNotifications((prev) => {
+        if (prev.some((p) => p.id === notif.id)) return prev
+        return [{ ...notif, read: true }, ...prev]
+      })
       return
     }
 

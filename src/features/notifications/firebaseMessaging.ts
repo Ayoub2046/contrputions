@@ -1,7 +1,7 @@
 import { getToken, onMessage, type MessagePayload } from 'firebase/messaging'
 import { getFirebaseMessaging, VAPID_KEY } from '../../lib/firebase'
 import { playWhatsAppChime } from './notificationAudio'
-import { triggerSystemNotification } from './notificationService'
+import { triggerSystemNotification, generateUUID } from './notificationService'
 import { supabase } from '../../lib/supabase'
 import type { PushNotificationPayload } from './notificationTypes'
 
@@ -78,7 +78,7 @@ export async function setupFcmForegroundListener(
     console.log('[FCM Foreground Message]:', payload)
 
     const notifPayload: PushNotificationPayload = {
-      id: payload.messageId || `fcm_${Date.now()}`,
+      id: payload.data?.id || payload.messageId || generateUUID(),
       title: payload.notification?.title || payload.data?.title || '📢 ClassBank Notification',
       body: payload.notification?.body || payload.data?.body || 'New class announcement received.',
       category: 'announcement',

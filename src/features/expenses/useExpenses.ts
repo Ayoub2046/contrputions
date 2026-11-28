@@ -40,6 +40,7 @@ export function useExpenses(classId?: string | null) {
         body: `An expense of $${amount} was recorded: ${description}`,
         category: 'expense',
         classId: resolvedClassId,
+        url: '/expenses',
         createdAt: new Date().toISOString(),
       }).catch(() => {})
     }

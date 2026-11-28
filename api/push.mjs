@@ -1,10 +1,8 @@
-import { createRequire } from 'module'
+import * as webpush from 'web-push'
+import { randomUUID } from 'crypto'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-
-const require = createRequire(import.meta.url)
-const webpush = require('web-push')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SUB_STORE_DIR = resolve(__dirname, '..', '.data')
@@ -18,25 +16,55 @@ export const VAPID_PRIVATE_KEY =
   process.env.VAPID_PRIVATE_KEY || 'bAJF6SgBdPx7z-nVTN6Qry2p8fUIBUeVLpGlV_nFaj0'
 export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@classbank.local'
 
-try {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
-} catch (err) {
-  console.warn('[WebPush VAPID Init Warning]:', err.message)
+let vapidConfigured = false
+function ensureVapidConfigured() {
+  if (vapidConfigured) return
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
+    vapidConfigured = true
+  } catch (err) {
+    console.warn('[WebPush VAPID Init Warning]:', err.message)
+  }
+}
+ensureVapidConfigured()
+
+// Bounded server-side duplicate event guard (5 minute window, never collides across distinct event IDs)
+const RECENT_EVENT_TTL_MS = 5 * 60 * 1000
+const recentDispatchedEvents = new Map()
+
+function isDuplicateEventDispatch(cacheKey) {
+  const now = Date.now()
+  for (const [k, ts] of recentDispatchedEvents.entries()) {
+    if (now - ts > RECENT_EVENT_TTL_MS) {
+      recentDispatchedEvents.delete(k)
+    }
+  }
+  if (recentDispatchedEvents.size > 500) {
+    const oldestKey = recentDispatchedEvents.keys().next().value
+    if (oldestKey) recentDispatchedEvents.delete(oldestKey)
+  }
+  if (recentDispatchedEvents.has(cacheKey)) return true
+  recentDispatchedEvents.set(cacheKey, now)
+  return false
 }
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
-const ANON_KEY =
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY
+function getSupabaseEnv() {
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
+  const anonKey =
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY
+  return { url, serviceKey, anonKey }
+}
 
 function getSupabaseHeaders(req, extra = {}) {
-  const callerAuth = req.headers?.authorization || req.headers?.Authorization
-  const apiKey = SERVICE_ROLE_KEY || ANON_KEY
-  const auth = SERVICE_ROLE_KEY ? `Bearer ${SERVICE_ROLE_KEY}` : callerAuth || (ANON_KEY ? `Bearer ${ANON_KEY}` : '')
-  if (!SUPABASE_URL || !apiKey) return null
+  const { url, serviceKey, anonKey } = getSupabaseEnv()
+  const callerAuth = req?.headers?.authorization || req?.headers?.Authorization
+  const apiKey = serviceKey || anonKey
+  const auth = serviceKey ? `Bearer ${serviceKey}` : callerAuth || (anonKey ? `Bearer ${anonKey}` : '')
+  if (!url || !apiKey) return null
   return {
     Authorization: auth,
     apikey: apiKey,
@@ -107,20 +135,110 @@ function normalizeSubscription(item) {
   }
 }
 
+function maskEndpoint(endpoint) {
+  if (!endpoint || typeof endpoint !== 'string') return 'unknown'
+  return `...${endpoint.slice(-18)}`
+}
+
+function isPermanentGoneError(err) {
+  const code = err?.statusCode
+  if (code === 404 || code === 410) return true
+  const body = String(err?.body || err?.message || '')
+  return /NotRegistered|Unregistered|MismatchSenderId/i.test(body)
+}
+
+function isTransientPushError(err) {
+  const code = err?.statusCode
+  if (code === 429 || (code >= 500 && code < 600)) return true
+  const msg = String(err?.code || err?.message || '')
+  return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|Socket timeout|network/i.test(msg)
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function sendWithRetry(sub, pushData, eventId, maxAttempts = 3) {
+  ensureVapidConfigured()
+  let lastError = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth,
+          },
+        },
+        pushData,
+        {
+          // 24h retention so offline/locked/Doze devices receive EVERY message when reachable
+          TTL: 86400,
+          urgency: 'high',
+          // Omit `topic` so messages remain strictly non-collapsible in FCM/Web Push queues
+        }
+      )
+      return {
+        ok: true,
+        attempts: attempt,
+        statusCode: response?.statusCode ?? 201,
+        endpointHint: maskEndpoint(sub.endpoint),
+        userId: sub.user_id || null,
+      }
+    } catch (err) {
+      lastError = err
+      const permanent = isPermanentGoneError(err)
+      const transient = !permanent && isTransientPushError(err)
+
+      console.warn(
+        `[WebPush Attempt ${attempt}/${maxAttempts} Failed] event=${eventId} endpoint=${maskEndpoint(sub.endpoint)} status=${err?.statusCode || 'ERR'} msg=${err?.message}`
+      )
+
+      if (!transient || attempt === maxAttempts) {
+        return {
+          ok: false,
+          attempts: attempt,
+          statusCode: err?.statusCode || 0,
+          permanentGone: permanent,
+          message: err?.message || 'Push delivery error',
+          body: err?.body ? String(err.body).slice(0, 160) : undefined,
+          endpointHint: maskEndpoint(sub.endpoint),
+          userId: sub.user_id || null,
+        }
+      }
+
+      await sleep(attempt === 1 ? 250 : 600)
+    }
+  }
+
+  return {
+    ok: false,
+    attempts: maxAttempts,
+    statusCode: lastError?.statusCode || 0,
+    permanentGone: isPermanentGoneError(lastError),
+    message: lastError?.message || 'Unknown push failure',
+    endpointHint: maskEndpoint(sub.endpoint),
+    userId: sub.user_id || null,
+  }
+}
+
 async function fetchAppBranding(req) {
+  const { url: supabaseUrl } = getSupabaseEnv()
   const defaults = {
     appName: 'ClassBank',
     notifIcon: '/icons/notif-logo-192.png',
     notifBadge: '/icons/notif-badge-96.png',
   }
   const headers = getSupabaseHeaders(req)
-  if (!headers) return defaults
+  if (!supabaseUrl || !headers) return defaults
 
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 2000)
     const resp = await fetch(
-      `${SUPABASE_URL}/rest/v1/app_settings?select=key,value&key=in.(app_name,app_logo_url)`,
+      `${supabaseUrl}/rest/v1/app_settings?select=key,value&key=in.(app_name,app_logo_url)`,
       { headers, signal: controller.signal }
     )
     clearTimeout(timeout)
@@ -134,7 +252,6 @@ async function fetchAppBranding(req) {
           }
           if (row.key === 'app_logo_url' && row.value?.trim()) {
             const val = row.value.trim()
-            // Use fast optimized 192x192 PNG when pointing to bundled /custom-logo.png or /classBankLogo.png
             if (val === '/custom-logo.png') {
               defaults.notifIcon = '/icons/notif-logo-192.png'
             } else if (!val.startsWith('data:') && !val.startsWith('blob:') && val.length < 800) {
@@ -146,6 +263,199 @@ async function fetchAppBranding(req) {
     }
   } catch {}
   return defaults
+}
+
+async function fetchRoleUserIds(req, roles) {
+  const { url: supabaseUrl } = getSupabaseEnv()
+  const headers = getSupabaseHeaders(req)
+  if (!supabaseUrl || !headers || !Array.isArray(roles) || roles.length === 0) return null
+
+  try {
+    const cleanRoles = roles.map((r) => encodeURIComponent(String(r).trim())).filter(Boolean)
+    if (cleanRoles.length === 0) return null
+    const resp = await fetch(
+      `${supabaseUrl}/rest/v1/profiles?role=in.(${cleanRoles.join(',')})&select=id`,
+      { headers }
+    )
+    if (!resp.ok) return null
+    const rows = await resp.json()
+    if (!Array.isArray(rows)) return null
+    return new Set(rows.map((r) => r.id).filter(Boolean))
+  } catch {
+    return null
+  }
+}
+
+export async function dispatchPushNotification(req, body = {}) {
+  const { url: supabaseUrl } = getSupabaseEnv()
+  const branding = await fetchAppBranding(req)
+  const title = body.title || `📢 ${branding.appName} Notification`
+  const messageBody = body.body || 'New announcement available.'
+  const category = body.category || 'announcement'
+  const targetClassId = body.classId || body.class_id || null
+  const targetEndpoint = body.targetEndpoint || null
+  const targetUserId = body.targetUserId || body.target_user_id || null
+  const rawTargetUserIds = Array.isArray(body.targetUserIds) ? body.targetUserIds : []
+  const targetUserSet = new Set(
+    [targetUserId, ...rawTargetUserIds].filter((id) => typeof id === 'string' && id.trim().length > 0)
+  )
+  const targetRoles = Array.isArray(body.targetRoles) ? body.targetRoles : null
+  const targetUrl = body.url || '/dashboard'
+  const eventId = (typeof body.id === 'string' && body.id.trim()) || randomUUID()
+
+  const dedupeCacheKey = `${eventId}::${targetEndpoint || 'all'}`
+  if (isDuplicateEventDispatch(dedupeCacheKey)) {
+    console.log(`[WebPush Dedupe Skip]: Already dispatched event=${eventId}`)
+    return {
+      ok: true,
+      deduplicated: true,
+      eventId,
+      sent: 0,
+      failed: 0,
+      totalTargets: 0,
+      deliveries: [],
+      errors: [],
+    }
+  }
+
+  let roleUserSet = null
+  if (targetRoles && targetRoles.length > 0) {
+    roleUserSet = await fetchRoleUserIds(req, targetRoles)
+  }
+
+  // Collect all registered device subscriptions (multi-device per user preserved)
+  const allSubsMap = new Map()
+  const readHeaders = getSupabaseHeaders(req)
+
+  if (supabaseUrl && readHeaders) {
+    try {
+      const resp = await fetch(
+        `${supabaseUrl}/rest/v1/push_subscriptions?select=*&order=updated_at.desc`,
+        { headers: readHeaders }
+      )
+      if (resp.ok) {
+        const dbSubs = await resp.json()
+        if (Array.isArray(dbSubs)) {
+          for (const s of dbSubs) {
+            const norm = normalizeSubscription(s)
+            if (norm) allSubsMap.set(norm.endpoint, norm)
+          }
+        }
+      } else {
+        console.warn('[Fetch DB Push Subscriptions Error]:', resp.status, await resp.text())
+      }
+    } catch (err) {
+      console.warn('[Fetch DB Push Subscriptions Warning]:', err.message)
+    }
+  }
+
+  // Merge local dev cache
+  for (const s of getLocalSubscriptions()) {
+    const norm = normalizeSubscription(s)
+    if (norm && !allSubsMap.has(norm.endpoint)) {
+      allSubsMap.set(norm.endpoint, norm)
+    }
+  }
+
+  const allSubs = Array.from(allSubsMap.values())
+
+  // Filter eligible recipients across ALL their registered devices:
+  // 1) targetEndpoint (single device test push)
+  // 2) targetRoles (admin/finance-only notifications)
+  // 3) targetUserSet (user-targeted receipts, targets, reminders, congrats)
+  // 4) targetClassId (class announcements/contributions/expenses/comments + global/admin subs with class_id=null)
+  const targetSubs = allSubs.filter((sub) => {
+    if (targetEndpoint) return sub.endpoint === targetEndpoint
+    if (roleUserSet) {
+      if (!sub.user_id || !roleUserSet.has(sub.user_id)) return false
+    }
+    if (targetUserSet.size > 0) {
+      if (!sub.user_id || !targetUserSet.has(sub.user_id)) return false
+    }
+    if (targetClassId && targetUserSet.size === 0 && !roleUserSet) {
+      return !sub.class_id || sub.class_id === targetClassId
+    }
+    return true
+  })
+
+  const pushTimestamp = Date.now()
+  const pushData = JSON.stringify({
+    id: eventId,
+    tag: `cb-${eventId}`,
+    title,
+    body: messageBody,
+    appName: branding.appName,
+    category,
+    classId: targetClassId,
+    url: targetUrl,
+    icon: branding.notifIcon,
+    badge: branding.notifBadge,
+    vibrate: [300, 150, 300, 150, 400],
+    silent: false,
+    requireInteraction: false,
+    timestamp: pushTimestamp,
+  })
+
+  console.log(
+    `[WebPush Dispatch Start] event=${eventId} category=${category} targets=${targetSubs.length} class=${targetClassId || 'all'}`
+  )
+
+  const deliveries = await Promise.all(targetSubs.map((sub) => sendWithRetry(sub, pushData, eventId)))
+
+  let sentCount = 0
+  let failedCount = 0
+  const staleEndpoints = []
+  const errors = []
+
+  deliveries.forEach((result, idx) => {
+    if (result.ok) {
+      sentCount++
+    } else {
+      failedCount++
+      if (result.permanentGone && targetSubs[idx]?.endpoint) {
+        staleEndpoints.push(targetSubs[idx].endpoint)
+      }
+      errors.push({
+        endpoint: result.endpointHint,
+        statusCode: result.statusCode,
+        message: result.message,
+        body: result.body,
+      })
+    }
+  })
+
+  // Remove permanently expired/unregistered tokens safely
+  if (staleEndpoints.length > 0) {
+    const remaining = allSubs.filter((s) => !staleEndpoints.includes(s.endpoint))
+    saveLocalSubscriptions(remaining)
+
+    if (supabaseUrl && readHeaders) {
+      for (const ep of staleEndpoints) {
+        try {
+          await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(ep)}`, {
+            method: 'DELETE',
+            headers: readHeaders,
+          })
+        } catch {}
+      }
+    }
+    console.log(`[WebPush Cleanup]: Removed ${staleEndpoints.length} expired/unregistered endpoints`)
+  }
+
+  console.log(
+    `[WebPush Dispatch Done] event=${eventId} sent=${sentCount} failed=${failedCount} removedStale=${staleEndpoints.length} totalTargets=${targetSubs.length}`
+  )
+
+  return {
+    ok: targetSubs.length === 0 || sentCount > 0,
+    eventId,
+    sent: sentCount,
+    failed: failedCount,
+    removedStale: staleEndpoints.length,
+    totalTargets: targetSubs.length,
+    deliveries,
+    errors: errors.slice(0, 5),
+  }
 }
 
 export default async function handler(req, res) {
@@ -162,14 +472,14 @@ export default async function handler(req, res) {
   const pathname = url.pathname
   const action = url.searchParams.get('action')
 
-  // 1. GET /api/push/vapid - Returns the public VAPID key for client subscriptions
-  if (req.method === 'GET' && (pathname === '/api/push/vapid' || pathname === '/api/push')) {
-    return res.status(200).json({ publicKey: VAPID_PUBLIC_KEY })
+  // 1. GET /api/push/vapid or GET /api/push - Returns public VAPID key
+  if (req.method === 'GET' && (pathname === '/api/push/vapid' || pathname === '/api/push' || action === 'vapid')) {
+    return res.status(200).json({ ok: true, publicKey: VAPID_PUBLIC_KEY })
   }
 
   const body = req.method === 'POST' ? await parseJsonBody(req) : {}
 
-  // 2. Subscribe endpoint: supports /api/push?action=subscribe, /api/push/subscribe, or { action: 'subscribe' }
+  // 2. Subscribe / refresh device endpoint (never overwrites other devices or wipes logged-out owner)
   const isSubscribeRequest =
     req.method === 'POST' &&
     (pathname.endsWith('/subscribe') || action === 'subscribe' || body.action === 'subscribe')
@@ -182,65 +492,84 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid push subscription payload. Missing endpoint or keys.' })
     }
 
-    normalized.class_id = body.classId || body.class_id || null
-    normalized.user_id = body.userId || body.user_id || null
+    const explicitUserId = body.userId || body.user_id || null
+    const explicitClassId = body.classId || body.class_id || null
+    normalized.user_id = explicitUserId
+    normalized.class_id = explicitClassId
     normalized.user_agent = req.headers?.['user-agent'] || null
     normalized.updated_at = new Date().toISOString()
 
-    const previousEndpoint = typeof body.previousEndpoint === 'string' && body.previousEndpoint.trim()
-      ? body.previousEndpoint.trim()
-      : null
+    const previousEndpoint =
+      typeof body.previousEndpoint === 'string' && body.previousEndpoint.trim()
+        ? body.previousEndpoint.trim()
+        : null
 
+    const { url: supabaseUrl } = getSupabaseEnv()
     const dbHeaders = getSupabaseHeaders(req, {
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates,return=minimal',
     })
 
-    // If renewing in background via `pushsubscriptionchange` without auth state, inherit user_id/class_id
-    if ((!normalized.user_id || !normalized.class_id) && previousEndpoint && dbHeaders) {
-      try {
-        const prevResp = await fetch(
-          `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(previousEndpoint)}&select=user_id,class_id&limit=1`,
-          { headers: dbHeaders }
-        )
-        if (prevResp.ok) {
-          const prevRows = await prevResp.json()
-          const prev = Array.isArray(prevRows) ? prevRows[0] : null
-          if (prev) {
-            normalized.user_id = normalized.user_id || prev.user_id || null
-            normalized.class_id = normalized.class_id || prev.class_id || null
+    // Preserve existing ownership when renewing via `pushsubscriptionchange`, on unauthenticated page load, or after logout
+    if (supabaseUrl && dbHeaders && (!normalized.user_id || !normalized.class_id)) {
+      const lookupEndpoints = [normalized.endpoint, previousEndpoint].filter(
+        (ep, i, arr) => Boolean(ep) && arr.indexOf(ep) === i
+      )
+      for (const lookupEp of lookupEndpoints) {
+        try {
+          const prevResp = await fetch(
+            `${supabaseUrl}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(lookupEp)}&select=user_id,class_id&limit=1`,
+            { headers: dbHeaders }
+          )
+          if (prevResp.ok) {
+            const prevRows = await prevResp.json()
+            const prev = Array.isArray(prevRows) ? prevRows[0] : null
+            if (prev) {
+              normalized.user_id = normalized.user_id || prev.user_id || null
+              normalized.class_id = normalized.class_id || prev.class_id || null
+              if (normalized.user_id) break
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
     }
 
-    // Save to local file cache (works in local dev/VPS)
+    // Update local file cache (local dev fallback)
     const currentSubs = getLocalSubscriptions()
+    const existingLocal = currentSubs.find((s) => s.endpoint === normalized.endpoint)
+    if (!normalized.user_id && existingLocal?.user_id) {
+      normalized.user_id = existingLocal.user_id
+    }
+    if (!normalized.class_id && existingLocal?.class_id) {
+      normalized.class_id = existingLocal.class_id
+    }
     const filtered = currentSubs.filter(
       (s) => s.endpoint !== normalized.endpoint && s.endpoint !== previousEndpoint
     )
     filtered.push(normalized)
     saveLocalSubscriptions(filtered)
 
-    // Persist directly to Supabase push_subscriptions table (CRITICAL for Vercel / multi-device)
     let dbSaved = false
     let dbError = null
 
-    if (dbHeaders) {
+    if (supabaseUrl && dbHeaders) {
       try {
-        const upsertResp = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?on_conflict=endpoint`, {
-          method: 'POST',
-          headers: dbHeaders,
-          body: JSON.stringify({
-            endpoint: normalized.endpoint,
-            p256dh: normalized.p256dh,
-            auth: normalized.auth,
-            class_id: normalized.class_id,
-            user_id: normalized.user_id,
-            user_agent: normalized.user_agent,
-            updated_at: normalized.updated_at,
-          }),
-        })
+        const upsertResp = await fetch(
+          `${supabaseUrl}/rest/v1/push_subscriptions?on_conflict=endpoint`,
+          {
+            method: 'POST',
+            headers: dbHeaders,
+            body: JSON.stringify({
+              endpoint: normalized.endpoint,
+              p256dh: normalized.p256dh,
+              auth: normalized.auth,
+              class_id: normalized.class_id,
+              user_id: normalized.user_id,
+              user_agent: normalized.user_agent,
+              updated_at: normalized.updated_at,
+            }),
+          }
+        )
         if (upsertResp.ok) {
           dbSaved = true
         } else {
@@ -253,192 +582,29 @@ export default async function handler(req, res) {
       }
     }
 
-    // Clean up replaced previousEndpoint + stale duplicate rows on the SAME device/UA
-    // (preserving subscriptions on other devices like laptop + mobile phone)
-    if (dbHeaders) {
-      if (previousEndpoint && previousEndpoint !== normalized.endpoint) {
-        try {
-          await fetch(
-            `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(previousEndpoint)}`,
-            { method: 'DELETE', headers: dbHeaders }
-          )
-        } catch {}
-      }
-      if (normalized.user_id && normalized.user_agent) {
-        try {
-          await fetch(
-            `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${encodeURIComponent(normalized.user_id)}&user_agent=eq.${encodeURIComponent(normalized.user_agent)}&endpoint=neq.${encodeURIComponent(normalized.endpoint)}`,
-            { method: 'DELETE', headers: dbHeaders }
-          )
-        } catch (cleanupErr) {
-          console.warn('[Supabase Push Cleanup Warning]:', cleanupErr.message)
-        }
-      }
+    // Clean up ONLY the replaced previousEndpoint rotated by this same browser instance
+    if (supabaseUrl && dbHeaders && previousEndpoint && previousEndpoint !== normalized.endpoint) {
+      try {
+        await fetch(
+          `${supabaseUrl}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(previousEndpoint)}`,
+          { method: 'DELETE', headers: dbHeaders }
+        )
+      } catch {}
     }
 
     return res.status(200).json({
       ok: true,
       dbSaved,
       dbError,
+      preservedUserId: normalized.user_id,
       message: 'Device push subscription registered',
     })
   }
 
-  // 3. POST /api/push or /api/push/send - Dispatches background push notifications to devices
+  // 3. POST /api/push or /api/push/send - Dispatches background push notifications
   if (req.method === 'POST') {
-    const branding = await fetchAppBranding(req)
-    const title = body.title || `📢 ${branding.appName} Notification`
-    const messageBody = body.body || 'New announcement available.'
-    const category = body.category || 'announcement'
-    const targetClassId = body.classId || body.class_id || null
-    const targetEndpoint = body.targetEndpoint || null
-    const targetUrl = body.url || '/dashboard'
-    const notifId = body.id || `push_${Date.now()}`
-
-    // Collect all subscriptions
-    const allSubsMap = new Map()
-
-    // 1. From Supabase database (authoritative cross-device store, newest first)
-    const readHeaders = getSupabaseHeaders(req)
-    if (readHeaders) {
-      try {
-        const resp = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?select=*&order=updated_at.desc`, {
-          headers: readHeaders,
-        })
-        if (resp.ok) {
-          const dbSubs = await resp.json()
-          if (Array.isArray(dbSubs)) {
-            dbSubs.forEach((s) => {
-              const norm = normalizeSubscription(s)
-              if (norm) allSubsMap.set(norm.endpoint, norm)
-            })
-          }
-        } else {
-          console.warn('[Fetch DB Push Subscriptions Error]:', resp.status, await resp.text())
-        }
-      } catch (err) {
-        console.warn('[Fetch DB Push Subscriptions Warning]:', err.message)
-      }
-    }
-
-    // 2. Merge local file cache (for local dev environment)
-    getLocalSubscriptions().forEach((s) => {
-      const norm = normalizeSubscription(s)
-      if (norm && !allSubsMap.has(norm.endpoint)) {
-        allSubsMap.set(norm.endpoint, norm)
-      }
-    })
-
-    // Deduplicate by (user_id, user_agent) keeping the newest updated_at per device/browser.
-    // Preserves independent delivery to each device (phone + laptop), while eliminating stale duplicate endpoints.
-    const deviceLatestMap = new Map()
-    const unkeyedSubs = []
-    for (const sub of allSubsMap.values()) {
-      if (!sub.user_id) {
-        unkeyedSubs.push(sub)
-        continue
-      }
-      const deviceKey = `${sub.user_id}::${sub.user_agent || sub.endpoint}`
-      const existing = deviceLatestMap.get(deviceKey)
-      const subTs = sub.updated_at || sub.created_at || ''
-      const existingTs = existing ? (existing.updated_at || existing.created_at || '') : ''
-      if (!existing || subTs > existingTs) {
-        deviceLatestMap.set(deviceKey, sub)
-      }
-    }
-    const deduplicatedSubs = [...deviceLatestMap.values(), ...unkeyedSubs]
-    const allSubs = Array.from(allSubsMap.values())
-
-    // Filter targets:
-    // - If targetEndpoint is supplied (e.g. single-device test push), target that endpoint.
-    // - Otherwise, if targetClassId is supplied, deliver to matching class AND any global/unscoped subscriptions (!sub.class_id).
-    const targetSubs = deduplicatedSubs.filter((sub) => {
-      if (targetEndpoint) return sub.endpoint === targetEndpoint
-      if (!targetClassId) return true
-      return !sub.class_id || sub.class_id === targetClassId
-    })
-
-    // Intentionally DO NOT include `tag` or `renotify` in push payload so Android Chrome
-    // renders every incoming notification as an independent stacked card.
-    const pushData = JSON.stringify({
-      id: notifId,
-      title,
-      body: messageBody,
-      appName: branding.appName,
-      category,
-      classId: targetClassId,
-      url: targetUrl,
-      icon: branding.notifIcon,
-      badge: branding.notifBadge,
-      vibrate: [300, 150, 300, 150, 400],
-      silent: false,
-      requireInteraction: false,
-      timestamp: Date.now(),
-    })
-
-    let sentCount = 0
-    let failedCount = 0
-    const staleEndpoints = []
-    const errors = []
-
-    await Promise.all(
-      targetSubs.map(async (sub) => {
-        try {
-          await webpush.sendNotification(
-            {
-              endpoint: sub.endpoint,
-              keys: {
-                p256dh: sub.p256dh,
-                auth: sub.auth,
-              },
-            },
-            pushData,
-            {
-              TTL: 86400, // 24 hours retention on push service
-              urgency: 'high', // Forces immediate delivery past Android Doze mode
-            }
-          )
-          sentCount++
-        } catch (err) {
-          failedCount++
-          if (err.statusCode === 410 || err.statusCode === 404) {
-            staleEndpoints.push(sub.endpoint)
-          } else {
-            errors.push({ statusCode: err.statusCode, message: err.message })
-            console.warn('[WebPush Dispatch Single Error]:', err.statusCode, err.message)
-          }
-        }
-      })
-    )
-
-    // Clean up expired/unsubscribed endpoints
-    if (staleEndpoints.length > 0) {
-      const remaining = allSubs.filter((s) => !staleEndpoints.includes(s.endpoint))
-      saveLocalSubscriptions(remaining)
-
-      if (readHeaders) {
-        try {
-          for (const ep of staleEndpoints) {
-            await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(ep)}`, {
-              method: 'DELETE',
-              headers: readHeaders,
-            })
-          }
-        } catch {}
-      }
-    }
-
-    console.log(
-      `[WebPush Broadcast Completed]: Sent ${sentCount} notifications (${failedCount} failed, ${targetSubs.length} total targets)`
-    )
-
-    return res.status(200).json({
-      ok: true,
-      sent: sentCount,
-      failed: failedCount,
-      totalTargets: targetSubs.length,
-      errors: errors.slice(0, 3),
-    })
+    const result = await dispatchPushNotification(req, body)
+    return res.status(result.ok ? 200 : 502).json(result)
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

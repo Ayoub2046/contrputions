@@ -95,19 +95,21 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
   const targetUrl =
     payload.url || (typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '/dashboard')
   const now = Date.now()
+  const eventId = payload.id || generateUUID()
+  const uniqueTag = `cb-${eventId}`
 
-  // 1. Post to active Service Worker controller (SW omits `tag` so notifications always stack)
+  // 1. Post to active Service Worker controller (SW uses unique per-event tag so notifications always stack)
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     try {
       navigator.serviceWorker.controller.postMessage({
         type: 'PUSH_NOTIFICATION',
-        payload: { ...payload, icon: iconUrl, badge: badgeUrl, url: targetUrl },
+        payload: { ...payload, id: eventId, icon: iconUrl, badge: badgeUrl, url: targetUrl },
       })
       return
     } catch {}
   }
 
-  // 2. Try service worker ready showNotification (omit `tag` & `renotify` for independent stacking)
+  // 2. Try service worker ready showNotification with unique per-event tag + renotify
   if ('serviceWorker' in navigator) {
     try {
       const reg = await Promise.race([
@@ -120,7 +122,9 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
           icon: iconUrl,
           badge: badgeUrl,
           vibrate: [300, 150, 300, 150, 400],
-          data: { url: targetUrl, id: payload.id },
+          tag: uniqueTag,
+          renotify: true,
+          data: { url: targetUrl, id: eventId },
           requireInteraction: false,
           silent: false,
           timestamp: now,
@@ -136,6 +140,8 @@ export async function triggerSystemNotification(payload: PushNotificationPayload
       body: payload.body,
       icon: iconUrl,
       badge: badgeUrl,
+      tag: uniqueTag,
+      renotify: true,
       requireInteraction: false,
       silent: false,
     } as NotificationOptions)
@@ -381,7 +387,7 @@ export async function broadcastMarkUnread(id: string, userId?: string | null): P
 
 export async function dispatchWebPushApi(
   payload: PushNotificationPayload & { targetEndpoint?: string | null }
-): Promise<{ sent: number; totalTargets: number } | null> {
+): Promise<{ sent: number; failed: number; totalTargets: number; eventId?: string } | null> {
   try {
     let accessToken: string | null = null
     try {
@@ -402,11 +408,22 @@ export async function dispatchWebPushApi(
     })
 
     const ct = resp.headers.get('content-type') || ''
-    if (resp.ok && ct.includes('application/json')) {
+    if (ct.includes('application/json')) {
       const resData = await resp.json()
-      console.log('[WebPush API Result]:', resData)
-      return { sent: resData.sent ?? 0, totalTargets: resData.totalTargets ?? 0 }
+      if (!resp.ok || !resData.ok) {
+        console.warn('[WebPush API Failure]:', resp.status, resData)
+      } else {
+        console.log('[WebPush API Result]:', resData)
+      }
+      return {
+        sent: resData.sent ?? 0,
+        failed: resData.failed ?? 0,
+        totalTargets: resData.totalTargets ?? 0,
+        eventId: resData.eventId,
+      }
     }
+    const errText = await resp.text().catch(() => '')
+    console.warn('[WebPush API Unexpected Response]:', resp.status, errText.slice(0, 200))
   } catch (err: any) {
     console.warn('[WebPush Dispatch Notice]:', err?.message || err)
   }

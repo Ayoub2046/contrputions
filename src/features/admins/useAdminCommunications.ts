@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
+import { dispatchWebPushApi } from '../notifications/notificationService'
 import type { AdminMessage, Profile } from '../../lib/types'
 
 export function useAdminCommunications() {
@@ -129,6 +130,21 @@ export function useAdminCommunications() {
       if (err) {
         return err.message
       }
+
+      // Trigger targeted push alert to admin roles without exposing private admin messages to students
+      dispatchWebPushApi({
+        id: newMsg.id,
+        title: `🛡️ ${category === 'urgent' ? 'URGENT ' : ''}Admin Notice from ${user.name}`,
+        body: content.trim(),
+        category: 'announcement',
+        senderId: user.id,
+        senderName: user.name,
+        senderRole: user.role,
+        targetRoles: ['super_admin', 'admin', 'finance_manager'],
+        url: '/admin-contacts',
+        createdAt: newMsg.created_at,
+      }).catch(() => {})
+
       return null
     } catch (e: any) {
       setSubmitting(false)

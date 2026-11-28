@@ -10,6 +10,8 @@ export interface PushNotificationPayload {
   senderRole?: string
   classId?: string | null
   className?: string
+  targetUserIds?: string[]
+  targetRoles?: string[]
   createdAt: string
   url?: string
 }

@@ -57,10 +57,15 @@ function markShownAndCheckDuplicate(id) {
 async function displayIndependentNotification(payload) {
   const title = payload.title || (payload.appName ? `${payload.appName} Notification` : 'ClassBank Notification')
   const now = Date.now()
+  const rawEventId =
+    (payload.id && String(payload.id).trim()) ||
+    (payload.tag && String(payload.tag).trim()) ||
+    (self.crypto?.randomUUID ? self.crypto.randomUUID() : `${now}-${Math.random().toString(36).slice(2)}`)
 
-  // IMPORTANT: Intentionally DO NOT set `tag` or `renotify`!
-  // On Android Chrome, omitting `tag` guarantees every push creates a brand-new,
-  // independent stacked notification card (never replacing or blocking earlier ones).
+  // Use a strictly unique tag per event + renotify: true so Android Chrome stacks every
+  // notification independently without ever replacing or collapsing prior messages.
+  const uniqueTag = rawEventId.startsWith('cb-') ? rawEventId : `cb-${rawEventId}`
+
   const options = {
     body: payload.body || 'You have a new update.',
     icon: payload.icon || '/icons/notif-logo-192.png',
@@ -68,10 +73,12 @@ async function displayIndependentNotification(payload) {
     vibrate: Array.isArray(payload.vibrate) ? payload.vibrate : [300, 150, 300, 150, 400],
     requireInteraction: false,
     silent: false,
+    tag: uniqueTag,
+    renotify: true,
     timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : now,
     data: {
       url: payload.url || '/dashboard',
-      id: payload.id,
+      id: payload.id || rawEventId,
       timestamp: now,
     },
     actions: [{ action: 'open', title: 'Open App' }],
@@ -84,6 +91,8 @@ async function displayIndependentNotification(payload) {
     try {
       await self.registration.showNotification(title, {
         body: options.body,
+        tag: uniqueTag,
+        renotify: true,
         data: options.data,
       })
     } catch {}

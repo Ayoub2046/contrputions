@@ -203,15 +203,16 @@ async function performWebPushSubscribe(
 
       let persisted = false
 
-      // 1. Direct authenticated upsert into Supabase push_subscriptions (guaranteed persistence)
-      if (accessToken) {
+      // 1. Direct authenticated upsert into Supabase push_subscriptions ONLY when userId is known,
+      // so unauthenticated page loads or logouts NEVER overwrite device ownership with user_id=null.
+      if (accessToken && userId) {
         try {
           const { error: dbErr } = await supabase.from('push_subscriptions').upsert(
             {
               endpoint,
               p256dh,
               auth,
-              user_id: userId || null,
+              user_id: userId,
               class_id: classId || null,
               user_agent: navigator.userAgent,
               updated_at: new Date().toISOString(),
@@ -220,7 +221,7 @@ async function performWebPushSubscribe(
           )
           if (!dbErr) {
             persisted = true
-            // Remove replaced endpoint if this device rotated endpoints
+            // Remove replaced endpoint ONLY when this device rotated its own endpoint
             if (previousEndpoint && previousEndpoint !== endpoint) {
               try {
                 await supabase
@@ -235,7 +236,7 @@ async function performWebPushSubscribe(
         } catch {}
       }
 
-      // 2. Also register with serverless API (/api/push?action=subscribe works directly on Vercel & local dev)
+      // 2. Register/refresh with serverless API (/api/push?action=subscribe preserves existing owner when userId is omitted)
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (accessToken) headers.Authorization = `Bearer ${accessToken}`
@@ -247,14 +248,17 @@ async function performWebPushSubscribe(
             action: 'subscribe',
             subscription: subJson,
             previousEndpoint: previousEndpoint && previousEndpoint !== endpoint ? previousEndpoint : null,
-            userId: userId || null,
-            classId: classId || null,
+            userId: userId || undefined,
+            classId: userId ? (classId || null) : undefined,
           }),
         })
         const contentType = resp.headers.get('content-type') || ''
         if (resp.ok && contentType.includes('application/json')) {
           const resJson = await resp.json()
           if (resJson?.ok && resJson?.dbSaved) persisted = true
+        } else {
+          const errText = await resp.text().catch(() => '')
+          console.warn('[WebPush API Subscribe Error]:', resp.status, errText.slice(0, 200))
         }
       } catch (apiErr) {
         console.warn('[WebPush API Subscribe Notice]:', apiErr)

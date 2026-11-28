@@ -56,7 +56,7 @@ export function WeeklyCutoffBanner({
     try {
       const tasks: Promise<any>[] = []
 
-      // Send Congratulations message if requested
+      // Send Congratulations message to paid students
       if ((modalType === 'both' || modalType === 'congrats') && paidStudents.length > 0) {
         tasks.push(
           broadcastPushNotification({
@@ -65,20 +65,24 @@ export function WeeklyCutoffBanner({
             body: congratsMsg,
             category: 'contribution',
             classId: classId || null,
+            targetUserIds: paidStudents.map((s) => s.id),
+            url: '/dashboard',
             createdAt: new Date().toISOString(),
           })
         )
       }
 
-      // Send Reminder message if requested
+      // Send Reminder message to unpaid students
       if ((modalType === 'both' || modalType === 'reminder') && unpaidStudents.length > 0) {
         tasks.push(
           broadcastPushNotification({
             id: generateUUID(),
             title: `⏰ Weekly Reminder: Friday Collection Cutoff (${cycle.shortLabel})`,
             body: reminderMsg,
-            category: 'announcement',
+            category: 'reminder',
             classId: classId || null,
+            targetUserIds: unpaidStudents.map((s) => s.id),
+            url: '/dashboard',
             createdAt: new Date().toISOString(),
           })
         )

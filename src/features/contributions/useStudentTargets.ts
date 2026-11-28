@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { resolveStudentClassId } from './useContributions'
+import { dispatchWebPushApi, generateUUID } from '../notifications/notificationService'
 
 export interface StudentTarget {
   id: string
@@ -50,7 +51,19 @@ export function useStudentTargets(classId?: string | null) {
         note: note ?? null,
         updated_at: new Date().toISOString(),
       } as never, { onConflict: 'student_id,class_id' })
-    if (!error) fetchTargets()
+    if (!error) {
+      fetchTargets()
+      dispatchWebPushApi({
+        id: generateUUID(),
+        title: '🎯 Contribution Target Updated',
+        body: `Your contribution target has been set to $${targetAmount}${note ? ` (${note})` : ''}.`,
+        category: 'reminder',
+        classId: resolvedClassId,
+        targetUserIds: [studentId],
+        url: '/dashboard',
+        createdAt: new Date().toISOString(),
+      }).catch(() => {})
+    }
     return error?.message ?? null
   }
 

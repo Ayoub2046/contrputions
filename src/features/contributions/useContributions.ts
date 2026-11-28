@@ -69,6 +69,7 @@ export function useContributions(classId?: string | null) {
         body: `A contribution of $${amount} was recorded.`,
         category: 'contribution',
         classId: resolvedClassId,
+        url: '/contributions',
         createdAt: new Date().toISOString(),
       }).catch(() => {})
     }
@@ -77,9 +78,21 @@ export function useContributions(classId?: string | null) {
 
   async function update(id: string, amount: number, date: string) {
     // Instant optimistic update
+    const existing = contributions.find((c) => c.id === id)
     setContributions((prev) => prev.map((c) => (c.id === id ? { ...c, amount, date } : c)))
     const { error } = await supabase.from('contributions').update({ amount, date } as never).eq('id', id)
-    if (!error) fetch()
+    if (!error) {
+      fetch()
+      broadcastPushNotification({
+        id: generateUUID(),
+        title: '💰 Contribution Updated',
+        body: `${existing?.profiles?.name || 'Student'}'s contribution record was updated to $${amount}.`,
+        category: 'contribution',
+        classId: existing?.class_id ?? classId ?? null,
+        url: '/contributions',
+        createdAt: new Date().toISOString(),
+      }).catch(() => {})
+    }
     return error?.message ?? null
   }
 
