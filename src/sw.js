@@ -7,7 +7,18 @@ import { ExpirationPlugin } from 'workbox-expiration'
 self.skipWaiting()
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k.startsWith('app-html-shell') && k !== 'app-html-shell-v5')
+            .map((k) => caches.delete(k))
+        )
+      )
+      .then(() => self.clients.claim())
+  )
 })
 
 cleanupOutdatedCaches()
@@ -18,8 +29,8 @@ precacheAndRoute(self.__WB_MANIFEST)
 registerRoute(
   new NavigationRoute(
     new NetworkFirst({
-      cacheName: 'app-html-shell',
-      networkTimeoutSeconds: 3,
+      cacheName: 'app-html-shell-v5',
+      networkTimeoutSeconds: 2,
       plugins: [new ExpirationPlugin({ maxEntries: 5, maxAgeSeconds: 86400 })],
     }),
     {
@@ -31,7 +42,7 @@ registerRoute(
 registerRoute(
   /\.(?:png|jpg|jpeg|webp)$/i,
   new CacheFirst({
-    cacheName: 'app-images',
+    cacheName: 'app-images-v5',
     plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 2592000 })],
   }),
   'GET'

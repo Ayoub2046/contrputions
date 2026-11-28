@@ -22,7 +22,11 @@ type PreviewTab = 'card' | 'expenses' | 'private'
 export function LandingHero({ settings }: LandingHeroProps) {
   const [activePreview, setActivePreview] = useState<PreviewTab>('card')
 
-  const hasBgImage = Boolean(settings.hero_bg_image && settings.hero_bg_image.trim() !== '')
+  const hasBgImage = Boolean(
+    settings.hero_bg_image &&
+      settings.hero_bg_image.trim() !== '' &&
+      !settings.hero_bg_image.startsWith('data:image')
+  )
   const overlayOpacity = Math.max(0.45, Math.min(0.95, (settings.hero_bg_overlay_opacity ?? 80) / 100))
 
   return (
@@ -262,17 +266,17 @@ export function LandingHero({ settings }: LandingHeroProps) {
                     </div>
 
                     <div className="space-y-2.5 rounded-xl bg-[#ECECEC]/40 dark:bg-[#08121E] border border-[#ECECEC] dark:border-[#1D3552] p-3.5">
-                      <div className="ml-6 rounded-xl bg-[#1176BC] text-[#FFFFFF] p-3 text-xs leading-relaxed">
+                      <div className="ml-6 rounded-xl bg-[#1176BC] text-[#FFFFFF] p-3 text-xs leading-relaxed shadow-xs">
                         <span className="text-[10px] font-bold text-[#FFFFFF]/80 block mb-0.5">
                           Student (Private to Class Admin)
                         </span>
-                        &ldquo;Salaam, I paid via mobile money today. Could you verify my receipt before Friday?&rdquo;
+                        &ldquo;Salaam brother, I paid my $25 contribution via EVC Plus reference #TX9841. Could you check and clear my pass before Friday?&rdquo;
                       </div>
-                      <div className="mr-6 rounded-xl bg-[#FFFFFF] dark:bg-[#0E1D31] border border-[#C6CACB]/80 dark:border-[#1D3552] p-3 text-xs text-[#0B1A2B] dark:text-[#FFFFFF] leading-relaxed">
+                      <div className="mr-6 rounded-xl bg-[#FFFFFF] dark:bg-[#0E1D31] border border-[#C6CACB]/80 dark:border-[#1D3552] p-3 text-xs text-[#0B1A2B] dark:text-[#FFFFFF] leading-relaxed shadow-xs">
                         <span className="text-[10px] font-bold text-[#1176BC] dark:text-[#25A8E0] block mb-0.5">
                           Assigned Class Admin Reply
                         </span>
-                        &ldquo;Wa alaykum salaam! Confirmed and logged just now. Refresh your Student Card anytime.&rdquo;
+                        &ldquo;Wa alaykum salaam! Verified and logged just now. Your Semester Clearance Pass is 100% ready to download or print.&rdquo;
                       </div>
                     </div>
 

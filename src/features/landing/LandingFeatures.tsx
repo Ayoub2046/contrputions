@@ -7,6 +7,8 @@ import {
   PhoneCall,
   Lock,
   CheckCircle,
+  MessageSquareText,
+  FileCheck,
 } from 'lucide-react'
 import type { FeatureItem } from '../../lib/types'
 
@@ -19,6 +21,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: 
   PhoneCall,
   Lock,
   CheckCircle,
+  MessageSquareText,
+  FileCheck,
 }
 
 interface LandingFeaturesProps {

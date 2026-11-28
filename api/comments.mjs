@@ -110,7 +110,7 @@ export default async function handler(req, res) {
       if (url.searchParams.get('leaders') === '1') {
         const targetClassId =
           caller.role === 'student'
-            ? caller.class_id
+            ? (caller.class_id || reqClassId)
             : reqClassId && reqClassId !== 'all'
             ? reqClassId
             : adminClassIds[0] || caller.class_id
@@ -137,7 +137,13 @@ export default async function handler(req, res) {
               const p = row?.profiles
               // Strict requirement: Only assigned class admins (role 'admin') are shown to students.
               // NEVER include or expose super_admin!
-              if (p?.id && p.role === 'admin') {
+              if (
+                p?.id &&
+                p.role === 'admin' &&
+                p.role !== 'super_admin' &&
+                p.id !== 'ae4ac258-d506-4466-a1df-bae5e70c67c9' &&
+                !p.name?.toLowerCase().includes('ayoub')
+              ) {
                 leadersMap.set(p.id, {
                   id: p.id,
                   name: p.name,
@@ -343,16 +349,21 @@ export default async function handler(req, res) {
 
         // STRICT: Students can ONLY send private messages to their assigned Class Admin (NEVER super_admin!)
         if (caller.role === 'student') {
-          if (recipientProfile.role !== 'admin') {
+          if (
+            recipientProfile.role !== 'admin' ||
+            recipientProfile.role === 'super_admin' ||
+            recipient_id === 'ae4ac258-d506-4466-a1df-bae5e70c67c9'
+          ) {
             return res.status(403).json({
               error: 'Forbidden: Students can only send private messages to their assigned class administrator.',
             })
           }
-          if (!caller.class_id) {
+          const targetClassId = caller.class_id || reqClassId
+          if (!targetClassId) {
             return res.status(403).json({ error: 'Forbidden: No class assigned to your student profile.' })
           }
           const caCheckRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/class_admins?class_id=eq.${encodeURIComponent(caller.class_id)}&admin_id=eq.${encodeURIComponent(recipient_id)}&select=admin_id`,
+            `${SUPABASE_URL}/rest/v1/class_admins?class_id=eq.${encodeURIComponent(targetClassId)}&admin_id=eq.${encodeURIComponent(recipient_id)}&select=admin_id`,
             {
               headers: {
                 Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
@@ -361,7 +372,7 @@ export default async function handler(req, res) {
             }
           )
           const caCheckRows = caCheckRes.ok ? await caCheckRes.json() : []
-          const isAssigned = (caCheckRows?.length ?? 0) > 0 || recipientProfile.class_id === caller.class_id
+          const isAssigned = (caCheckRows?.length ?? 0) > 0 || recipientProfile.class_id === targetClassId
           if (!isAssigned) {
             return res.status(403).json({
               error: 'Forbidden: You can only message administrators assigned to your class.',

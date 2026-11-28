@@ -89,6 +89,17 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   const [classLeaders, setClassLeaders] = useState<ClassLeader[]>([])
   const [leadersLoading, setLeadersLoading] = useState(false)
 
+  // Double-reinforced strict filter: students NEVER see or interact with super_admin
+  const visibleClassAdmins = useMemo(() => {
+    return classLeaders.filter(
+      (l) =>
+        Boolean(l) &&
+        l.role === 'admin' &&
+        l.id !== 'ae4ac258-d506-4466-a1df-bae5e70c67c9' &&
+        !l.name?.toLowerCase().includes('ayoub')
+    )
+  }, [classLeaders])
+
   // 1-on-1 Confidential Private Messages history (Student <-> Class Admin)
   const [privateDms, setPrivateDms] = useState<StudentPrivateMessage[]>([])
   const [dmsLoading, setDmsLoading] = useState(false)
@@ -160,7 +171,14 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           if (resp.ok) {
             const list = await resp.json()
             if (active && Array.isArray(list)) {
-              const adminsOnly = list.filter((l: any) => l.role === 'admin' && l.role !== 'super_admin')
+              const adminsOnly = list.filter(
+                (l: any) =>
+                  l &&
+                  l.role === 'admin' &&
+                  l.role !== 'super_admin' &&
+                  l.id !== 'ae4ac258-d506-4466-a1df-bae5e70c67c9' &&
+                  !l.name?.toLowerCase().includes('ayoub')
+              )
               setClassLeaders(adminsOnly)
               setLeadersLoading(false)
               return
@@ -176,7 +194,14 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         })
         if (active && !error && Array.isArray(rpcData) && rpcData.length > 0) {
           const adminsOnly = rpcData
-            .filter((r: any) => r.role === 'admin' && r.role !== 'super_admin')
+            .filter(
+              (r: any) =>
+                r &&
+                r.role === 'admin' &&
+                r.role !== 'super_admin' &&
+                r.id !== 'ae4ac258-d506-4466-a1df-bae5e70c67c9' &&
+                !r.name?.toLowerCase().includes('ayoub')
+            )
             .map((r: any) => ({
               ...r,
               isAssignedClassAdmin: true,
@@ -196,7 +221,14 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         if (active && rows) {
           const leaders = rows
             .map((r: any) => r.admin)
-            .filter((p: any) => p && p.role === 'admin' && p.role !== 'super_admin')
+            .filter(
+              (p: any) =>
+                p &&
+                p.role === 'admin' &&
+                p.role !== 'super_admin' &&
+                p.id !== 'ae4ac258-d506-4466-a1df-bae5e70c67c9' &&
+                !p.name?.toLowerCase().includes('ayoub')
+            )
             .map((r: any) => ({ ...r, isAssignedClassAdmin: true }))
           setClassLeaders(leaders)
         }
@@ -231,6 +263,17 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   async function handleSendInAppText(e: React.FormEvent) {
     e.preventDefault()
     if (!textTarget || !textBody.trim() || !classId) return
+    if (
+      textTarget.role === 'super_admin' ||
+      textTarget.id === 'ae4ac258-d506-4466-a1df-bae5e70c67c9' ||
+      textTarget.name?.toLowerCase().includes('ayoub')
+    ) {
+      setTextStatus({
+        ok: false,
+        msg: 'Students can only contact assigned class representatives. Direct messages to super administration are not permitted.',
+      })
+      return
+    }
     setTextSending(true)
     setTextStatus(null)
 
@@ -599,13 +642,13 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                 Your Class Admin &amp; Support
               </h2>
               <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB]">
-                Call or send a text message directly to your class administrator
+                Call, SMS, or send a 100% confidential private message directly to your class leader
               </p>
             </div>
           </div>
-          {classLeaders.length > 0 && (
+          {visibleClassAdmins.length > 0 && (
             <span className="text-xs font-bold text-[#1176BC] dark:text-[#25A8E0] bg-[#9FBBDE]/25 dark:bg-[#172D47] border border-[#9FBBDE]/50 dark:border-[#203854] px-2.5 py-0.5 rounded-full">
-              {classLeaders.length} Class {classLeaders.length === 1 ? 'Admin' : 'Admins'}
+              {visibleClassAdmins.length} Class {visibleClassAdmins.length === 1 ? 'Admin' : 'Admins'}
             </span>
           )}
         </div>
@@ -615,7 +658,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
             <Skeleton className="h-32 rounded-2xl" />
             <Skeleton className="h-32 rounded-2xl" />
           </div>
-        ) : classLeaders.length === 0 ? (
+        ) : visibleClassAdmins.length === 0 ? (
           <Card className="rounded-2xl border-[#ECECEC] dark:border-[#203854]">
             <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1">
@@ -637,7 +680,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {classLeaders.map((leader) => {
+            {visibleClassAdmins.map((leader) => {
               const waDigits = leader.phone ? formatWhatsAppNumber(leader.phone) : ''
               const prefilledText = `Hello ${leader.name}, I am ${user?.name || 'a student'} (${user?.student_id || ''}) from ${data.className}.`
 
