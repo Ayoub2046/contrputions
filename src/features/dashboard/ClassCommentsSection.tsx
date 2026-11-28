@@ -84,7 +84,7 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
   }
 
   return (
-    <div className="space-y-4 pt-4 border-t border-border/60">
+    <div id="class-discussion" className="space-y-4 pt-4 border-t border-border/60">
       <div className="flex items-center justify-between flex-wrap gap-2 px-0.5">
         <div className="flex items-center gap-2">
           <MessageSquare size={18} className="text-brand-600 dark:text-brand-400" />

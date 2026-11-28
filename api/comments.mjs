@@ -100,11 +100,89 @@ export default async function handler(req, res) {
 
   try {
     // ----------------------------------------------------
-    // GET /api/comments?class_id=...
+    // GET /api/comments?leaders=1&class_id=... (Class Leaders Directory)
+    // OR GET /api/comments?class_id=... (Class Discussion Comments)
     // ----------------------------------------------------
     if (req.method === 'GET') {
       const url = new URL(req.url, 'http://localhost')
       const reqClassId = url.searchParams.get('class_id')
+
+      if (url.searchParams.get('leaders') === '1') {
+        const targetClassId =
+          caller.role === 'student'
+            ? caller.class_id
+            : reqClassId && reqClassId !== 'all'
+            ? reqClassId
+            : adminClassIds[0] || caller.class_id
+
+        if (caller.role === 'admin' && targetClassId && !adminClassIds.includes(targetClassId)) {
+          return res.status(403).json({ error: 'Forbidden: You do not administer this class' })
+        }
+
+        const leadersMap = new Map()
+
+        if (targetClassId) {
+          const caRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/class_admins?class_id=eq.${encodeURIComponent(targetClassId)}&select=admin_id,profiles!class_admins_admin_id_fkey(id,name,phone,role,student_id)`,
+            {
+              headers: {
+                Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+                apikey: SERVICE_ROLE_KEY,
+              },
+            }
+          )
+          if (caRes.ok) {
+            const caRows = await caRes.json()
+            for (const row of caRows || []) {
+              const p = row?.profiles
+              if (p?.id) {
+                leadersMap.set(p.id, {
+                  id: p.id,
+                  name: p.name,
+                  phone: p.phone || null,
+                  role: p.role,
+                  student_id: p.student_id || null,
+                  isAssignedClassAdmin: true,
+                })
+              }
+            }
+          }
+        }
+
+        const saRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?role=eq.super_admin&select=id,name,phone,role,student_id&order=name.asc`,
+          {
+            headers: {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              apikey: SERVICE_ROLE_KEY,
+            },
+          }
+        )
+        if (saRes.ok) {
+          const saRows = await saRes.json()
+          for (const p of saRows || []) {
+            if (p?.id && !leadersMap.has(p.id)) {
+              leadersMap.set(p.id, {
+                id: p.id,
+                name: p.name,
+                phone: p.phone || null,
+                role: p.role,
+                student_id: p.student_id || null,
+                isAssignedClassAdmin: false,
+              })
+            }
+          }
+        }
+
+        const leaders = Array.from(leadersMap.values()).sort((a, b) => {
+          if (a.isAssignedClassAdmin !== b.isAssignedClassAdmin) {
+            return a.isAssignedClassAdmin ? -1 : 1
+          }
+          return String(a.name || '').localeCompare(String(b.name || ''))
+        })
+
+        return res.status(200).json(leaders)
+      }
 
       let filterClassId = null
       if (caller.role === 'super_admin' || caller.role === 'finance_manager') {

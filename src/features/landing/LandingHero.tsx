@@ -9,6 +9,7 @@ import {
   Users,
   Coins,
   CheckCircle,
+  Lock,
 } from 'lucide-react'
 import type { LandingPageSettings } from '../../lib/types'
 
@@ -19,9 +20,9 @@ interface LandingHeroProps {
 export function LandingHero({ settings }: LandingHeroProps) {
   const hasBgImage = Boolean(settings.hero_bg_image && settings.hero_bg_image.trim() !== '')
   const opacityPercent = settings.hero_bg_overlay_opacity ?? 85
-  const overlayOpacity = Math.max(0.2, Math.min(0.98, opacityPercent / 100))
+  // Keep readable floor so dark/light text always maintains WCAG contrast over any photo
+  const overlayOpacity = Math.max(0.72, Math.min(0.96, opacityPercent / 100))
 
-  // 3D Tilt State for Interactive Centerpiece
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -31,19 +32,16 @@ export function LandingHero({ settings }: LandingHeroProps) {
     const x = e.clientX - rect.left - rect.width / 2
     const y = e.clientY - rect.top - rect.height / 2
     setTilt({
-      x: -(y / (rect.height / 2)) * 10,
-      y: (x / (rect.width / 2)) * 10,
+      x: -(y / (rect.height / 2)) * 8,
+      y: (x / (rect.width / 2)) * 8,
     })
   }
 
-  const handleMouseLeave = () => {
-    setTilt({ x: 0, y: 0 })
-  }
+  const handleMouseLeave = () => setTilt({ x: 0, y: 0 })
 
-  // Interactive Contribution Impact Tier Selection
   const [selectedTier, setSelectedTier] = useState<number>(25)
 
-  const impactTiers: Record<number, { title: string; desc: string; icon: any }> = {
+  const impactTiers: Record<number, { title: string; desc: string; icon: typeof Coins }> = {
     10: {
       title: 'Study Handouts & Lab Supplies',
       desc: 'Ensures no classmate is excluded from practical sessions due to unpaid material fees.',
@@ -62,89 +60,93 @@ export function LandingHero({ settings }: LandingHeroProps) {
   }
 
   return (
-    <section className="relative overflow-hidden border-b border-border min-h-[680px] flex items-center justify-center">
-      {/* Background Image Layer */}
+    <section className="relative overflow-hidden border-b border-[#ECECEC] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#09131F] min-h-[660px] flex items-center justify-center">
+      {/* Subtle Architectural Background Layer */}
       {hasBgImage ? (
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700"
-          style={{ backgroundImage: `url(${settings.hero_bg_image})` }}
-        />
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700"
+            style={{ backgroundImage: `url(${settings.hero_bg_image})` }}
+          />
+          <div
+            className="absolute inset-0 bg-gradient-to-b lg:bg-gradient-to-r from-[#FFFFFF] via-[#FFFFFF]/95 to-[#EAF4FB]/85 dark:from-[#09131F] dark:via-[#09131F]/94 dark:to-[#102033]/85"
+            style={{ opacity: overlayOpacity }}
+          />
+        </>
       ) : (
-        /* Dynamic Mesh Gradient Default */
-        <div className="absolute inset-0 bg-gradient-to-br from-bg-main via-brand-50/40 to-bg-main dark:from-bg-main dark:via-brand-900/15 dark:to-bg-main">
-          <div className="absolute -top-40 -left-40 h-[480px] w-[480px] rounded-full bg-brand-600/10 blur-3xl animate-pulse" />
-          <div className="absolute -bottom-40 -right-40 h-[480px] w-[480px] rounded-full bg-amber-500/10 blur-3xl animate-pulse" />
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-br from-[#FFFFFF] via-[#F4F8FC] to-[#9FBBDE]/25 dark:from-[#09131F] dark:via-[#0D1B2C] dark:to-[#1176BC]/20" />
       )}
 
-      {/* Adaptive Theme Overlay for Readability */}
-      {hasBgImage && (
-        <div
-          className="absolute inset-0 bg-gradient-to-b lg:bg-gradient-to-r from-bg-main/95 via-bg-main/75 to-bg-main/30 dark:from-bg-main/95 dark:via-bg-main/80 dark:to-bg-main/40 transition-opacity duration-300"
-          style={{ opacity: overlayOpacity }}
-        />
-      )}
+      {/* Controlled Palette Glows (#1176BC, #25A8E0, #9FBBDE) */}
+      <div className="pointer-events-none absolute -top-32 -left-32 h-[420px] w-[420px] rounded-full bg-[#25A8E0]/12 dark:bg-[#25A8E0]/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-36 -right-24 h-[460px] w-[460px] rounded-full bg-[#1176BC]/12 dark:bg-[#1176BC]/20 blur-3xl" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.035] dark:opacity-[0.06]"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 1px 1px, #1176BC 1px, transparent 0)',
+          backgroundSize: '28px 28px',
+        }}
+      />
 
       {/* Content Container */}
-      <div className="relative z-10 mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-          {/* Left Column: Headlines & CTA */}
+      <div className="relative z-10 mx-auto max-w-7xl px-4 py-16 sm:py-20 sm:px-6 lg:px-8 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
+          {/* Left Column: Editorial Headline & Clear CTAs */}
           <div className="lg:col-span-7 text-center lg:text-left space-y-6">
-            {/* Announcement / Badge */}
             {settings.hero_badge && (
-              <div className="inline-flex items-center gap-2 rounded-full border border-brand-600/30 bg-brand-50/80 dark:bg-brand-900/30 px-4 py-1.5 text-xs font-semibold text-brand-600 dark:text-brand-300 shadow-sm backdrop-blur-sm">
-                <Sparkles size={14} className="text-brand-600 dark:text-brand-300" />
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#9FBBDE] dark:border-[#25A8E0]/40 bg-[#FFFFFF]/90 dark:bg-[#102033]/90 px-4 py-1.5 text-xs font-bold text-[#1176BC] dark:text-[#25A8E0] shadow-xs backdrop-blur-sm">
+                <Sparkles size={14} className="text-[#25A8E0] shrink-0" />
                 <span>{settings.hero_badge}</span>
               </div>
             )}
 
-            {/* Main Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-serif font-bold tracking-tight text-text leading-[1.12]">
+            <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-serif font-bold tracking-tight text-[#0B1A2B] dark:text-[#FFFFFF] leading-[1.08]">
               {settings.hero_title || 'Transparent Class Contributions & Student Charity'}
             </h1>
 
-            {/* Subtitle */}
-            <p className="max-w-2xl mx-auto lg:mx-0 text-base sm:text-lg text-secondary leading-relaxed font-sans">
-              {settings.hero_subtitle || 'A student-first mutual aid and contribution platform. Real-time contribution tracking, audited expense logs, and collective peer support.'}
+            <p className="max-w-2xl mx-auto lg:mx-0 text-base sm:text-lg text-[#2F465E] dark:text-[#DCE8F5] leading-relaxed font-sans font-normal">
+              {settings.hero_subtitle ||
+                'A student-first mutual aid and contribution platform. Real-time contribution tracking, audited expense logs, and collective peer support so no classmate is left behind.'}
             </p>
 
-            {/* CTA Buttons */}
+            {/* Primary & Secondary CTAs */}
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-2">
               <Link
                 to={settings.cta_primary_link || '/login'}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-btn bg-brand-600 px-7 py-3.5 text-base font-semibold text-white shadow-md shadow-brand-600/25 hover:bg-brand-600/90 hover:shadow-lg hover:shadow-brand-600/30 active:scale-98 transition-all"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] px-7 py-3.5 text-base font-semibold text-[#FFFFFF] shadow-lg shadow-[#1176BC]/25 hover:shadow-xl hover:opacity-95 active:scale-98 transition-all"
               >
                 <span>{settings.cta_primary_text || 'Access Class Portal'}</span>
                 <ArrowRight size={18} />
               </Link>
 
               <a
-                href="#charity-pledge"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-btn border border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/15 px-6 py-3.5 text-base font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 active:scale-98 transition-all backdrop-blur-sm"
+                href={settings.cta_secondary_link || '#charity-pledge'}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-[#C6CACB] dark:border-[#9FBBDE]/35 bg-[#FFFFFF]/95 dark:bg-[#102033]/90 px-6 py-3.5 text-base font-semibold text-[#1176BC] dark:text-[#FFFFFF] hover:bg-[#ECECEC]/70 dark:hover:bg-[#172D47] hover:border-[#1176BC] dark:hover:border-[#25A8E0] active:scale-98 transition-all shadow-xs"
               >
-                <Heart size={16} className="fill-amber-500 text-amber-500" />
-                <span>Read Student Mercy Pledge</span>
+                <Heart size={16} className="text-[#25A8E0] fill-[#25A8E0]/20" />
+                <span>{settings.cta_secondary_text || 'Read Student Mercy Pledge'}</span>
               </a>
             </div>
 
-            {/* Trust Checklist */}
-            <div className="pt-4 flex flex-wrap items-center justify-center lg:justify-start gap-y-2 gap-x-6 text-xs text-secondary font-medium">
+            {/* Trust Metrics Pill Strip */}
+            <div className="pt-4 flex flex-wrap items-center justify-center lg:justify-start gap-y-2.5 gap-x-5 text-xs font-semibold text-[#2F465E] dark:text-[#C6CACB]">
               <div className="flex items-center gap-1.5">
-                <CheckCircle size={15} className="text-success shrink-0" />
+                <CheckCircle size={15} className="text-[#0C9B5E] dark:text-[#22C55E] shrink-0" />
                 <span>100% Peer Audited Ledger</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <ShieldCheck size={15} className="text-brand-600 shrink-0" />
-                <span>Zero Stored Hidden Values</span>
+                <ShieldCheck size={15} className="text-[#1176BC] dark:text-[#25A8E0] shrink-0" />
+                <span>Zero Stored Balances</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Users size={15} className="text-amber-500 shrink-0" />
-                <span>Mutual Assistance for Classmates</span>
+                <Users size={15} className="text-[#25A8E0] shrink-0" />
+                <span>Mutual Classmate Support</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: 3D ANIMATED CONTRIBUTION VAULT */}
+          {/* Right Column: Executive Ocean-Blue Fintech Card Centerpiece */}
           <div className="lg:col-span-5 flex justify-center perspective-[1200px]">
             <div
               ref={cardRef}
@@ -155,55 +157,56 @@ export function LandingHero({ settings }: LandingHeroProps) {
                 transformStyle: 'preserve-3d',
                 transition: 'transform 0.15s ease-out',
               }}
-              className="relative w-full max-w-md rounded-2xl border-2 border-brand-600/30 bg-gradient-to-b from-bg-card/95 via-bg-card/90 to-brand-50/30 dark:to-brand-900/20 p-6 sm:p-7 shadow-2xl backdrop-blur-xl space-y-6 select-none"
+              className="relative w-full max-w-md rounded-3xl border border-[#9FBBDE]/60 dark:border-[#25A8E0]/40 bg-[#FFFFFF] dark:bg-[#102033] p-5 sm:p-6 shadow-2xl shadow-[#1176BC]/15 dark:shadow-black/50 space-y-5 select-none"
             >
-              {/* Top 3D Floating Badge */}
+              {/* Top Ocean Banner inside Card */}
               <div
-                style={{ transform: 'translateZ(30px)' }}
-                className="flex items-center justify-between border-b border-border pb-4"
+                style={{ transform: 'translateZ(20px)' }}
+                className="rounded-2xl bg-gradient-to-br from-[#0A4673] via-[#1176BC] to-[#25A8E0] p-4 sm:p-5 text-[#FFFFFF] shadow-md relative overflow-hidden"
               >
-                <div className="flex items-center gap-3">
-                  <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 text-white shadow-md shadow-brand-600/30">
-                    <Heart size={22} className="fill-white" />
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-                    </span>
+                <div className="absolute -right-8 -top-8 size-32 rounded-full bg-[#FFFFFF]/10 blur-xl pointer-events-none" />
+                <div className="relative z-10 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-11 items-center justify-center rounded-xl bg-[#FFFFFF]/15 border border-[#FFFFFF]/25 backdrop-blur-sm">
+                      <Heart size={21} className="text-[#FFFFFF] fill-[#FFFFFF]/25" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#FFFFFF]">Student Solidarity Vault</h3>
+                      <p className="text-xs text-[#FFFFFF]/80">Collective Class Mutual Treasury</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-text">Student Solidarity Fund</h3>
-                    <p className="text-xs text-muted">Collective Class Mutual Treasury</p>
-                  </div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFFFFF]/20 border border-[#FFFFFF]/30 px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase text-[#FFFFFF] shrink-0">
+                    <span className="size-1.5 rounded-full bg-[#FFFFFF] animate-pulse" />
+                    Live
+                  </span>
                 </div>
-
-                <span className="rounded-full bg-brand-600/10 px-2.5 py-1 text-[11px] font-bold text-brand-600 dark:text-brand-900 border border-brand-600/20">
-                  ✦ Active Pool
-                </span>
               </div>
 
-              {/* 3D Animated Contribution Orb Preview */}
+              {/* Impact Simulator Panel */}
               <div
-                style={{ transform: 'translateZ(40px)' }}
-                className="relative rounded-xl overflow-hidden border border-border/80 bg-gradient-to-br from-bg-elevated/70 via-bg-card to-brand-50/50 dark:to-brand-900/30 p-5 space-y-4"
+                style={{ transform: 'translateZ(30px)' }}
+                className="rounded-2xl border border-[#ECECEC] dark:border-[#203854] bg-[#F4F8FC] dark:bg-[#0D1B2C] p-4 space-y-3.5"
               >
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xs font-semibold text-secondary">Simulate Your Impact:</span>
-                  <span className="text-xs font-bold text-brand-600 dark:text-brand-900">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+                    Simulate Your Impact
+                  </span>
+                  <span className="text-[11px] font-bold text-[#1176BC] dark:text-[#25A8E0]">
                     Direct Classmate Aid
                   </span>
                 </div>
 
-                {/* Tier Selection Buttons */}
+                {/* Tier Pills */}
                 <div className="grid grid-cols-3 gap-2">
                   {[10, 25, 50].map((tier) => (
                     <button
                       key={tier}
                       type="button"
                       onClick={() => setSelectedTier(tier)}
-                      className={`py-2 px-3 rounded-btn text-xs font-bold transition-all cursor-pointer ${
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                         selectedTier === tier
-                          ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 scale-105'
-                          : 'bg-bg-card border border-border text-secondary hover:bg-bg-elevated hover:text-text'
+                          ? 'bg-gradient-to-r from-[#1176BC] to-[#25A8E0] border-transparent text-[#FFFFFF] shadow-md shadow-[#1176BC]/25'
+                          : 'bg-[#FFFFFF] dark:bg-[#172D47] border-[#C6CACB] dark:border-[#203854] text-[#0B1A2B] dark:text-[#FFFFFF] hover:border-[#1176BC] dark:hover:border-[#25A8E0]'
                       }`}
                     >
                       ${tier} Share
@@ -211,45 +214,53 @@ export function LandingHero({ settings }: LandingHeroProps) {
                   ))}
                 </div>
 
-                {/* Dynamic Tier Impact Reveal */}
-                <div className="rounded-btn bg-bg-card border border-brand-600/20 p-3 space-y-1.5 transition-all">
+                {/* Tier Description */}
+                <div className="rounded-xl bg-[#FFFFFF] dark:bg-[#102033] border border-[#ECECEC] dark:border-[#203854] p-3.5 space-y-1.5">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-50 dark:bg-brand-900/40 text-brand-600 shrink-0">
+                    <span className="flex size-6 items-center justify-center rounded-lg bg-[#9FBBDE]/25 dark:bg-[#172D47] text-[#1176BC] dark:text-[#25A8E0] shrink-0">
                       <Sparkles size={13} />
                     </span>
-                    <p className="text-xs font-bold text-text">
+                    <p className="text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
                       {impactTiers[selectedTier].title}
                     </p>
                   </div>
-                  <p className="text-[11px] text-secondary leading-relaxed pl-8">
+                  <p className="text-[11px] text-[#2F465E] dark:text-[#C6CACB] leading-relaxed pl-8">
                     {impactTiers[selectedTier].desc}
                   </p>
                 </div>
               </div>
 
-              {/* Live Mutual Assistance Guarantees */}
+              {/* Dual Guarantees */}
               <div
-                style={{ transform: 'translateZ(25px)' }}
-                className="grid grid-cols-2 gap-3 pt-1 text-center"
+                style={{ transform: 'translateZ(20px)' }}
+                className="grid grid-cols-2 gap-3"
               >
-                <div className="rounded-btn bg-bg-elevated p-2.5 border border-border/60">
-                  <p className="text-[10px] text-muted font-medium">Class Participation</p>
-                  <p className="text-sm font-bold text-text mt-0.5">100% Shared</p>
+                <div className="rounded-xl bg-[#ECECEC]/75 dark:bg-[#172D47] p-3 border border-[#C6CACB]/60 dark:border-[#203854] text-center">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-[#52677D] dark:text-[#9FBBDE]">
+                    Class Participation
+                  </p>
+                  <p className="text-sm font-bold text-[#0B1A2B] dark:text-[#FFFFFF] mt-0.5">100% Shared</p>
                 </div>
-                <div className="rounded-btn bg-bg-elevated p-2.5 border border-border/60">
-                  <p className="text-[10px] text-muted font-medium">Unaccounted Loss</p>
-                  <p className="text-sm font-bold text-success mt-0.5">$0.00 Guaranteed</p>
+                <div className="rounded-xl bg-[#ECECEC]/75 dark:bg-[#172D47] p-3 border border-[#C6CACB]/60 dark:border-[#203854] text-center">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-[#52677D] dark:text-[#9FBBDE]">
+                    Unaccounted Loss
+                  </p>
+                  <p className="text-sm font-bold text-[#0C9B5E] dark:text-[#22C55E] mt-0.5">$0.00 Verified</p>
                 </div>
               </div>
 
-              {/* Bottom Quick Action */}
-              <div style={{ transform: 'translateZ(35px)' }}>
+              {/* Bottom CTA inside Card */}
+              <div style={{ transform: 'translateZ(25px)' }} className="space-y-2">
                 <Link
                   to="/login"
-                  className="w-full flex items-center justify-center gap-2 rounded-btn bg-gradient-to-r from-brand-600 to-indigo-600 py-3 text-xs font-bold text-white shadow-md hover:opacity-95 active:scale-98 transition-all"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] py-3 text-xs font-bold text-[#FFFFFF] shadow-md hover:opacity-95 active:scale-98 transition-all"
                 >
-                  <Coins size={15} /> Log In To Submit Your Contribution
+                  <Coins size={15} /> Log In To Check Your Class Balance
                 </Link>
+                <p className="flex items-center justify-center gap-1.5 text-[10px] font-medium text-[#52677D] dark:text-[#C6CACB]">
+                  <Lock size={11} className="text-[#1176BC] dark:text-[#25A8E0]" />
+                  <span>Protected by PostgreSQL Row-Level Security</span>
+                </p>
               </div>
             </div>
           </div>

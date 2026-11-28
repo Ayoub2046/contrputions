@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useNotifications } from '../notifications/NotificationContext'
 import { useStudentDashboard } from './useStudentDashboard'
+import { useClassComments } from './useClassComments'
 import { StudentContributionBreakdown } from './StudentContributionBreakdown'
 import { formatCurrency, formatDate } from '../../lib/utils'
+import { getValidAuthToken } from '../../lib/admin-api'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
@@ -25,7 +27,6 @@ import {
   Bell,
   Cpu,
   Radio,
-  Sparkles,
   TrendingUp,
   Receipt,
   Users,
@@ -33,11 +34,32 @@ import {
   Phone,
   PhoneCall,
   MessageSquare,
+  MessageSquareText,
+  Send,
+  Shield,
 } from 'lucide-react'
 
 interface StudentDashboardViewProps {
   userId: string
   classId: string | null
+}
+
+interface ClassLeader {
+  id: string
+  name: string
+  phone: string | null
+  role: string
+  student_id?: string | null
+  isAssignedClassAdmin?: boolean
+}
+
+function formatWhatsAppNumber(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (!digits) return ''
+  if (digits.startsWith('252')) return digits
+  if (digits.length === 9 && digits.startsWith('6')) return `252${digits}`
+  if (digits.length === 10 && digits.startsWith('06')) return `252${digits.slice(1)}`
+  return digits
 }
 
 export function StudentDashboardView({ userId, classId }: StudentDashboardViewProps) {
@@ -46,38 +68,85 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   const appName = useAppName()
   const { isInstalled } = usePwaInstall()
   const { data, loading } = useStudentDashboard(userId, classId)
+  const { addComment } = useClassComments(classId)
   const { notifications, markAsRead, markAsUnread } = useNotifications()
 
   const [copiedId, setCopiedId] = useState(false)
   const [showClearanceModal, setShowClearanceModal] = useState(false)
 
-  // Class leaders (admins/super_admins) for this student's class
-  const [classLeaders, setClassLeaders] = useState<{ id: string; name: string; phone: string | null; role: string }[]>([])
+  // Class leaders (Class Admins + Super Admin)
+  const [classLeaders, setClassLeaders] = useState<ClassLeader[]>([])
+  const [leadersLoading, setLeadersLoading] = useState(false)
+
+  // Direct Quick Text Composer Modal
+  const [textTarget, setTextTarget] = useState<ClassLeader | null>(null)
+  const [textBody, setTextBody] = useState('')
+  const [textSending, setTextSending] = useState(false)
+  const [textStatus, setTextStatus] = useState<{ ok: boolean; msg: string } | null>(null)
 
   useEffect(() => {
     if (!classId) return
-    // 1. First try secure RPC function
-    supabase
-      .rpc('get_class_leaders_for_student', { p_class_id: classId })
-      .then(({ data: rpcData, error }) => {
-        if (!error && rpcData && rpcData.length > 0) {
-          setClassLeaders(rpcData)
-        } else {
-          // Fallback to direct relational query
-          supabase
-            .from('class_admins')
-            .select('admin:profiles!class_admins_admin_id_fkey(id, name, phone, role)')
-            .eq('class_id', classId)
-            .then(({ data: rows }) => {
-              if (rows) {
-                const leaders = rows
-                  .map((r: any) => r.admin)
-                  .filter(Boolean) as { id: string; name: string; phone: string | null; role: string }[]
-                setClassLeaders(leaders)
-              }
-            })
+    let active = true
+    setLeadersLoading(true)
+
+    async function loadLeaders() {
+      // 1. Primary path: authenticated serverless API (bypasses profiles RLS cleanly)
+      try {
+        const token = await getValidAuthToken()
+        if (token) {
+          const resp = await fetch(`/api/comments?leaders=1&class_id=${encodeURIComponent(classId!)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (resp.ok) {
+            const list = await resp.json()
+            if (active && Array.isArray(list)) {
+              setClassLeaders(list)
+              setLeadersLoading(false)
+              return
+            }
+          }
         }
-      })
+      } catch {}
+
+      // 2. Fallback RPC if API unavailable
+      try {
+        const { data: rpcData, error } = await supabase.rpc('get_class_leaders_for_student', {
+          p_class_id: classId!,
+        })
+        if (active && !error && Array.isArray(rpcData) && rpcData.length > 0) {
+          setClassLeaders(
+            rpcData.map((r: any) => ({
+              ...r,
+              isAssignedClassAdmin: r.role === 'admin',
+            }))
+          )
+          setLeadersLoading(false)
+          return
+        }
+      } catch {}
+
+      // 3. Last-resort direct table query
+      try {
+        const { data: rows } = await supabase
+          .from('class_admins')
+          .select('admin:profiles!class_admins_admin_id_fkey(id, name, phone, role, student_id)')
+          .eq('class_id', classId!)
+        if (active && rows) {
+          const leaders = rows
+            .map((r: any) => r.admin)
+            .filter(Boolean)
+            .map((r: any) => ({ ...r, isAssignedClassAdmin: true }))
+          setClassLeaders(leaders)
+        }
+      } catch {}
+
+      if (active) setLeadersLoading(false)
+    }
+
+    loadLeaders()
+    return () => {
+      active = false
+    }
   }, [classId])
 
   const copyStudentId = () => {
@@ -87,6 +156,35 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
     setTimeout(() => setCopiedId(false), 2000)
   }
 
+  function openQuickTextModal(leader: ClassLeader) {
+    setTextTarget(leader)
+    setTextBody('')
+    setTextStatus(null)
+  }
+
+  async function handleSendInAppText(e: React.FormEvent) {
+    e.preventDefault()
+    if (!textTarget || !textBody.trim() || !classId) return
+    setTextSending(true)
+    setTextStatus(null)
+    const msg = `@${textTarget.name}: ${textBody.trim()}`
+    const err = await addComment(msg, classId)
+    setTextSending(false)
+    if (err) {
+      setTextStatus({ ok: false, msg: err })
+    } else {
+      setTextStatus({
+        ok: true,
+        msg: `Message sent! ${textTarget.name} and your class will see it and receive an instant notification.`,
+      })
+      setTextBody('')
+      setTimeout(() => {
+        setTextTarget(null)
+        setTextStatus(null)
+      }, 1600)
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6 w-full max-w-4xl mx-auto">
@@ -94,7 +192,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-9 w-24 rounded-lg" />
         </div>
-        <Skeleton className="h-64 w-full rounded-3xl" />
+        <Skeleton className="h-72 w-full rounded-3xl" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Skeleton className="h-28 rounded-2xl" />
           <Skeleton className="h-28 rounded-2xl" />
@@ -110,26 +208,31 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
       <div className="space-y-6 w-full max-w-4xl mx-auto">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <AppLogo className="size-10 rounded-xl object-contain p-1 bg-white dark:bg-slate-800 border border-border shadow-xs" alt={appName} />
-            <h1 className="text-2xl font-bold text-text">{t('dashboard.title')}</h1>
+            <AppLogo
+              className="size-10 rounded-xl object-contain p-1 bg-[#FFFFFF] dark:bg-[#102033] border border-[#ECECEC] dark:border-[#203854] shadow-xs"
+              alt={appName}
+            />
+            <h1 className="text-2xl font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">{t('dashboard.title')}</h1>
           </div>
           <Button
             variant="secondary"
             size="sm"
             onClick={signOut}
-            className="flex items-center gap-1.5 border-error/30 text-error hover:bg-error hover:text-white transition-all shadow-xs"
+            className="flex items-center gap-1.5 border-error/40 text-error hover:bg-error hover:text-white transition-all shadow-xs"
           >
             <LogOut size={15} />
             <span>{t('nav.signOut')}</span>
           </Button>
         </div>
-        <Card className="rounded-3xl border border-dashed border-border/80">
+        <Card className="rounded-3xl border border-dashed border-[#C6CACB] dark:border-[#203854]">
           <CardContent className="py-16 text-center space-y-3">
-            <div className="size-16 rounded-full bg-bg-elevated mx-auto flex items-center justify-center text-muted">
+            <div className="size-16 rounded-full bg-[#ECECEC] dark:bg-[#172D47] mx-auto flex items-center justify-center text-[#1176BC] dark:text-[#25A8E0]">
               <Users size={32} />
             </div>
-            <h2 className="text-lg font-bold text-text">{t('dashboard.noClassAssigned')}</h2>
-            <p className="text-xs text-muted max-w-md mx-auto leading-relaxed">
+            <h2 className="text-lg font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+              {t('dashboard.noClassAssigned')}
+            </h2>
+            <p className="text-xs text-[#2F465E] dark:text-[#C6CACB] max-w-md mx-auto leading-relaxed">
               You are currently registered in {appName}, but your account has not been assigned to a specific batch or class group. Contact your class administrator to assign you.
             </p>
           </CardContent>
@@ -143,50 +246,48 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   const progressPct = data.target > 0 ? Math.min(100, Math.round((data.personalTotal / data.target) * 100)) : 0
   const remainingNeeded = Math.max(0, data.target - data.personalTotal)
 
-  // Filter notifications relevant to this student
-  const classNotifs = notifications.filter(
-    (n) => !n.classId || n.classId === classId
-  ).slice(0, 3)
+  const classNotifs = notifications.filter((n) => !n.classId || n.classId === classId).slice(0, 3)
 
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto">
-      {/* 1. Header Welcome Bar with Official App Logo & Direct Logout */}
+      {/* 1. HEADER WELCOME BAR */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1">
         <div className="flex items-center gap-3.5">
-          <div className="size-12 rounded-2xl bg-white dark:bg-slate-800 p-2 border border-border shadow-xs flex items-center justify-center shrink-0">
+          <div className="size-12 rounded-2xl bg-[#FFFFFF] dark:bg-[#102033] p-2 border border-[#ECECEC] dark:border-[#203854] shadow-xs flex items-center justify-center shrink-0">
             <AppLogo className="size-full object-contain" alt={appName} />
           </div>
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/20">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#FFFFFF] bg-gradient-to-r from-[#1176BC] to-[#25A8E0] px-2.5 py-0.5 rounded-full shadow-2xs">
                 {appName} Student Portal
               </span>
-              <span className="text-xs text-muted font-medium">📚 {data.className}</span>
+              <span className="text-xs font-semibold text-[#1176BC] dark:text-[#9FBBDE] bg-[#9FBBDE]/20 dark:bg-[#172D47] border border-[#9FBBDE]/40 dark:border-[#203854] px-2 py-0.5 rounded-full">
+                {data.className}
+              </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-text tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#0B1A2B] dark:text-[#FFFFFF] tracking-tight">
               {t('dashboard.welcome', { name: user?.name || 'Student' })}
             </h1>
           </div>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          {/* Copy Student ID Pill */}
           <button
+            type="button"
             onClick={copyStudentId}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn bg-bg-card hover:bg-bg-elevated border border-border text-xs font-mono font-semibold text-text transition-all cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFFFFF] dark:bg-[#102033] hover:bg-[#ECECEC] dark:hover:bg-[#172D47] border border-[#C6CACB] dark:border-[#203854] text-xs font-mono font-bold text-[#0B1A2B] dark:text-[#FFFFFF] transition-all cursor-pointer shadow-2xs"
             title="Click to copy Student ID"
           >
-            {copiedId ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} className="text-muted" />}
+            {copiedId ? <Check size={13} className="text-[#0C9B5E]" /> : <Copy size={13} className="text-[#1176BC] dark:text-[#25A8E0]" />}
             <span>{user?.student_id || 'ID'}</span>
-            {copiedId && <span className="text-[10px] text-emerald-600 font-sans font-bold">Copied!</span>}
+            {copiedId && <span className="text-[10px] text-[#0C9B5E] font-sans font-bold">Copied!</span>}
           </button>
 
-          {/* Direct Sign Out Button */}
           <Button
             variant="secondary"
             size="sm"
             onClick={signOut}
-            className="flex items-center gap-1.5 border-error/30 text-error hover:bg-error hover:text-white transition-all shadow-xs h-8 text-xs font-semibold px-3"
+            className="flex items-center gap-1.5 border-[#DC2626]/35 text-[#DC2626] dark:text-[#F87171] hover:bg-[#DC2626] hover:text-[#FFFFFF] transition-all shadow-xs h-8 text-xs font-semibold px-3"
           >
             <LogOut size={14} />
             <span>Sign Out</span>
@@ -194,159 +295,353 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         </div>
       </div>
 
-      {/* 2. THE STUDENT DIGITAL CONTRIBUTION PASS (Fintech Card with Logo & Dynamic Name) */}
+      {/* 2. EXECUTIVE STUDENT DIGITAL CONTRIBUTION PASS CARD (#1176BC -> #25A8E0 Palette) */}
       <div className="relative group perspective-[1200px]">
-        {/* Ambient Glow behind card */}
-        <div className="absolute -inset-1 rounded-[2.5rem] bg-gradient-to-r from-emerald-600/30 via-brand-600/20 to-teal-600/30 blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+        {/* Crisp Ambient Palette Halo */}
+        <div className="absolute -inset-1 rounded-[2rem] bg-gradient-to-r from-[#1176BC]/35 via-[#25A8E0]/30 to-[#9FBBDE]/35 blur-xl opacity-75 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 border border-emerald-500/30 p-6 sm:p-8 text-white shadow-2xl space-y-6">
-          {/* Decorative geometric background accents */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-radial from-emerald-500/15 via-transparent to-transparent pointer-events-none" />
-          <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-radial from-teal-500/10 via-transparent to-transparent pointer-events-none" />
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#08385E] via-[#1176BC] to-[#1D93CE] border border-[#9FBBDE]/50 dark:border-[#25A8E0]/50 p-5 sm:p-8 text-[#FFFFFF] shadow-2xl space-y-6">
+          {/* Geometric Mesh & Luminous Orbs */}
+          <div className="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-[#25A8E0]/30 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -left-16 w-64 h-64 rounded-full bg-[#9FBBDE]/20 blur-3xl pointer-events-none" />
+          <div
+            className="absolute inset-0 opacity-[0.07] pointer-events-none"
+            style={{
+              backgroundImage: 'radial-gradient(circle at 1px 1px, #FFFFFF 1px, transparent 0)',
+              backgroundSize: '22px 22px',
+            }}
+          />
 
-          {/* Top Row: Chip, Official App Logo & Status Badge */}
-          <div className="flex items-start justify-between gap-3 relative z-10">
+          {/* Top Bar: Brushed Metallic EMV Chip, App Brand & Live Status Pill */}
+          <div className="flex items-start justify-between gap-3 relative z-10 flex-wrap">
             <div className="flex items-center gap-3">
-              {/* Smart Card Chip Visual */}
-              <div className="size-10 rounded-lg bg-gradient-to-br from-amber-200 via-amber-300 to-amber-500 p-1 shadow-md border border-amber-400/60 flex items-center justify-center shrink-0">
-                <Cpu size={22} className="text-amber-900/80" />
+              {/* Platinum Brushed EMV Chip */}
+              <div className="size-10 rounded-xl bg-gradient-to-br from-[#FFFFFF] via-[#ECECEC] to-[#C6CACB] p-1 shadow-md border border-[#FFFFFF]/80 flex items-center justify-center shrink-0">
+                <Cpu size={21} className="text-[#1176BC]" />
               </div>
-              <div className="flex items-center gap-2 pl-2 border-l border-white/20">
-                <div className="size-8 rounded-lg bg-white/10 p-1 flex items-center justify-center backdrop-blur-xs">
+
+              <div className="flex items-center gap-2.5 pl-3 border-l border-[#FFFFFF]/25">
+                <div className="size-8 rounded-lg bg-[#FFFFFF] p-1 flex items-center justify-center shadow-xs shrink-0">
                   <AppLogo className="size-full object-contain" alt={appName} />
                 </div>
-                <span className="text-sm font-bold tracking-wider text-white font-serif">{appName}</span>
+                <div>
+                  <span className="text-sm font-bold tracking-wider text-[#FFFFFF] font-serif block leading-none">
+                    {appName}
+                  </span>
+                  <span className="text-[10px] text-[#FFFFFF]/80 tracking-wide font-medium">
+                    Verified Member Card
+                  </span>
+                </div>
               </div>
-              <Radio size={18} className="text-white/40 rotate-90 hidden sm:block" />
+
+              <Radio size={17} className="text-[#FFFFFF]/60 rotate-90 hidden sm:block ml-1" />
             </div>
 
-            {/* Dynamic Status Badge */}
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-block text-[11px] uppercase tracking-wider text-white/50 font-medium">
-                Pass Status
-              </span>
-              <div
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide shadow-sm border ${
-                  isPaid
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 ring-1 ring-emerald-400/30'
-                    : isPartial
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-400/40 ring-1 ring-amber-400/30'
-                    : 'bg-rose-500/20 text-rose-300 border-rose-400/40 ring-1 ring-rose-400/30'
-                }`}
-              >
-                {isPaid ? (
-                  <>
-                    <Sparkles size={13} className="text-emerald-300 animate-pulse" />
-                    <span>FULLY PAID</span>
-                  </>
-                ) : isPartial ? (
-                  <>
-                    <Clock size={13} className="text-amber-300" />
-                    <span>PARTIALLY PAID</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle size={13} className="text-rose-300" />
-                    <span>PAYMENT DUE</span>
-                  </>
-                )}
-              </div>
+            {/* High-Contrast Status Badge */}
+            <div
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold tracking-wide shadow-sm border backdrop-blur-md ${
+                isPaid
+                  ? 'bg-[#FFFFFF] text-[#0C9B5E] border-[#FFFFFF]'
+                  : isPartial
+                  ? 'bg-[#FFFFFF]/20 text-[#FFFFFF] border-[#FFFFFF]/45'
+                  : 'bg-[#FFFFFF]/95 text-[#DC2626] border-[#FFFFFF]'
+              }`}
+            >
+              {isPaid ? (
+                <>
+                  <CheckCircle2 size={14} className="text-[#0C9B5E]" />
+                  <span>FULLY PAID</span>
+                </>
+              ) : isPartial ? (
+                <>
+                  <Clock size={14} className="text-[#FFFFFF]" />
+                  <span>PARTIAL PAID</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle size={14} className="text-[#DC2626]" />
+                  <span>PAYMENT DUE</span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Middle Row: Student Identification & Target Numbers */}
+          {/* Middle Row: Student Name / ID + Contribution Total */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end relative z-10">
-            <div>
-              <span className="text-[11px] uppercase tracking-widest text-emerald-400/80 font-semibold block mb-0.5">
-                {appName} Member Pass
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-[#FFFFFF]/80 font-bold block">
+                Cardholder Identity
               </span>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white truncate">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#FFFFFF] truncate">
                 {user?.name}
               </h2>
-              <div className="flex items-center gap-2 mt-1 text-xs text-white/60 font-mono">
-                <span>ID: {user?.student_id}</span>
-                <span>&bull;</span>
-                <span className="text-emerald-400 font-sans font-medium">{data.className}</span>
+              <div className="flex items-center gap-2 text-xs font-mono text-[#FFFFFF]/90 flex-wrap pt-0.5">
+                <span className="px-2 py-0.5 rounded-md bg-[#FFFFFF]/15 border border-[#FFFFFF]/25 font-bold">
+                  ID: {user?.student_id}
+                </span>
+                <span className="font-sans font-semibold text-[#FFFFFF]/95">{data.className}</span>
               </div>
             </div>
 
-            {/* Contribution Figure */}
-            <div className="sm:text-right">
-              <span className="text-[11px] uppercase tracking-widest text-white/50 font-medium block mb-0.5">
+            <div className="sm:text-right space-y-0.5">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-[#FFFFFF]/80 font-bold block">
                 Total Contributed
               </span>
               <div className="flex items-baseline sm:justify-end gap-2">
-                <span className="text-3xl sm:text-4xl font-serif font-bold text-white tabular-nums tracking-tight">
+                <span className="text-3xl sm:text-4xl font-serif font-bold text-[#FFFFFF] tabular-nums tracking-tight">
                   {formatCurrency(data.personalTotal)}
                 </span>
-                <span className="text-sm font-medium text-white/40">
-                  / {formatCurrency(data.target)} Target
+                <span className="text-sm font-semibold text-[#FFFFFF]/80">
+                  / {formatCurrency(data.target)}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Progress Bar & Status Text */}
+          {/* 3-Column Glass Metric Strip inside Card */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 relative z-10">
+            <div className="rounded-2xl bg-[#FFFFFF]/12 border border-[#FFFFFF]/20 backdrop-blur-sm p-3">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#FFFFFF]/80 block">
+                My Paid
+              </span>
+              <span className="text-sm sm:text-base font-bold text-[#FFFFFF] tabular-nums mt-0.5 block">
+                {formatCurrency(data.personalTotal)}
+              </span>
+            </div>
+            <div className="rounded-2xl bg-[#FFFFFF]/12 border border-[#FFFFFF]/20 backdrop-blur-sm p-3">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#FFFFFF]/80 block">
+                Target
+              </span>
+              <span className="text-sm sm:text-base font-bold text-[#FFFFFF] tabular-nums mt-0.5 block">
+                {formatCurrency(data.target)}
+              </span>
+            </div>
+            <div className="rounded-2xl bg-[#FFFFFF]/12 border border-[#FFFFFF]/20 backdrop-blur-sm p-3">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#FFFFFF]/80 block">
+                Remaining
+              </span>
+              <span className="text-sm sm:text-base font-bold text-[#FFFFFF] tabular-nums mt-0.5 block">
+                {formatCurrency(remainingNeeded)}
+              </span>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
           <div className="space-y-2 relative z-10">
-            <div className="h-2.5 w-full bg-white/10 rounded-full overflow-hidden p-0.5 backdrop-blur-sm border border-white/5">
+            <div className="h-3 w-full bg-[#062945]/60 rounded-full overflow-hidden p-0.5 border border-[#FFFFFF]/20">
               <div
-                className={`h-full rounded-full transition-all duration-1000 ${
-                  isPaid
-                    ? 'bg-gradient-to-r from-emerald-400 to-teal-300 shadow-[0_0_12px_rgba(52,211,153,0.8)]'
-                    : 'bg-gradient-to-r from-amber-400 to-emerald-400'
-                }`}
+                className="h-full rounded-full bg-gradient-to-r from-[#9FBBDE] via-[#FFFFFF] to-[#25A8E0] transition-all duration-1000 shadow-[0_0_10px_rgba(255,255,255,0.65)]"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
 
-            <div className="flex items-center justify-between text-xs text-white/70">
-              <span className="font-semibold text-emerald-400">
-                {progressPct}% Completed
-              </span>
+            <div className="flex items-center justify-between text-xs font-semibold text-[#FFFFFF]/95">
+              <span>{progressPct}% Completed</span>
               <span>
                 {isPaid
-                  ? '✨ 100% Cleared • No Outstanding Dues'
-                  : `${formatCurrency(remainingNeeded)} remaining to reach full clearance`}
+                  ? '100% Cleared • No Outstanding Dues'
+                  : `${formatCurrency(remainingNeeded)} left for full clearance`}
               </span>
             </div>
           </div>
 
-          {/* Card Bottom: Clearance Pass Action & Security Seal */}
-          <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 relative z-10">
-            <div className="flex items-center gap-2 text-xs text-white/60">
-              <ShieldCheck size={16} className="text-emerald-400" />
-              <span>Auditable Ledger Protected &bull; Verified ID</span>
+          {/* Card Footer */}
+          <div className="pt-4 border-t border-[#FFFFFF]/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 relative z-10">
+            <div className="flex items-center gap-2 text-xs text-[#FFFFFF]/90 font-medium">
+              <ShieldCheck size={16} className="text-[#FFFFFF]" />
+              <span>Audited PostgreSQL Ledger &bull; Verified Student Pass</span>
             </div>
 
             <button
+              type="button"
               onClick={() => setShowClearanceModal(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-white transition-all cursor-pointer backdrop-blur-md active:scale-98 shadow-sm"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#FFFFFF] hover:bg-[#ECECEC] text-xs font-bold text-[#1176BC] transition-all cursor-pointer active:scale-98 shadow-md"
             >
-              <QrCode size={14} className="text-emerald-300" />
+              <QrCode size={15} className="text-[#1176BC]" />
               <span>View Official Clearance Pass</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* 2.5. STUDENT 1-CLICK PWA INSTALL WIDGET (Prominently showing App Logo) */}
+      {/* 2.5. YOUR CLASS ADMIN & DIRECT CONTACT (Visible, Call, SMS Text, WhatsApp & In-App Note) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <div className="size-7 rounded-lg bg-[#1176BC] text-[#FFFFFF] flex items-center justify-center shadow-2xs">
+              <PhoneCall size={14} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF] leading-tight">
+                Your Class Admin &amp; Support
+              </h2>
+              <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB]">
+                Call or send a text message directly to your class administrator
+              </p>
+            </div>
+          </div>
+          {classLeaders.length > 0 && (
+            <span className="text-xs font-bold text-[#1176BC] dark:text-[#25A8E0] bg-[#9FBBDE]/25 dark:bg-[#172D47] border border-[#9FBBDE]/50 dark:border-[#203854] px-2.5 py-0.5 rounded-full">
+              {classLeaders.length} {classLeaders.length === 1 ? 'Admin' : 'Admins'}
+            </span>
+          )}
+        </div>
+
+        {leadersLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Skeleton className="h-32 rounded-2xl" />
+            <Skeleton className="h-32 rounded-2xl" />
+          </div>
+        ) : classLeaders.length === 0 ? (
+          <Card className="rounded-2xl border-[#ECECEC] dark:border-[#203854]">
+            <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+                  Need help from your Class Admin?
+                </p>
+                <p className="text-xs text-[#2F465E] dark:text-[#C6CACB]">
+                  No phone contact has been added yet for your batch, but you can write a direct text note in Class Discussion below.
+                </p>
+              </div>
+              <a
+                href="#class-discussion"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-[#FFFFFF] text-xs font-bold shadow-sm shrink-0"
+              >
+                <MessageSquareText size={14} />
+                <span>Write a Message</span>
+              </a>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {classLeaders.map((leader) => {
+              const waDigits = leader.phone ? formatWhatsAppNumber(leader.phone) : ''
+              const prefilledText = `Hello ${leader.name}, I am ${user?.name || 'a student'} (${user?.student_id || ''}) from ${data.className}.`
+              const isPrimaryClassAdmin = leader.isAssignedClassAdmin || leader.role === 'admin'
+
+              return (
+                <Card
+                  key={leader.id}
+                  className={`rounded-2xl overflow-hidden transition-all shadow-xs ${
+                    isPrimaryClassAdmin
+                      ? 'border-[#9FBBDE] dark:border-[#25A8E0]/50 bg-[#FFFFFF] dark:bg-[#102033]'
+                      : 'border-[#ECECEC] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033]'
+                  }`}
+                >
+                  <div
+                    className={`h-1 w-full ${
+                      isPrimaryClassAdmin
+                        ? 'bg-gradient-to-r from-[#1176BC] to-[#25A8E0]'
+                        : 'bg-[#9FBBDE] dark:bg-[#203854]'
+                    }`}
+                  />
+                  <CardContent className="p-4 sm:p-5 space-y-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="size-12 rounded-2xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shrink-0 text-[#FFFFFF] font-bold text-lg shadow-sm">
+                        {leader.name.charAt(0).toUpperCase()}
+                      </div>
+
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm sm:text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF] truncate">
+                            {leader.name}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                              leader.role === 'super_admin'
+                                ? 'bg-[#ECECEC] dark:bg-[#172D47] text-[#0B1A2B] dark:text-[#9FBBDE] border-[#C6CACB] dark:border-[#203854]'
+                                : 'bg-[#9FBBDE]/25 dark:bg-[#172D47] text-[#1176BC] dark:text-[#25A8E0] border-[#9FBBDE]/60 dark:border-[#25A8E0]/40'
+                            }`}
+                          >
+                            <Shield size={10} />
+                            {leader.role === 'super_admin' ? 'Super Admin' : 'Your Class Admin'}
+                          </span>
+                          {leader.phone && (
+                            <span className="text-xs font-mono font-semibold text-[#2F465E] dark:text-[#DCE8F5]">
+                              {leader.phone}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Row: Call + SMS Text + WhatsApp + In-App Text */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#ECECEC] dark:border-[#203854]">
+                      {leader.phone && (
+                        <>
+                          <a
+                            href={`tel:${leader.phone}`}
+                            className="flex-1 min-w-[90px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#1176BC] hover:bg-[#0D5E97] text-[#FFFFFF] text-xs font-bold transition-colors shadow-2xs"
+                            title={`Call ${leader.name}`}
+                          >
+                            <Phone size={13} />
+                            <span>Call</span>
+                          </a>
+
+                          <a
+                            href={`sms:${leader.phone}?body=${encodeURIComponent(prefilledText)}`}
+                            className="flex-1 min-w-[95px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#25A8E0] hover:bg-[#1D96CA] text-[#FFFFFF] text-xs font-bold transition-colors shadow-2xs"
+                            title={`Send SMS text to ${leader.name}`}
+                          >
+                            <MessageSquareText size={13} />
+                            <span>SMS Text</span>
+                          </a>
+
+                          {waDigits && (
+                            <a
+                              href={`https://wa.me/${waDigits}?text=${encodeURIComponent(prefilledText)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#ECECEC] dark:bg-[#172D47] hover:bg-[#9FBBDE]/30 dark:hover:bg-[#214568] border border-[#C6CACB] dark:border-[#203854] text-[#0B1A2B] dark:text-[#FFFFFF] text-xs font-bold transition-colors"
+                              title={`Message ${leader.name} on WhatsApp`}
+                            >
+                              <MessageSquare size={13} className="text-[#0C9B5E] dark:text-[#22C55E]" />
+                              <span>WhatsApp</span>
+                            </a>
+                          )}
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => openQuickTextModal(leader)}
+                        className={`${
+                          leader.phone ? '' : 'w-full'
+                        } inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#1176BC]/35 dark:border-[#25A8E0]/45 bg-[#FFFFFF] dark:bg-[#102033] hover:bg-[#9FBBDE]/20 dark:hover:bg-[#172D47] text-[#1176BC] dark:text-[#25A8E0] text-xs font-bold transition-colors cursor-pointer`}
+                        title={`Write an in-app text message to ${leader.name}`}
+                      >
+                        <Send size={12} />
+                        <span>Write a Text</span>
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 3. STUDENT 1-CLICK PWA INSTALL WIDGET */}
       {!isInstalled && (
-        <div className="rounded-3xl border border-brand-500/30 bg-gradient-to-r from-brand-50/90 via-sky-50/50 to-white dark:from-brand-950/40 dark:via-slate-900 dark:to-bg-card p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="rounded-3xl border border-[#9FBBDE]/60 dark:border-[#203854] bg-gradient-to-r from-[#FFFFFF] via-[#EAF4FB]/80 to-[#FFFFFF] dark:from-[#102033] dark:via-[#172D47] dark:to-[#102033] p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="size-14 sm:size-16 rounded-2xl bg-white dark:bg-slate-800 p-2.5 shadow-md border border-brand-200 dark:border-brand-800/60 flex items-center justify-center shrink-0">
+            <div className="size-14 sm:size-16 rounded-2xl bg-[#FFFFFF] dark:bg-[#0D1B2C] p-2.5 shadow-sm border border-[#ECECEC] dark:border-[#203854] flex items-center justify-center shrink-0">
               <AppLogo className="size-full object-contain" alt={appName} />
             </div>
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700 dark:text-brand-300 bg-brand-100 dark:bg-brand-900/60 px-2 py-0.5 rounded-full">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#FFFFFF] bg-[#1176BC] px-2.5 py-0.5 rounded-full">
                   Install Application
                 </span>
-                <span className="text-xs text-muted font-medium">1-Tap Fast Access</span>
+                <span className="text-xs text-[#52677D] dark:text-[#C6CACB] font-semibold">1-Tap Fast Access</span>
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-text">
+              <h3 className="text-sm sm:text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
                 Install {appName} on your mobile phone
               </h3>
-              <p className="text-xs text-secondary leading-relaxed">
+              <p className="text-xs text-[#2F465E] dark:text-[#DCE8F5] leading-relaxed">
                 Add {appName} to your home screen with its official logo for instant offline access and real-time updates.
               </p>
             </div>
@@ -357,23 +652,27 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         </div>
       )}
 
-      {/* 3. PROFESSIONAL CLASS ANNOUNCEMENTS BULLETIN */}
+      {/* 4. OFFICIAL CLASS ANNOUNCEMENTS BULLETIN */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
-            <div className="size-6 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+            <div className="size-6 rounded-full bg-[#1176BC]/12 dark:bg-[#25A8E0]/20 flex items-center justify-center text-[#1176BC] dark:text-[#25A8E0]">
               <Bell size={14} />
             </div>
-            <h2 className="text-base font-bold text-text">Official Class Announcements & Bulletins</h2>
+            <h2 className="text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+              Official Class Announcements &amp; Bulletins
+            </h2>
           </div>
-          <span className="text-xs text-muted font-medium">Live Updates</span>
+          <span className="text-xs text-[#52677D] dark:text-[#9FBBDE] font-semibold">Live Updates</span>
         </div>
 
         {classNotifs.length === 0 ? (
-          <Card className="rounded-2xl border-border/70">
-            <CardContent className="py-6 px-4 text-center space-y-1 text-muted text-xs">
-              <p className="font-semibold text-text">All Caught Up!</p>
-              <p>No active broadcasts for your class group right now. Any official news will appear here.</p>
+          <Card className="rounded-2xl border-[#ECECEC] dark:border-[#203854]">
+            <CardContent className="py-6 px-4 text-center space-y-1 text-xs">
+              <p className="font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">All Caught Up!</p>
+              <p className="text-[#52677D] dark:text-[#C6CACB]">
+                No active broadcasts for your class group right now. Any official news will appear here.
+              </p>
             </CardContent>
           </Card>
         ) : (
@@ -384,19 +683,19 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                 onClick={() => markAsRead(n.id)}
                 className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                   n.read
-                    ? 'bg-bg-card border-border/70 hover:border-border-hover'
-                    : 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/50 shadow-xs'
+                    ? 'bg-[#FFFFFF] dark:bg-[#102033] border-[#ECECEC] dark:border-[#203854] hover:border-[#C6CACB] dark:hover:border-[#9FBBDE]'
+                    : 'bg-[#EAF4FB] dark:bg-[#172D47] border-[#25A8E0]/60 shadow-xs'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-text">{n.title}</span>
-                        {!n.read && (
-                          <span className="size-2 rounded-full bg-emerald-500 shrink-0" />
-                        )}
-                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.2 rounded-full border border-emerald-500/20 uppercase tracking-wider">
+                        <span className="text-xs sm:text-sm font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+                          {n.title}
+                        </span>
+                        {!n.read && <span className="size-2 rounded-full bg-[#25A8E0] shrink-0" />}
+                        <span className="text-[10px] font-bold text-[#1176BC] dark:text-[#FFFFFF] bg-[#9FBBDE]/25 dark:bg-[#1176BC]/40 px-2 py-0.5 rounded-full border border-[#9FBBDE]/50 dark:border-[#25A8E0]/40 uppercase tracking-wider">
                           {n.category || 'Announcement'}
                         </span>
                       </div>
@@ -408,7 +707,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                             e.stopPropagation()
                             markAsRead(n.id)
                           }}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 hover:bg-emerald-600 hover:text-white dark:bg-emerald-900/50 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-[#FFFFFF] bg-[#1176BC] hover:bg-[#0D5E97] px-2.5 py-1 rounded-md transition-colors cursor-pointer"
                         >
                           <Check size={11} /> Mark read
                         </button>
@@ -419,20 +718,20 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                             e.stopPropagation()
                             markAsUnread(n.id)
                           }}
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted hover:text-[#1176BC] px-2 py-0.5 rounded-md hover:bg-[#EAF4FB] dark:hover:bg-[#1176BC]/20 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#52677D] dark:text-[#C6CACB] hover:text-[#1176BC] dark:hover:text-[#25A8E0] px-2 py-0.5 rounded-md hover:bg-[#ECECEC] dark:hover:bg-[#102033] transition-colors cursor-pointer"
                           title="Click to mark as unread"
                         >
-                          <Check size={11} className="text-emerald-500" /> Read
+                          <Check size={11} className="text-[#0C9B5E] dark:text-[#22C55E]" /> Read
                         </button>
                       )}
                     </div>
 
-                    <p className="text-xs text-secondary leading-relaxed whitespace-pre-wrap break-words">
+                    <p className="text-xs text-[#2F465E] dark:text-[#DCE8F5] leading-relaxed whitespace-pre-wrap break-words">
                       {n.body}
                     </p>
 
-                    <div className="flex items-center gap-2 pt-1 text-[11px] text-muted">
-                      <span className="font-medium text-text">
+                    <div className="flex items-center gap-2 pt-1 text-[11px] text-[#52677D] dark:text-[#C6CACB]">
+                      <span className="font-semibold text-[#0B1A2B] dark:text-[#FFFFFF]">
                         {n.senderName ? `By ${n.senderName}` : 'Class Leadership'}
                       </span>
                       <span>&bull;</span>
@@ -446,120 +745,123 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         )}
       </div>
 
-      {/* 4. CLASS FINANCIAL SUMMARY POOL (Collective Transparency) */}
+      {/* 5. CLASS FINANCIAL SUMMARY POOL */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
-            <TrendingUp size={16} className="text-brand-600 dark:text-brand-400" />
-            <h2 className="text-base font-bold text-text">Class Financial Transparency Pool</h2>
+            <TrendingUp size={16} className="text-[#1176BC] dark:text-[#25A8E0]" />
+            <h2 className="text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+              Class Financial Transparency Pool
+            </h2>
           </div>
-          <span className="text-xs text-muted font-medium">
+          <span className="text-xs text-[#52677D] dark:text-[#9FBBDE] font-semibold">
             {data.totalPaidStudents} of {data.totalStudents} classmates cleared
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-          {/* Card 1: Total Pooled */}
-          <Card className="rounded-2xl border-border/80 hover:border-border-hover transition-colors">
+          <Card className="rounded-2xl border-[#ECECEC] dark:border-[#203854] hover:border-[#25A8E0] transition-colors">
             <CardContent className="p-4 space-y-1">
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-muted block">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-[#52677D] dark:text-[#9FBBDE] block">
                 Total Class Collections
               </span>
-              <p className="text-xl sm:text-2xl font-bold font-serif text-text tabular-nums">
+              <p className="text-xl sm:text-2xl font-bold font-serif text-[#1176BC] dark:text-[#25A8E0] tabular-nums">
                 {formatCurrency(data.classTotal)}
               </p>
-              <p className="text-[11px] text-muted">
+              <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB]">
                 Pooled from {data.totalStudents} enrolled peers
               </p>
             </CardContent>
           </Card>
 
-          {/* Card 2: Total Spent */}
-          <Card className="rounded-2xl border-border/80 hover:border-border-hover transition-colors">
+          <Card className="rounded-2xl border-[#ECECEC] dark:border-[#203854] hover:border-[#25A8E0] transition-colors">
             <CardContent className="p-4 space-y-1">
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-muted block">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-[#52677D] dark:text-[#9FBBDE] block">
                 Approved Class Expenses
               </span>
-              <p className="text-xl sm:text-2xl font-bold font-serif text-error tabular-nums">
+              <p className="text-xl sm:text-2xl font-bold font-serif text-[#DC2626] dark:text-[#F87171] tabular-nums">
                 {formatCurrency(data.expenseTotal)}
               </p>
-              <p className="text-[11px] text-muted">
-                Handouts, materials & exam supplies
+              <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB]">
+                Handouts, materials &amp; exam supplies
               </p>
             </CardContent>
           </Card>
 
-          {/* Card 3: Safe Balance */}
-          <Card className="rounded-2xl border-border/80 hover:border-border-hover transition-colors">
+          <Card className="rounded-2xl border-[#ECECEC] dark:border-[#203854] hover:border-[#25A8E0] transition-colors">
             <CardContent className="p-4 space-y-1">
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-muted block">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-[#52677D] dark:text-[#9FBBDE] block">
                 Net Class Bank Balance
               </span>
               <p
                 className={`text-xl sm:text-2xl font-bold font-serif tabular-nums ${
-                  data.remainingBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-error'
+                  data.remainingBalance >= 0
+                    ? 'text-[#0C9B5E] dark:text-[#22C55E]'
+                    : 'text-[#DC2626] dark:text-[#F87171]'
                 }`}
               >
                 {formatCurrency(data.remainingBalance)}
               </p>
-              <p className="text-[11px] text-muted">
-                Audited & available in class ledger
+              <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB]">
+                Audited &amp; available in class ledger
               </p>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* 5. MY PERSONAL CONTRIBUTION RECEIPTS (Ledger Record) */}
+      {/* 6. PERSONAL PAYMENT RECEIPTS */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
-            <Receipt size={16} className="text-emerald-600 dark:text-emerald-400" />
-            <h2 className="text-base font-bold text-text">My Official Payment Receipts</h2>
+            <Receipt size={16} className="text-[#1176BC] dark:text-[#25A8E0]" />
+            <h2 className="text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+              My Official Payment Receipts
+            </h2>
           </div>
-          <span className="text-xs font-semibold text-muted">
+          <span className="text-xs font-bold text-[#52677D] dark:text-[#9FBBDE]">
             {data.contributions.length} {data.contributions.length === 1 ? 'record' : 'records'}
           </span>
         </div>
 
         {data.contributions.length === 0 ? (
-          <Card className="rounded-2xl border-dashed">
-            <CardContent className="py-10 text-center space-y-2 text-muted">
-              <Receipt size={32} className="mx-auto opacity-30" />
-              <p className="text-xs font-medium text-text">No payment records found</p>
-              <p className="text-xs max-w-sm mx-auto">
+          <Card className="rounded-2xl border-dashed border-[#C6CACB] dark:border-[#203854]">
+            <CardContent className="py-10 text-center space-y-2">
+              <Receipt size={32} className="mx-auto text-[#9FBBDE]" />
+              <p className="text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">No payment records found</p>
+              <p className="text-xs text-[#52677D] dark:text-[#C6CACB] max-w-sm mx-auto">
                 Once your class admin verifies and records your contribution, your verified electronic receipt will be logged here.
               </p>
             </CardContent>
           </Card>
         ) : (
-          <Card className="rounded-2xl overflow-hidden">
-            <CardContent className="p-0 divide-y divide-border/40">
+          <Card className="rounded-2xl overflow-hidden border-[#ECECEC] dark:border-[#203854]">
+            <CardContent className="p-0 divide-y divide-[#ECECEC] dark:divide-[#203854]">
               {data.contributions.map((c, i) => (
                 <div
                   key={c.id}
-                  className="p-4 flex items-center justify-between hover:bg-bg-elevated/40 transition-colors gap-3"
+                  className="p-4 flex items-center justify-between hover:bg-[#EAF4FB]/50 dark:hover:bg-[#172D47]/60 transition-colors gap-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 font-mono font-bold text-xs">
+                    <div className="size-10 rounded-xl bg-[#9FBBDE]/25 dark:bg-[#172D47] text-[#1176BC] dark:text-[#25A8E0] border border-[#9FBBDE]/50 dark:border-[#203854] flex items-center justify-center shrink-0 font-mono font-bold text-xs">
                       #{data.contributions.length - i}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-text truncate">
+                      <p className="text-sm font-bold text-[#0B1A2B] dark:text-[#FFFFFF] truncate">
                         Class Contribution Payment
                       </p>
-                      <p className="text-xs text-muted">
+                      <p className="text-xs text-[#52677D] dark:text-[#C6CACB]">
                         Receipt Date: {formatDate(c.date)}
                       </p>
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    <span className="text-base font-bold text-[#0C9B5E] dark:text-[#22C55E] tabular-nums">
                       +{formatCurrency(Number(c.amount))}
                     </span>
-                    <span className="block text-[10px] text-muted font-medium">
-                      ✓ Recorded
+                    <span className="block text-[10px] text-[#52677D] dark:text-[#C6CACB] font-semibold">
+                      &check; Recorded
                     </span>
                   </div>
                 </div>
@@ -569,118 +871,151 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         )}
       </div>
 
-      {/* 5.3. CYCLE & CONTRIBUTION BREAKDOWN + EXPENSES TRANSPARENCY */}
+      {/* 7. CYCLE & CONTRIBUTION BREAKDOWN */}
       <StudentContributionBreakdown userId={userId} classId={classId} />
 
-      {/* 5.5. CONTACT YOUR CLASS LEADERS */}
-      {classLeaders.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <div className="size-6 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-600 dark:text-brand-400">
-                <PhoneCall size={14} />
-              </div>
-              <h2 className="text-base font-bold text-text">Contact Your Class Leaders</h2>
-            </div>
-            <span className="text-xs text-muted font-medium">{classLeaders.length} {classLeaders.length === 1 ? 'leader' : 'leaders'}</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {classLeaders.map((leader) => (
-              <Card key={leader.id} className="rounded-2xl border-border/80 hover:border-border-hover transition-colors">
-                <CardContent className="p-4 flex items-center gap-4">
-                  {/* Avatar */}
-                  <div className="size-12 rounded-2xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shrink-0 text-white font-bold text-lg shadow-sm">
-                    {leader.name.charAt(0).toUpperCase()}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-text truncate">{leader.name}</p>
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border mt-0.5 ${
-                      leader.role === 'super_admin'
-                        ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-500/20'
-                        : 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border-brand-500/20'
-                    }`}>
-                      {leader.role === 'super_admin' ? '👑 Super Admin' : '🛡️ Class Admin'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5 shrink-0">
-                    {leader.phone ? (
-                      <>
-                        <a
-                          href={`tel:${leader.phone}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold transition-colors shadow-xs"
-                          title={`Call ${leader.name}`}
-                        >
-                          <Phone size={12} />
-                          <span>Call</span>
-                        </a>
-                        <a
-                          href={`https://wa.me/${leader.phone.replace(/\D/g, '')}?text=Asc ${encodeURIComponent(leader.name)}, waxaan ahay ${encodeURIComponent(user?.name || 'student')} (${user?.student_id || ''}). Waxaan rabnaa in aan kula xiriirno arrimaha fasalka.`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#1ebe57] text-white text-xs font-semibold transition-colors shadow-xs"
-                          title={`WhatsApp ${leader.name}`}
-                        >
-                          <MessageSquare size={12} />
-                          <span>WA</span>
-                        </a>
-                      </>
-                    ) : (
-                      <span className="text-[11px] text-muted italic">No phone</span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 6. CLASS DISCUSSION & STUDENT FEEDBACK */}
+      {/* 8. CLASS DISCUSSION & STUDENT FEEDBACK */}
       <ClassCommentsSection classId={classId} />
 
-      {/* 7. DIGITAL CLEARANCE PASS MODAL */}
+      {/* QUICK DIRECT TEXT MESSAGE MODAL */}
+      <Modal
+        open={Boolean(textTarget)}
+        onClose={() => {
+          if (!textSending) {
+            setTextTarget(null)
+            setTextStatus(null)
+          }
+        }}
+        title={textTarget ? `✉️ Write a Text to ${textTarget.name}` : 'Write a Text'}
+      >
+        {textTarget && (
+          <form onSubmit={handleSendInAppText} className="space-y-4">
+            <div className="rounded-xl border border-[#ECECEC] dark:border-[#203854] bg-[#F4F8FC] dark:bg-[#0D1B2C] p-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF] truncate">
+                  {textTarget.name}
+                </p>
+                <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB]">
+                  {textTarget.role === 'super_admin' ? 'Super Admin' : 'Class Admin'}
+                  {textTarget.phone ? ` · ${textTarget.phone}` : ''}
+                </p>
+              </div>
+              {textTarget.phone && (
+                <a
+                  href={`sms:${textTarget.phone}?body=${encodeURIComponent(
+                    `Hello ${textTarget.name}, I am ${user?.name || ''} (${user?.student_id || ''}): ${textBody}`
+                  )}`}
+                  className="px-3 py-1.5 rounded-lg bg-[#25A8E0] text-[#FFFFFF] text-[11px] font-bold shrink-0 hover:bg-[#1D96CA]"
+                >
+                  Open Phone SMS
+                </a>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF] mb-1.5">
+                Message (posts to Class Discussion &amp; notifies {textTarget.name})
+              </label>
+              <textarea
+                value={textBody}
+                onChange={(e) => setTextBody(e.target.value)}
+                rows={3}
+                maxLength={450}
+                required
+                placeholder={`Write your message to ${textTarget.name}...`}
+                className="w-full rounded-xl border border-[#C6CACB] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033] p-3 text-sm text-[#0B1A2B] dark:text-[#FFFFFF] placeholder:text-[#52677D] dark:placeholder:text-[#9FBBDE] focus:outline-none focus:ring-2 focus:ring-[#25A8E0]/40"
+              />
+            </div>
+
+            {textStatus && (
+              <p
+                className={`text-xs font-medium p-2.5 rounded-xl border ${
+                  textStatus.ok
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                }`}
+              >
+                {textStatus.msg}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={textSending}
+                onClick={() => setTextTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                loading={textSending}
+                disabled={!textBody.trim() || textSending}
+                className="bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-[#FFFFFF]"
+              >
+                <Send size={14} /> Send Message
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* DIGITAL CLEARANCE PASS MODAL */}
       <Modal
         open={showClearanceModal}
         onClose={() => setShowClearanceModal(false)}
         title="🎓 Official Contribution Clearance Pass"
       >
         <div className="space-y-6 py-2">
-          {/* Printable Ticket Pass Box */}
-          <div className="p-6 rounded-2xl bg-gradient-to-br from-bg-card to-bg-elevated border-2 border-emerald-500/30 shadow-xl space-y-5 text-center relative overflow-hidden">
+          <div className="p-6 rounded-2xl bg-gradient-to-br from-[#FFFFFF] to-[#EAF4FB] dark:from-[#102033] dark:to-[#172D47] border-2 border-[#1176BC]/35 dark:border-[#25A8E0]/45 shadow-xl space-y-5 text-center relative overflow-hidden">
             <div className="space-y-1">
-              <div className="size-12 rounded-2xl bg-white dark:bg-slate-800 p-2 shadow-xs border border-border mx-auto mb-2 flex items-center justify-center">
+              <div className="size-12 rounded-2xl bg-[#FFFFFF] p-2 shadow-xs border border-[#ECECEC] mx-auto mb-2 flex items-center justify-center">
                 <AppLogo className="size-full object-contain" alt={appName} />
               </div>
-              <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold block">
+              <span className="text-[10px] uppercase tracking-widest text-[#1176BC] dark:text-[#25A8E0] font-bold block">
                 {appName} Transparency Network
               </span>
-              <h3 className="text-xl font-bold text-text">Student Contribution Clearance</h3>
-              <p className="text-xs text-muted">Batch: {data.className}</p>
+              <h3 className="text-xl font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+                Student Contribution Clearance
+              </h3>
+              <p className="text-xs text-[#52677D] dark:text-[#C6CACB]">Batch: {data.className}</p>
             </div>
 
-            <div className="py-4 border-y border-border/80 grid grid-cols-2 gap-4 text-left">
+            <div className="py-4 border-y border-[#C6CACB]/60 dark:border-[#203854] grid grid-cols-2 gap-4 text-left">
               <div>
-                <span className="text-[10px] text-muted uppercase font-semibold block">Student Name</span>
-                <span className="text-sm font-bold text-text truncate block">{user?.name}</span>
+                <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] uppercase font-bold block">
+                  Student Name
+                </span>
+                <span className="text-sm font-bold text-[#0B1A2B] dark:text-[#FFFFFF] truncate block">
+                  {user?.name}
+                </span>
               </div>
               <div>
-                <span className="text-[10px] text-muted uppercase font-semibold block">Student ID</span>
-                <span className="text-sm font-mono font-bold text-emerald-600 block">{user?.student_id}</span>
+                <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] uppercase font-bold block">
+                  Student ID
+                </span>
+                <span className="text-sm font-mono font-bold text-[#1176BC] dark:text-[#25A8E0] block">
+                  {user?.student_id}
+                </span>
               </div>
               <div>
-                <span className="text-[10px] text-muted uppercase font-semibold block">Total Paid</span>
-                <span className="text-base font-serif font-bold text-emerald-600 block">
+                <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] uppercase font-bold block">
+                  Total Paid
+                </span>
+                <span className="text-base font-serif font-bold text-[#0C9B5E] dark:text-[#22C55E] block">
                   {formatCurrency(data.personalTotal)}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] text-muted uppercase font-semibold block">Status</span>
+                <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] uppercase font-bold block">
+                  Status
+                </span>
                 <span
                   className={`text-xs font-bold uppercase inline-block px-2 py-0.5 rounded-md ${
-                    isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    isPaid
+                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
                   }`}
                 >
                   {isPaid ? 'Fully Cleared' : 'Pending Clearance'}
@@ -688,25 +1023,20 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
               </div>
             </div>
 
-            <div className="flex items-center justify-center gap-2 text-xs text-muted">
-              <CheckCircle2 size={16} className="text-emerald-600" />
+            <div className="flex items-center justify-center gap-2 text-xs text-[#52677D] dark:text-[#C6CACB]">
+              <CheckCircle2 size={16} className="text-[#0C9B5E] dark:text-[#22C55E]" />
               <span>Verified against {appName} PostgreSQL Ledger</span>
             </div>
           </div>
 
           <div className="flex gap-2">
             <Button
-              className="flex-1 justify-center bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => {
-                window.print()
-              }}
+              className="flex-1 justify-center bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-[#FFFFFF]"
+              onClick={() => window.print()}
             >
               Print / Save PDF
             </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setShowClearanceModal(false)}
-            >
+            <Button variant="secondary" onClick={() => setShowClearanceModal(false)}>
               Close
             </Button>
           </div>
