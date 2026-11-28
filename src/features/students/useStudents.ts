@@ -64,7 +64,11 @@ export function useStudents(classId?: string | null) {
 
   async function remove(id: string) {
     // Instant optimistic deletion from UI (0ms delay)
-    const student = students.find((s) => s.id === id)
+    let student = students.find((s) => s.id === id)
+    if (!student) {
+      const { data: fetched } = await supabase.from('profiles').select('*').eq('id', id).single()
+      if (fetched) student = fetched as Profile
+    }
     setStudents((prev) => prev.filter((s) => s.id !== id))
 
     if (student) {
@@ -72,15 +76,21 @@ export function useStudents(classId?: string | null) {
         'student',
         id,
         student.name,
-        { student_id: student.student_id, name: student.name, phone: student.phone, role: student.role },
+        {
+          student_id: student.student_id,
+          name: student.name,
+          phone: student.phone,
+          role: student.role,
+          class_id: student.class_id ?? null,
+        },
         student.class_id ?? null,
       )
     }
     const { error } = await supabase.from('profiles').delete().eq('id', id)
     if (!error) {
       await adminDeleteUser(id)
-      fetch()
     }
+    fetch()
     return error?.message ?? null
   }
 

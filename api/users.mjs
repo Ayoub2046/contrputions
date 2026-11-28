@@ -52,6 +52,112 @@ function normalizeAuthPassword(sid, pwd) {
   return p
 }
 
+async function serviceFetch(path, options = {}) {
+  return fetch(`${SUPABASE_URL}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      apikey: SERVICE_ROLE_KEY,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+}
+
+async function clearTable(table, filterQuery) {
+  try {
+    const resp = await serviceFetch(`/rest/v1/${table}?${filterQuery}`, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=minimal' },
+    })
+    return { ok: resp.ok, status: resp.status }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+}
+
+async function handleResetAppData(callerId, resetBranding = false) {
+  const anyUuidFilter = 'id=neq.00000000-0000-0000-0000-000000000000'
+  const summary = {
+    clearedTables: [],
+    deletedAuthUsers: 0,
+    preservedUserId: callerId,
+  }
+
+  // 1. Delete dependent child tables before parent tables (profiles, classes)
+  const orderedDeletes = [
+    ['notification_reads', anyUuidFilter],
+    ['notifications', anyUuidFilter],
+    ['admin_messages', anyUuidFilter],
+    ['class_comments', anyUuidFilter],
+    ['recycle_bin', anyUuidFilter],
+    ['student_contribution_targets', anyUuidFilter],
+    ['contributions', anyUuidFilter],
+    ['expenses', anyUuidFilter],
+    ['activity_logs', anyUuidFilter],
+    ['class_admins', 'class_id=neq.00000000-0000-0000-0000-000000000000'],
+    ['push_subscriptions', `user_id=neq.${callerId}`],
+    ['push_subscriptions', 'user_id=is.null'],
+    ['admin_passwords', `user_id=neq.${callerId}`],
+  ]
+
+  for (const [table, filter] of orderedDeletes) {
+    const res = await clearTable(table, filter)
+    if (res.ok) summary.clearedTables.push(table)
+  }
+
+  // Detach caller from any class before removing classes
+  await serviceFetch(`/rest/v1/profiles?id=eq.${callerId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ class_id: null }),
+  })
+  await serviceFetch(`/rest/v1/push_subscriptions?user_id=eq.${callerId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ class_id: null }),
+  }).catch(() => {})
+
+  // 2. Delete all non-preserved profiles
+  const profRes = await clearTable('profiles', `id=neq.${callerId}`)
+  if (profRes.ok) summary.clearedTables.push('profiles')
+
+  // 3. Delete all non-preserved Supabase Auth users (paginated so orphaned usernames are freed too)
+  let page = 1
+  const idsToDelete = []
+  while (page <= 20) {
+    const listResp = await serviceFetch(`/auth/v1/admin/users?page=${page}&per_page=200`, {
+      method: 'GET',
+    })
+    if (!listResp.ok) break
+    const listData = await listResp.json().catch(() => ({}))
+    const users = Array.isArray(listData?.users) ? listData.users : []
+    if (users.length === 0) break
+    for (const u of users) {
+      if (u?.id && u.id !== callerId) idsToDelete.push(u.id)
+    }
+    if (users.length < 200) break
+    page++
+  }
+
+  for (const uid of idsToDelete) {
+    const delRes = await serviceFetch(`/auth/v1/admin/users/${uid}`, { method: 'DELETE' })
+    if (delRes.ok) summary.deletedAuthUsers++
+  }
+
+  // 4. Delete all classes
+  const clsRes = await clearTable('classes', anyUuidFilter)
+  if (clsRes.ok) summary.clearedTables.push('classes')
+
+  // 5. Optionally reset branding settings
+  if (resetBranding) {
+    const brandRes = await clearTable('app_settings', 'key=in.(app_name,app_logo_url)')
+    if (brandRes.ok) summary.clearedTables.push('app_settings')
+  }
+
+  return summary
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, PUT, DELETE, OPTIONS')
@@ -81,6 +187,12 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
       const body = req.body || {}
+
+      // Full application reset (preserving ONLY the active Super Admin account/username)
+      if (body.action === 'reset_app_data') {
+        const summary = await handleResetAppData(auth.callerId, Boolean(body.resetBranding))
+        return res.status(200).json({ ok: true, ...summary })
+      }
 
       // Batch import support for CSV
       if (Array.isArray(body.students)) {

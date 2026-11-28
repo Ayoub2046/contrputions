@@ -10,18 +10,20 @@ import { Badge } from '../../components/ui/Badge'
 import { useRecycleBin } from './useRecycleBin'
 import { formatCurrency, formatDate } from '../../lib/utils'
 import { SkeletonTable } from '../../components/ui/Skeleton'
-import { Trash2, RotateCcw, PiggyBank, User, Receipt } from 'lucide-react'
+import { Trash2, RotateCcw, PiggyBank, User, Receipt, School, RefreshCw } from 'lucide-react'
 import type { RecycleBinItem } from './recycleBinManager'
 
 function itemTypeIcon(type: string) {
   if (type === 'student') return <User size={15} className="text-brand-500" />
   if (type === 'expense') return <Receipt size={15} className="text-warning" />
+  if (type === 'class') return <School size={15} className="text-[#1176BC]" />
   return <PiggyBank size={15} className="text-error" />
 }
 
 function itemTypeBadge(type: string) {
   if (type === 'student') return <Badge variant="info">Student</Badge>
   if (type === 'expense') return <Badge variant="warning">Expense</Badge>
+  if (type === 'class') return <Badge variant="info">Class</Badge>
   return <Badge variant="danger">Contribution</Badge>
 }
 
@@ -38,13 +40,16 @@ export function RecycleBinPage() {
   const [confirmPermanentDelete, setConfirmPermanentDelete] = useState<RecycleBinItem | null>(null)
   const [permanentDeleteText, setPermanentDeleteText] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
 
-  useEffect(() => { refetch() }, [])
+  useEffect(() => { refetch() }, [refetch])
 
   async function handleRestore() {
     if (!confirmRestore) return
     setActionLoading(true)
-    await restoreItem(confirmRestore)
+    setActionError('')
+    const err = await restoreItem(confirmRestore)
+    if (err) setActionError(err)
     setConfirmRestore(null)
     setActionLoading(false)
   }
@@ -52,7 +57,9 @@ export function RecycleBinPage() {
   async function handlePermanentDelete() {
     if (!confirmPermanentDelete) return
     setActionLoading(true)
-    await permanentDeleteItem(confirmPermanentDelete)
+    setActionError('')
+    const err = await permanentDeleteItem(confirmPermanentDelete)
+    if (err) setActionError(err)
     setConfirmPermanentDelete(null)
     setPermanentDeleteText('')
     setActionLoading(false)
@@ -60,10 +67,22 @@ export function RecycleBinPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-text">{t('recycleBin.title')}</h1>
-        <p className="text-sm text-muted">{t('recycleBin.subtitle')}</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-text">{t('recycleBin.title')}</h1>
+          <p className="text-sm text-muted">{t('recycleBin.subtitle')}</p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={loading}>
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          Refresh
+        </Button>
       </div>
+
+      {actionError && (
+        <div className="rounded-xl border border-error/30 bg-error/10 px-4 py-2.5 text-xs font-medium text-error">
+          {actionError}
+        </div>
+      )}
 
       <Card>
         {loading ? (

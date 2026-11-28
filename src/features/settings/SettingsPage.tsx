@@ -4,14 +4,15 @@ import { useAuth } from '../auth/AuthContext'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { adminCreateUser } from '../../lib/admin-api'
+import { adminCreateUser, adminResetAppData } from '../../lib/admin-api'
 import { supabase } from '../../lib/supabase'
-import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2, Type, Sparkles, User } from 'lucide-react'
+import { Modal } from '../../components/ui/Modal'
+import { Globe, Shield, KeyRound, Image as ImageIcon, Upload, CheckCircle2, Type, Sparkles, User, AlertTriangle, RotateCcw } from 'lucide-react'
 import { DEFAULT_APP_NAME, DEFAULT_LOGO, updateDynamicManifest, notifyAppBrandingChanged } from '../../hooks/useAppLogo'
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation()
-  const { user } = useAuth()
+  const { user, setActiveClassId } = useAuth()
   const isSuperAdmin = user?.role === 'super_admin'
 
   const [sid, setSid] = useState('')
@@ -41,6 +42,14 @@ export function SettingsPage() {
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoMsg, setLogoMsg] = useState('')
   const logoInputRef = useRef<HTMLInputElement>(null)
+
+  // Danger Zone: Full Application Reset (preserving active Super Admin username/account)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetConfirmText, setResetConfirmText] = useState('')
+  const [keepBranding, setKeepBranding] = useState(true)
+  const [resettingApp, setResettingApp] = useState(false)
+  const [resetMsg, setResetMsg] = useState('')
+  const [resetErr, setResetErr] = useState('')
 
   useEffect(() => {
     // Load current app name and logo URL directly from Supabase app_settings table
@@ -206,6 +215,45 @@ export function SettingsPage() {
     setMsg(error || t('settings.success'))
     if (!error) { setSid(''); setName(''); setAdminPhone(''); setPwd('') }
     setLoading(false)
+  }
+
+  async function handleResetApplicationData() {
+    if (resetConfirmText.trim().toUpperCase() !== 'RESET') return
+    setResettingApp(true)
+    setResetErr('')
+    setResetMsg('')
+
+    const res = await adminResetAppData(!keepBranding)
+    if (res.error) {
+      setResetErr(res.error)
+      setResettingApp(false)
+      return
+    }
+
+    setActiveClassId(null)
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith('classbank_read_notifs_')) {
+          localStorage.removeItem(k)
+        }
+      }
+    } catch {}
+
+    if (!keepBranding) {
+      setAppNameInput(DEFAULT_APP_NAME)
+      setCurrentLogo(DEFAULT_LOGO)
+      document.title = DEFAULT_APP_NAME
+      updateDynamicManifest(DEFAULT_APP_NAME, DEFAULT_LOGO)
+      notifyAppBrandingChanged(DEFAULT_APP_NAME, DEFAULT_LOGO)
+    }
+
+    setShowResetModal(false)
+    setResetConfirmText('')
+    setResettingApp(false)
+    setResetMsg(
+      `✓ All application data cleared (${res.deletedAuthUsers ?? 0} user accounts removed). Your admin account "${user?.student_id}" was preserved.`
+    )
   }
 
   async function handlePasswordChange(e: React.FormEvent) {
@@ -501,7 +549,137 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </div>
+
+        {/* Danger Zone — Clear All Application Data (Super Admin only, preserves current username) */}
+        {isSuperAdmin && (
+          <div className="border-t border-red-200/70 dark:border-red-900/50 bg-red-50/30 dark:bg-red-950/15">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="size-9 rounded-lg bg-red-100 dark:bg-red-950/60 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle size={18} className="text-red-600 dark:text-red-400" />
+                </div>
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-sm font-bold text-red-700 dark:text-red-400">
+                      Clear Application Data
+                    </h2>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800">
+                      Danger Zone
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#4a5a72] dark:text-[#9FBBDE] leading-relaxed">
+                    Permanently erase all classes, students, other admins, contributions, student targets, expenses, comments, notifications, activity logs, and recycle bin items. Your login username{' '}
+                    <strong className="font-mono text-[#1a2332] dark:text-[#e8f0f8]">
+                      @{user?.student_id}
+                    </strong>{' '}
+                    ({user?.name}) and password are kept intact.
+                  </p>
+
+                  {resetMsg && (
+                    <p className="text-xs font-medium text-[#0C9B5E] bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 flex items-center gap-1.5">
+                      <CheckCircle2 size={14} className="shrink-0" />
+                      <span>{resetMsg}</span>
+                    </p>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => {
+                      setResetErr('')
+                      setResetConfirmText('')
+                      setShowResetModal(true)
+                    }}
+                  >
+                    <RotateCcw size={15} />
+                    Clear All Application Data
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        )}
       </Card>
+
+      {/* Confirm Full Data Clear Modal */}
+      <Modal
+        open={showResetModal}
+        onClose={() => {
+          if (!resettingApp) {
+            setShowResetModal(false)
+            setResetConfirmText('')
+            setResetErr('')
+          }
+        }}
+        title="⚠️ Clear All Application Data"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50/70 dark:bg-red-950/30 p-3.5 text-xs text-red-800 dark:text-red-200 space-y-1.5">
+            <p className="font-bold">This action cannot be undone.</p>
+            <p>
+              Every class, student account, class admin, contribution, expense, notification, comment, and recycle bin record will be permanently deleted.
+            </p>
+            <p className="pt-1 text-emerald-700 dark:text-emerald-300 font-semibold">
+              ✓ Preserved Account: {user?.name} (@{user?.student_id})
+            </p>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-text cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={keepBranding}
+              onChange={(e) => setKeepBranding(e.target.checked)}
+              className="rounded border-border text-brand-600 focus:ring-brand-500"
+            />
+            <span>Keep Application Name &amp; Logo branding settings</span>
+          </label>
+
+          <div>
+            <label htmlFor="reset-confirm-input" className="block text-xs font-semibold text-muted mb-1.5">
+              Type <strong className="text-red-600 dark:text-red-400">RESET</strong> to confirm
+            </label>
+            <input
+              id="reset-confirm-input"
+              type="text"
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              placeholder="RESET"
+              autoComplete="off"
+              className="w-full rounded-btn border border-border-hover bg-bg-card px-3 py-2 text-sm text-text placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-red-500/30"
+            />
+          </div>
+
+          {resetErr && (
+            <p className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 rounded-xl px-3 py-2 border border-red-200 dark:border-red-900">
+              {resetErr}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={resettingApp}
+              onClick={() => {
+                setShowResetModal(false)
+                setResetConfirmText('')
+                setResetErr('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              loading={resettingApp}
+              disabled={resetConfirmText.trim().toUpperCase() !== 'RESET'}
+              onClick={handleResetApplicationData}
+            >
+              Clear Data &amp; Keep @{user?.student_id}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

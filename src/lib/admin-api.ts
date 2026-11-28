@@ -150,3 +150,21 @@ export async function adminDeleteUser(id: string): Promise<{ error?: string }> {
     return { error: err.message || 'Network error deleting user' }
   }
 }
+
+export async function adminResetAppData(
+  resetBranding = false
+): Promise<{ ok?: boolean; deletedAuthUsers?: number; error?: string }> {
+  try {
+    const headers = await getAuthHeaders()
+    const r = await fetch('/api/users', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'reset_app_data', resetBranding }),
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) return { error: data.error || 'Failed to reset application data' }
+    return { ok: true, deletedAuthUsers: data.deletedAuthUsers ?? 0 }
+  } catch (err: any) {
+    return { error: err.message || 'Network error resetting application data' }
+  }
+}

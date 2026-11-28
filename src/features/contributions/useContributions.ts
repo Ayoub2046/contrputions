@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
+import { moveToRecycleBin, moveManyToRecycleBin } from '../recyclebin/recycleBinManager'
 import { broadcastPushNotification, generateUUID } from '../notifications/notificationService'
 import type { Contribution } from '../../lib/types'
 
@@ -85,7 +85,15 @@ export function useContributions(classId?: string | null) {
 
   async function remove(id: string) {
     // Instant optimistic removal from UI
-    const item = contributions.find((c) => c.id === id)
+    let item = contributions.find((c) => c.id === id)
+    if (!item) {
+      const { data: fetched } = await supabase
+        .from('contributions')
+        .select('*, profiles!contributions_student_id_fkey(student_id, name)')
+        .eq('id', id)
+        .single()
+      if (fetched) item = fetched as unknown as ContributionWithStudent
+    }
     setContributions((prev) => prev.filter((c) => c.id !== id))
 
     if (item) {
@@ -98,7 +106,7 @@ export function useContributions(classId?: string | null) {
       )
     }
     const { error } = await supabase.from('contributions').update({ deleted_at: new Date().toISOString() } as never).eq('id', id)
-    if (!error) fetch()
+    fetch()
     return error?.message ?? null
   }
 
@@ -106,6 +114,25 @@ export function useContributions(classId?: string | null) {
     if (!classId) {
       return 'Please select a specific class before clearing contributions.'
     }
+    // Archive all active contributions to recycle_bin before soft-deleting
+    const { data: toArchive } = await supabase
+      .from('contributions')
+      .select('*, profiles!contributions_student_id_fkey(student_id, name)')
+      .eq('class_id', classId)
+      .is('deleted_at', null)
+
+    if (Array.isArray(toArchive) && toArchive.length > 0) {
+      await moveManyToRecycleBin(
+        (toArchive as unknown as ContributionWithStudent[]).map((item) => ({
+          item_type: 'contribution' as const,
+          item_id: item.id,
+          name: `${item.profiles?.name || 'Student'} ($${item.amount})`,
+          details: { ...item },
+          class_id: item.class_id ?? classId,
+        }))
+      )
+    }
+
     const { error } = await supabase
       .from('contributions')
       .update({ deleted_at: new Date().toISOString() } as never)

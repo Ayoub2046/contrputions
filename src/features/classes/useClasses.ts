@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { moveToRecycleBin } from '../recyclebin/recycleBinManager'
 import type { Class, Profile } from '../../lib/types'
 
 export interface ClassWithMetrics extends Class {
@@ -73,6 +74,24 @@ export function useClasses() {
   }
 
   async function remove(id: string) {
+    let targetClass: Class | undefined = classes.find((c) => c.id === id)
+    if (!targetClass) {
+      const { data: fetched } = await supabase.from('classes').select('*').eq('id', id).single()
+      if (fetched) targetClass = fetched as Class
+    }
+    if (targetClass) {
+      await moveToRecycleBin(
+        'class',
+        id,
+        targetClass.name,
+        {
+          id: targetClass.id,
+          name: targetClass.name,
+          contribution_target: targetClass.contribution_target ?? 0,
+        },
+        null,
+      )
+    }
     const { error } = await supabase.from('classes').delete().eq('id', id)
     if (!error) fetch()
     return error?.message ?? null

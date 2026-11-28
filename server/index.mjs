@@ -123,6 +123,59 @@ const server = createServer(async (req, res) => {
         req.on('end', async () => {
           const parsed = JSON.parse(body)
 
+          // Full application reset (preserving ONLY the active Super Admin account/username)
+          if (parsed.action === 'reset_app_data') {
+            if (auth.caller.role !== 'super_admin') {
+              return json(res, 403, { error: 'Forbidden: Only Super Admins can clear application data' })
+            }
+            const callerId = auth.callerId
+            const anyUuid = 'id=neq.00000000-0000-0000-0000-000000000000'
+            const svcHeaders = {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              apikey: SERVICE_ROLE_KEY,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal',
+            }
+            const tables = [
+              ['notification_reads', anyUuid],
+              ['notifications', anyUuid],
+              ['admin_messages', anyUuid],
+              ['class_comments', anyUuid],
+              ['recycle_bin', anyUuid],
+              ['student_contribution_targets', anyUuid],
+              ['contributions', anyUuid],
+              ['expenses', anyUuid],
+              ['activity_logs', anyUuid],
+              ['class_admins', 'class_id=neq.00000000-0000-0000-0000-000000000000'],
+              ['push_subscriptions', `user_id=neq.${callerId}`],
+              ['push_subscriptions', 'user_id=is.null'],
+              ['admin_passwords', `user_id=neq.${callerId}`],
+            ]
+            for (const [tbl, flt] of tables) {
+              await fetch(`${SUPABASE_URL}/rest/v1/${tbl}?${flt}`, { method: 'DELETE', headers: svcHeaders }).catch(() => {})
+            }
+            await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerId}`, {
+              method: 'PATCH',
+              headers: svcHeaders,
+              body: JSON.stringify({ class_id: null }),
+            }).catch(() => {})
+            await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=neq.${callerId}`, { method: 'DELETE', headers: svcHeaders }).catch(() => {})
+            const listRes = await fetchAdmin('GET', '/users?page=1&per_page=1000')
+            const users = Array.isArray(listRes.data?.users) ? listRes.data.users : []
+            let deletedAuthUsers = 0
+            for (const u of users) {
+              if (u?.id && u.id !== callerId) {
+                const d = await fetchAdmin('DELETE', `/users/${u.id}`)
+                if (d.status === 200) deletedAuthUsers++
+              }
+            }
+            await fetch(`${SUPABASE_URL}/rest/v1/classes?${anyUuid}`, { method: 'DELETE', headers: svcHeaders }).catch(() => {})
+            if (parsed.resetBranding) {
+              await fetch(`${SUPABASE_URL}/rest/v1/app_settings?key=in.(app_name,app_logo_url)`, { method: 'DELETE', headers: svcHeaders }).catch(() => {})
+            }
+            return json(res, 200, { ok: true, preservedUserId: callerId, deletedAuthUsers })
+          }
+
           // Batch import support
           if (Array.isArray(parsed.students)) {
             const results = []

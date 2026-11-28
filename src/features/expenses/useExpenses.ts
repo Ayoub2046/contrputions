@@ -48,7 +48,11 @@ export function useExpenses(classId?: string | null) {
 
   async function remove(id: string) {
     // Instant optimistic removal from UI
-    const item = expenses.find((e) => e.id === id)
+    let item = expenses.find((e) => e.id === id)
+    if (!item) {
+      const { data: fetched } = await supabase.from('expenses').select('*').eq('id', id).single()
+      if (fetched) item = fetched as Expense
+    }
     setExpenses((prev) => prev.filter((e) => e.id !== id))
 
     if (item) {
@@ -61,7 +65,7 @@ export function useExpenses(classId?: string | null) {
       )
     }
     const { error } = await supabase.from('expenses').delete().eq('id', id)
-    if (!error) fetch()
+    fetch()
     return error?.message ?? null
   }
 
