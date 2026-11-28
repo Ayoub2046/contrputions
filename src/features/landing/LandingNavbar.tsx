@@ -28,10 +28,10 @@ export function LandingNavbar() {
             <AppLogo className="size-full object-contain" alt={appName} />
           </div>
           <div className="flex flex-col leading-none">
-            <span className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-[#0B1A2B] dark:text-[#FFFFFF]">
+            <span className="font-sans text-xl sm:text-2xl font-extrabold tracking-tight text-[#0B1A2B] dark:text-[#FFFFFF]">
               {appName}
             </span>
-            <span className="text-[10px] font-medium tracking-wider uppercase text-[#1176BC] dark:text-[#25A8E0] hidden sm:block">
+            <span className="text-[10px] font-bold tracking-wider uppercase text-[#1176BC] dark:text-[#25A8E0] hidden sm:block">
               Class Treasury Portal
             </span>
           </div>

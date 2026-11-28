@@ -51,7 +51,7 @@ export function LandingPage() {
               <span className="text-xs font-bold uppercase tracking-widest text-[#FFFFFF]/80">
                 University Class Access
               </span>
-              <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#FFFFFF] leading-tight">
+              <h2 className="text-3xl sm:text-4xl font-sans font-extrabold text-[#FFFFFF] leading-tight tracking-tight">
                 Check your contribution record in seconds.
               </h2>
               <p className="text-sm sm:text-base text-[#FFFFFF]/90 leading-relaxed">

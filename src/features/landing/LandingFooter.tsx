@@ -14,7 +14,7 @@ export function LandingFooter() {
           <div className="md:col-span-5 space-y-3.5">
             <div className="flex items-center gap-2.5">
               <AppLogo className="h-8 w-auto object-contain" alt={appName} />
-              <span className="font-serif text-2xl font-bold tracking-tight text-[#0B1A2B] dark:text-[#FFFFFF]">
+              <span className="font-sans text-2xl font-extrabold tracking-tight text-[#0B1A2B] dark:text-[#FFFFFF]">
                 {appName}
               </span>
             </div>

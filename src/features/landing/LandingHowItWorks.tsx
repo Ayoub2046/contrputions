@@ -55,7 +55,7 @@ export function LandingHowItWorks() {
             <span className="text-xs font-bold uppercase tracking-widest text-[#1176BC] dark:text-[#25A8E0]">
               Semester Workflow
             </span>
-            <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+            <h2 className="text-3xl sm:text-4xl font-sans font-extrabold text-[#0B1A2B] dark:text-[#FFFFFF] tracking-tight">
               Simple from the first payment to final clearance
             </h2>
           </div>
@@ -83,7 +83,7 @@ export function LandingHowItWorks() {
             <span className="text-xs font-bold uppercase tracking-widest text-[#1176BC] dark:text-[#25A8E0]">
               Frequently Asked
             </span>
-            <h2 className="text-2xl sm:text-3xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+            <h2 className="text-2xl sm:text-3xl font-sans font-extrabold text-[#0B1A2B] dark:text-[#FFFFFF] tracking-tight">
               Common Questions
             </h2>
             <p className="text-sm text-[#2F465E] dark:text-[#C6CACB]">

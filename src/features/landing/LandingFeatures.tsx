@@ -61,12 +61,12 @@ export function LandingFeatures({ features }: LandingFeaturesProps) {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
         <div className="max-w-2xl space-y-2.5">
           <span className="text-xs font-bold uppercase tracking-widest text-[#1176BC] dark:text-[#25A8E0]">
-            What Each Portal Includes
+            Core Platform Capabilities
           </span>
-          <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+          <h2 className="text-3xl sm:text-4xl font-sans font-extrabold text-[#0B1A2B] dark:text-[#FFFFFF] tracking-tight">
             Practical tools built for daily class life
           </h2>
-          <p className="text-sm sm:text-base text-[#2F465E] dark:text-[#DCE8F5]">
+          <p className="text-sm sm:text-base text-[#2F465E] dark:text-[#CBD5E1]">
             Everything students and class leaders need during a semester, organized cleanly without clutter.
           </p>
         </div>
