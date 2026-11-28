@@ -45,24 +45,29 @@ export function LandingPage() {
         <LandingFeatures features={settings.features_data} />
         <LandingHowItWorks />
 
-        {/* Executive CTA Section */}
+        {/* Executive University CTA Section */}
         <section className="py-20 bg-gradient-to-br from-[#093254] via-[#1176BC] to-[#1D8CC8] text-[#FFFFFF] relative overflow-hidden">
-          <div className="absolute -top-24 -right-24 size-96 rounded-full bg-[#25A8E0]/25 blur-3xl pointer-events-none" />
+          <div className="absolute -top-24 -right-24 size-96 rounded-full bg-[#25A8E0]/20 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-24 -left-24 size-96 rounded-full bg-[#9FBBDE]/15 blur-3xl pointer-events-none" />
           <div className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 text-center space-y-6">
             <h2 className="text-3xl sm:text-5xl font-serif font-bold tracking-tight text-[#FFFFFF]">
-              Ready for 100% financial clarity in your class?
+              Bring 100% Financial Clarity &amp; Respect to Your Class
             </h2>
             <p className="max-w-2xl mx-auto text-base sm:text-lg text-[#FFFFFF]/90 leading-relaxed">
-              Join students and class leaders who trust ClassBank for auditable contributions,
-              instant expense tracking, and error-free financial reporting.
+              Whether you are a student checking your contribution balance or a class administrator managing course expenses, ClassBank keeps every transaction clear, verified, and confidential.
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 to="/login"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#FFFFFF] px-8 py-3.5 text-base font-bold text-[#1176BC] shadow-xl hover:bg-[#ECECEC] active:scale-98 transition-all"
               >
-                Access Portal Now <ArrowRight size={18} />
+                Access Student Portal <ArrowRight size={18} />
+              </Link>
+              <Link
+                to="/login"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-[#FFFFFF]/40 bg-[#FFFFFF]/10 hover:bg-[#FFFFFF]/20 px-8 py-3.5 text-base font-bold text-[#FFFFFF] transition-all"
+              >
+                Class Admin Desk
               </Link>
             </div>
           </div>

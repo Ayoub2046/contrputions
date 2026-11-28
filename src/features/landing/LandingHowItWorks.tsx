@@ -4,48 +4,48 @@ export function LandingHowItWorks() {
   const steps = [
     {
       num: '01',
-      title: 'Target & Class Setup',
-      desc: 'Administrators define each class semester target. Every student record is linked directly to their class without manual spreadsheet juggling.',
+      title: 'Class & Contribution Setup',
+      desc: 'Class leaders set the semester target for course materials and shared funds. Every student is linked to their official class roster.',
       icon: Target,
     },
     {
       num: '02',
-      title: 'Instant Contribution Logging',
-      desc: 'Class treasurers log student contributions. The system dynamically derives status (Paid, Partial, Unpaid) directly from verified raw rows.',
+      title: 'Verified Payment Logging',
+      desc: 'Class admins log contributions with verifiable timestamps. Personal payment status is derived live—no manual spreadsheet errors.',
       icon: CreditCard,
     },
     {
       num: '03',
-      title: 'Real-Time Expense Receipts',
-      desc: 'Every expenditure (events, equipment, handouts) is recorded with date, description, and admin signature. Remaining funds update live.',
+      title: 'Itemized Expense Auditing',
+      desc: 'Every expenditure (printed booklets, exam clearances, practical tools) is documented with date and description.',
       icon: ReceiptText,
     },
     {
       num: '04',
-      title: 'Instant PDF Statements',
-      desc: 'Export formal, unalterable financial statements at any moment for class meetings, student body reviews, and administrative audits.',
+      title: 'Receipts & Clearance Statements',
+      desc: 'Students download official digital receipts; class leaders export auditable PDF statements for university clearance and class meetings.',
       icon: FileCheck,
     },
   ]
 
   const roles = [
     {
-      role: 'Super Admin',
-      badge: 'Full Governance',
-      desc: 'Oversees all university classes, creates treasurers, audits all transactions across the entire institution.',
-      icon: Shield,
-    },
-    {
-      role: 'Class Admin / Treasurer',
-      badge: 'Class Level Scope',
-      desc: 'Manages assigned class only, records student payments, logs expenditures, and generates PDF financial reports.',
+      role: 'Class Administrator',
+      badge: 'Course Leadership',
+      desc: 'Manages assigned class roster, records student contributions, documents class handout expenses, and answers student inquiries.',
       icon: UserCheck,
     },
     {
       role: 'Student Member',
-      badge: 'Total Transparency',
-      desc: 'Views their personal payment history, tracks the live class treasury, and contacts class admins directly.',
+      badge: 'Self-Service & Privacy',
+      desc: 'Logs in with Student ID to check payment balances, downloads official receipts, and reaches out to class leaders confidentially.',
       icon: GraduationCap,
+    },
+    {
+      role: 'Institutional Auditing',
+      badge: 'Row-Level Security',
+      desc: 'Ensures all financial data is backed by PostgreSQL security policies, preventing unauthorized edits and data tampering.',
+      icon: Shield,
     },
   ]
 
@@ -56,72 +56,78 @@ export function LandingHowItWorks() {
         <div>
           <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
             <p className="text-xs font-bold uppercase tracking-wider text-[#1176BC] dark:text-[#25A8E0]">
-              Simple 4-Step Process
+              How ClassBank Operates
             </p>
             <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
-              How ClassBank Delivers Full Transparency
+              From Collection to Audit in 4 Clear Steps
             </h2>
             <p className="text-base text-[#2F465E] dark:text-[#DCE8F5]">
-              From the first payment to semester closeout, every transaction is audited and visible.
+              Every transaction follows a clear, auditable workflow so everyone knows where class funds stand at all times.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {steps.map((step, idx) => {
-              const Icon = step.icon
+            {steps.map((s) => {
+              const Icon = s.icon
               return (
                 <div
-                  key={idx}
-                  className="rounded-2xl border border-[#ECECEC] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033] p-6 space-y-3.5 shadow-2xs"
+                  key={s.num}
+                  className="rounded-2xl border border-[#ECECEC] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033] p-6 space-y-4 hover:border-[#1176BC] dark:hover:border-[#25A8E0] transition-colors shadow-xs"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-3xl font-serif font-bold text-[#9FBBDE] dark:text-[#9FBBDE]/80">
-                      {step.num}
+                    <span className="font-mono text-xs font-bold text-[#1176BC] dark:text-[#25A8E0] bg-[#9FBBDE]/25 dark:bg-[#172D47] px-2.5 py-1 rounded-lg">
+                      {s.num}
                     </span>
-                    <div className="size-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-[#1176BC]/10 to-[#25A8E0]/20 dark:bg-[#172D47] border border-[#9FBBDE]/40 dark:border-[#25A8E0]/30 text-[#1176BC] dark:text-[#25A8E0]">
-                      <Icon size={20} />
-                    </div>
+                    <Icon size={18} className="text-[#52677D] dark:text-[#9FBBDE]" />
                   </div>
-                  <h3 className="text-lg font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">{step.title}</h3>
-                  <p className="text-sm text-[#2F465E] dark:text-[#C6CACB] leading-relaxed">{step.desc}</p>
+                  <div className="space-y-1.5">
+                    <h3 className="text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">{s.title}</h3>
+                    <p className="text-xs sm:text-sm text-[#2F465E] dark:text-[#C6CACB] leading-relaxed">
+                      {s.desc}
+                    </p>
+                  </div>
                 </div>
               )
             })}
           </div>
         </div>
 
-        {/* Role Isolation Section */}
-        <div id="transparency" className="pt-12 border-t border-[#C6CACB]/60 dark:border-[#203854]">
+        {/* Roles Section */}
+        <div>
           <div className="text-center max-w-2xl mx-auto space-y-3 mb-12">
             <p className="text-xs font-bold uppercase tracking-wider text-[#1176BC] dark:text-[#25A8E0]">
-              Security Architecture
+              Accountability Across Roles
             </p>
-            <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
-              Strict Role-Based Data Isolation
+            <h2 className="text-2xl sm:text-3xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+              Clear Permissions for Everyone
             </h2>
-            <p className="text-base text-[#2F465E] dark:text-[#DCE8F5]">
-              Permissions are enforced directly at the database engine level via Supabase Row-Level Security (RLS).
+            <p className="text-sm text-[#2F465E] dark:text-[#DCE8F5]">
+              Strict Supabase Row-Level Security guarantees students only see what belongs to them and administrators only manage their assigned classes.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {roles.map((r, i) => {
+            {roles.map((r) => {
               const Icon = r.icon
               return (
                 <div
-                  key={i}
-                  className="rounded-2xl border border-[#ECECEC] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033] p-6 space-y-4 hover:border-[#25A8E0] dark:hover:border-[#25A8E0] shadow-xs transition-all"
+                  key={r.role}
+                  className="rounded-2xl border border-[#ECECEC] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033] p-6 space-y-3.5 shadow-xs"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] text-[#FFFFFF] shadow-sm">
-                      <Icon size={21} />
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-[#1176BC]/10 dark:bg-[#1176BC]/25 text-[#1176BC] dark:text-[#25A8E0] flex items-center justify-center font-bold">
+                      <Icon size={19} />
                     </div>
-                    <span className="rounded-full bg-[#9FBBDE]/25 dark:bg-[#172D47] border border-[#9FBBDE]/50 dark:border-[#25A8E0]/30 px-3 py-1 text-xs font-bold text-[#1176BC] dark:text-[#9FBBDE]">
-                      {r.badge}
-                    </span>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">{r.role}</h3>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#1176BC] dark:text-[#25A8E0]">
+                        {r.badge}
+                      </span>
+                    </div>
                   </div>
-                  <h3 className="text-lg font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">{r.role}</h3>
-                  <p className="text-sm text-[#2F465E] dark:text-[#C6CACB] leading-relaxed">{r.desc}</p>
+                  <p className="text-xs sm:text-sm text-[#2F465E] dark:text-[#C6CACB] leading-relaxed">
+                    {r.desc}
+                  </p>
                 </div>
               )
             })}

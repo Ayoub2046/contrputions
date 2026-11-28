@@ -135,7 +135,9 @@ export default async function handler(req, res) {
             const caRows = await caRes.json()
             for (const row of caRows || []) {
               const p = row?.profiles
-              if (p?.id) {
+              // Strict requirement: Only assigned class admins (role 'admin') are shown to students.
+              // NEVER include or expose super_admin!
+              if (p?.id && p.role === 'admin') {
                 leadersMap.set(p.id, {
                   id: p.id,
                   name: p.name,
@@ -149,39 +151,46 @@ export default async function handler(req, res) {
           }
         }
 
-        const saRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profiles?role=eq.super_admin&select=id,name,phone,role,student_id&order=name.asc`,
-          {
-            headers: {
-              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-              apikey: SERVICE_ROLE_KEY,
-            },
-          }
+        // Return only legitimate assigned class admins - NO super admins
+        const leaders = Array.from(leadersMap.values()).sort((a, b) =>
+          String(a.name || '').localeCompare(String(b.name || ''))
         )
-        if (saRes.ok) {
-          const saRows = await saRes.json()
-          for (const p of saRows || []) {
-            if (p?.id && !leadersMap.has(p.id)) {
-              leadersMap.set(p.id, {
-                id: p.id,
-                name: p.name,
-                phone: p.phone || null,
-                role: p.role,
-                student_id: p.student_id || null,
-                isAssignedClassAdmin: false,
-              })
-            }
-          }
-        }
-
-        const leaders = Array.from(leadersMap.values()).sort((a, b) => {
-          if (a.isAssignedClassAdmin !== b.isAssignedClassAdmin) {
-            return a.isAssignedClassAdmin ? -1 : 1
-          }
-          return String(a.name || '').localeCompare(String(b.name || ''))
-        })
 
         return res.status(200).json(leaders)
+      }
+
+      // ----------------------------------------------------
+      // GET /api/comments?action=private_messages&admin_id=...
+      // Retrieve private direct messages between student & admin
+      // ----------------------------------------------------
+      if (url.searchParams.get('action') === 'private_messages') {
+        const adminId = url.searchParams.get('admin_id')
+        let dmQuery = `${SUPABASE_URL}/rest/v1/admin_messages?select=id,sender_id,content,category,created_at&order=created_at.asc`
+        if (caller.role === 'student') {
+          if (adminId) {
+            dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${adminId}),and(sender_id.eq.${adminId},category.eq.dm:${caller.id}))`
+          } else {
+            dmQuery += `&or=(sender_id.eq.${caller.id},category.eq.dm:${caller.id})`
+          }
+        } else if (caller.role === 'admin') {
+          const studentId = url.searchParams.get('student_id')
+          if (studentId) {
+            dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${studentId}),and(sender_id.eq.${studentId},category.eq.dm:${caller.id}))`
+          } else {
+            dmQuery += `&or=(sender_id.eq.${caller.id},category.eq.dm:${caller.id})`
+          }
+        }
+        const dmRes = await fetch(dmQuery, {
+          headers: {
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+            apikey: SERVICE_ROLE_KEY,
+          },
+        })
+        if (!dmRes.ok) {
+          return res.status(200).json([])
+        }
+        const dms = await dmRes.json()
+        return res.status(200).json(dms)
       }
 
       let filterClassId = null
@@ -241,13 +250,73 @@ export default async function handler(req, res) {
 
     // ----------------------------------------------------
     // POST /api/comments
+    // Supports:
+    // 1. Private 1-on-1 Messages (Student -> Assigned Class Admin)
+    // 2. Class Discussion Board Comments (Public to class)
     // ----------------------------------------------------
     if (req.method === 'POST') {
       const body = req.body || {}
-      const { content, class_id, id: requestedId } = body
+      const { content, class_id, id: requestedId, is_private, recipient_id } = body
 
       if (!content || !String(content).trim()) {
-        return res.status(400).json({ error: 'Comment content cannot be empty' })
+        return res.status(400).json({ error: 'Message content cannot be empty' })
+      }
+
+      // Handle 100% PRIVATE Direct Message (Student -> Class Admin)
+      // NEVER posts to class_comments! Stored confidentially with push notification.
+      if (is_private || recipient_id) {
+        if (!recipient_id) {
+          return res.status(400).json({ error: 'Recipient is required for private messages' })
+        }
+
+        const isUuid = typeof requestedId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedId)
+        const msgId = isUuid ? requestedId : randomUUID()
+
+        const dmPayload = {
+          id: msgId,
+          sender_id: caller.id,
+          content: String(content).trim(),
+          category: `dm:${recipient_id}`,
+        }
+
+        const insertDmRes = await fetch(`${SUPABASE_URL}/rest/v1/admin_messages`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+            apikey: SERVICE_ROLE_KEY,
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation',
+          },
+          body: JSON.stringify(dmPayload),
+        })
+
+        if (!insertDmRes.ok) {
+          const errJson = await insertDmRes.json().catch(() => ({}))
+          return res.status(500).json({ error: errJson.message || 'Failed to send private message' })
+        }
+
+        // Dispatch background Web Push directly to the class admin's device
+        try {
+          await dispatchPushNotification(req, {
+            id: msgId,
+            title: `🔒 Private Message from ${caller.name}`,
+            body: String(content).trim().slice(0, 100),
+            category: 'reminder',
+            targetUserIds: [recipient_id],
+            url: '/dashboard',
+            senderName: caller.name,
+            senderRole: caller.role,
+          })
+        } catch (pushErr) {
+          console.warn('[Private DM Push Warning]:', pushErr.message)
+        }
+
+        return res.status(201).json({
+          ok: true,
+          is_private: true,
+          message: 'Private message sent confidentially to class leader.',
+          data: dmPayload,
+        })
       }
 
       let targetClassId = class_id

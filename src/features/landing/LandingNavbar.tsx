@@ -38,10 +38,10 @@ export function LandingNavbar() {
             Features
           </a>
           <a
-            href="#charity-pledge"
+            href="#community-pledge"
             className="flex items-center gap-1.5 text-[#1176BC] dark:text-[#25A8E0] hover:text-[#0D5E97] dark:hover:text-[#FFFFFF] font-semibold transition-colors"
           >
-            <HeartHandshake size={15} /> Student Mercy Pledge
+            <HeartHandshake size={15} /> Community &amp; Values
           </a>
           <a href="#how-it-works" className="hover:text-[#1176BC] dark:hover:text-[#25A8E0] transition-colors">
             How It Works

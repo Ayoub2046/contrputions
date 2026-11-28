@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useNotifications } from '../notifications/NotificationContext'
 import { useStudentDashboard } from './useStudentDashboard'
-import { useClassComments } from './useClassComments'
 import { StudentContributionBreakdown } from './StudentContributionBreakdown'
 import { formatCurrency, formatDate } from '../../lib/utils'
 import { getValidAuthToken } from '../../lib/admin-api'
@@ -35,7 +34,7 @@ import {
   PhoneCall,
   MessageSquare,
   MessageSquareText,
-  Send,
+  Lock,
   Shield,
 } from 'lucide-react'
 
@@ -68,7 +67,6 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   const appName = useAppName()
   const { isInstalled } = usePwaInstall()
   const { data, loading } = useStudentDashboard(userId, classId)
-  const { addComment } = useClassComments(classId)
   const { notifications, markAsRead, markAsUnread } = useNotifications()
 
   const [copiedId, setCopiedId] = useState(false)
@@ -100,7 +98,9 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           if (resp.ok) {
             const list = await resp.json()
             if (active && Array.isArray(list)) {
-              setClassLeaders(list)
+              // STRICT: Exclude super_admin completely. Students can only see and contact assigned class admins.
+              const adminsOnly = list.filter((l: any) => l.role === 'admin' && l.role !== 'super_admin')
+              setClassLeaders(adminsOnly)
               setLeadersLoading(false)
               return
             }
@@ -114,12 +114,13 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           p_class_id: classId!,
         })
         if (active && !error && Array.isArray(rpcData) && rpcData.length > 0) {
-          setClassLeaders(
-            rpcData.map((r: any) => ({
+          const adminsOnly = rpcData
+            .filter((r: any) => r.role === 'admin' && r.role !== 'super_admin')
+            .map((r: any) => ({
               ...r,
-              isAssignedClassAdmin: r.role === 'admin',
+              isAssignedClassAdmin: true,
             }))
-          )
+          setClassLeaders(adminsOnly)
           setLeadersLoading(false)
           return
         }
@@ -134,7 +135,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         if (active && rows) {
           const leaders = rows
             .map((r: any) => r.admin)
-            .filter(Boolean)
+            .filter((p: any) => p && p.role === 'admin' && p.role !== 'super_admin')
             .map((r: any) => ({ ...r, isAssignedClassAdmin: true }))
           setClassLeaders(leaders)
         }
@@ -167,21 +168,45 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
     if (!textTarget || !textBody.trim() || !classId) return
     setTextSending(true)
     setTextStatus(null)
-    const msg = `@${textTarget.name}: ${textBody.trim()}`
-    const err = await addComment(msg, classId)
-    setTextSending(false)
-    if (err) {
-      setTextStatus({ ok: false, msg: err })
-    } else {
+
+    try {
+      const token = await getValidAuthToken()
+      if (!token) {
+        throw new Error('Authentication expired. Please sign in again.')
+      }
+
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          recipient_id: textTarget.id,
+          class_id: classId,
+          content: textBody.trim(),
+          is_private: true,
+        }),
+      })
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.error || 'Failed to send private message')
+      }
+
+      setTextSending(false)
       setTextStatus({
         ok: true,
-        msg: `Message sent! ${textTarget.name} and your class will see it and receive an instant notification.`,
+        msg: `🔒 Private message delivered! Only you and your class leader ${textTarget.name} have access to this communication.`,
       })
       setTextBody('')
       setTimeout(() => {
         setTextTarget(null)
         setTextStatus(null)
-      }, 1600)
+      }, 2200)
+    } catch (err: any) {
+      setTextSending(false)
+      setTextStatus({ ok: false, msg: err.message || 'Failed to send private message' })
     }
   }
 
@@ -482,7 +507,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           </div>
           {classLeaders.length > 0 && (
             <span className="text-xs font-bold text-[#1176BC] dark:text-[#25A8E0] bg-[#9FBBDE]/25 dark:bg-[#172D47] border border-[#9FBBDE]/50 dark:border-[#203854] px-2.5 py-0.5 rounded-full">
-              {classLeaders.length} {classLeaders.length === 1 ? 'Admin' : 'Admins'}
+              {classLeaders.length} Class {classLeaders.length === 1 ? 'Admin' : 'Admins'}
             </span>
           )}
         </div>
@@ -500,7 +525,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                   Need help from your Class Admin?
                 </p>
                 <p className="text-xs text-[#2F465E] dark:text-[#C6CACB]">
-                  No phone contact has been added yet for your batch, but you can write a direct text note in Class Discussion below.
+                  Your class leader contact is being updated. You can also write a note in Class Discussion below.
                 </p>
               </div>
               <a
@@ -508,7 +533,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                 className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-[#FFFFFF] text-xs font-bold shadow-sm shrink-0"
               >
                 <MessageSquareText size={14} />
-                <span>Write a Message</span>
+                <span>Class Discussion</span>
               </a>
             </CardContent>
           </Card>
@@ -517,24 +542,13 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
             {classLeaders.map((leader) => {
               const waDigits = leader.phone ? formatWhatsAppNumber(leader.phone) : ''
               const prefilledText = `Hello ${leader.name}, I am ${user?.name || 'a student'} (${user?.student_id || ''}) from ${data.className}.`
-              const isPrimaryClassAdmin = leader.isAssignedClassAdmin || leader.role === 'admin'
 
               return (
                 <Card
                   key={leader.id}
-                  className={`rounded-2xl overflow-hidden transition-all shadow-xs ${
-                    isPrimaryClassAdmin
-                      ? 'border-[#9FBBDE] dark:border-[#25A8E0]/50 bg-[#FFFFFF] dark:bg-[#102033]'
-                      : 'border-[#ECECEC] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033]'
-                  }`}
+                  className="rounded-2xl overflow-hidden transition-all shadow-xs border-[#9FBBDE] dark:border-[#25A8E0]/50 bg-[#FFFFFF] dark:bg-[#102033]"
                 >
-                  <div
-                    className={`h-1 w-full ${
-                      isPrimaryClassAdmin
-                        ? 'bg-gradient-to-r from-[#1176BC] to-[#25A8E0]'
-                        : 'bg-[#9FBBDE] dark:bg-[#203854]'
-                    }`}
-                  />
+                  <div className="h-1 w-full bg-gradient-to-r from-[#1176BC] to-[#25A8E0]" />
                   <CardContent className="p-4 sm:p-5 space-y-4">
                     <div className="flex items-start gap-3.5">
                       <div className="size-12 rounded-2xl bg-gradient-to-br from-[#1176BC] to-[#25A8E0] flex items-center justify-center shrink-0 text-[#FFFFFF] font-bold text-lg shadow-sm">
@@ -548,15 +562,9 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                           </h3>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                              leader.role === 'super_admin'
-                                ? 'bg-[#ECECEC] dark:bg-[#172D47] text-[#0B1A2B] dark:text-[#9FBBDE] border-[#C6CACB] dark:border-[#203854]'
-                                : 'bg-[#9FBBDE]/25 dark:bg-[#172D47] text-[#1176BC] dark:text-[#25A8E0] border-[#9FBBDE]/60 dark:border-[#25A8E0]/40'
-                            }`}
-                          >
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border bg-[#9FBBDE]/25 dark:bg-[#172D47] text-[#1176BC] dark:text-[#25A8E0] border-[#9FBBDE]/60 dark:border-[#25A8E0]/40">
                             <Shield size={10} />
-                            {leader.role === 'super_admin' ? 'Super Admin' : 'Your Class Admin'}
+                            Class Admin
                           </span>
                           {leader.phone && (
                             <span className="text-xs font-mono font-semibold text-[#2F465E] dark:text-[#DCE8F5]">
@@ -567,7 +575,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                       </div>
                     </div>
 
-                    {/* Action Row: Call + SMS Text + WhatsApp + In-App Text */}
+                    {/* Action Row: Call + SMS Text + WhatsApp + Private Message */}
                     <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#ECECEC] dark:border-[#203854]">
                       {leader.phone && (
                         <>
@@ -610,10 +618,10 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                         className={`${
                           leader.phone ? '' : 'w-full'
                         } inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#1176BC]/35 dark:border-[#25A8E0]/45 bg-[#FFFFFF] dark:bg-[#102033] hover:bg-[#9FBBDE]/20 dark:hover:bg-[#172D47] text-[#1176BC] dark:text-[#25A8E0] text-xs font-bold transition-colors cursor-pointer`}
-                        title={`Write an in-app text message to ${leader.name}`}
+                        title={`Send private confidential message to ${leader.name}`}
                       >
-                        <Send size={12} />
-                        <span>Write a Text</span>
+                        <Lock size={12} className="text-[#1176BC] dark:text-[#25A8E0]" />
+                        <span>Private Message</span>
                       </button>
                     </div>
                   </CardContent>
@@ -877,7 +885,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
       {/* 8. CLASS DISCUSSION & STUDENT FEEDBACK */}
       <ClassCommentsSection classId={classId} />
 
-      {/* QUICK DIRECT TEXT MESSAGE MODAL */}
+      {/* 100% PRIVATE CONFIDENTIAL DIRECT MESSAGE MODAL */}
       <Modal
         open={Boolean(textTarget)}
         onClose={() => {
@@ -886,18 +894,22 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
             setTextStatus(null)
           }
         }}
-        title={textTarget ? `✉️ Write a Text to ${textTarget.name}` : 'Write a Text'}
+        title={textTarget ? `🔒 Private Message to ${textTarget.name}` : 'Private Message'}
       >
         {textTarget && (
           <form onSubmit={handleSendInAppText} className="space-y-4">
-            <div className="rounded-xl border border-[#ECECEC] dark:border-[#203854] bg-[#F4F8FC] dark:bg-[#0D1B2C] p-3 flex items-center justify-between gap-2">
+            <div className="rounded-xl border border-[#9FBBDE]/50 dark:border-[#203854] bg-[#EAF4FB] dark:bg-[#0D1B2C] p-3 flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF] truncate">
-                  {textTarget.name}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF] truncate">
+                    {textTarget.name}
+                  </p>
+                  <span className="text-[10px] font-bold text-[#1176BC] dark:text-[#25A8E0] bg-[#FFFFFF] dark:bg-[#172D47] px-1.5 py-0.2 rounded">
+                    Class Admin
+                  </span>
+                </div>
                 <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB]">
-                  {textTarget.role === 'super_admin' ? 'Super Admin' : 'Class Admin'}
-                  {textTarget.phone ? ` · ${textTarget.phone}` : ''}
+                  {textTarget.phone ? `Phone: ${textTarget.phone}` : 'Assigned Class Administrator'}
                 </p>
               </div>
               {textTarget.phone && (
@@ -907,24 +919,54 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                   )}`}
                   className="px-3 py-1.5 rounded-lg bg-[#25A8E0] text-[#FFFFFF] text-[11px] font-bold shrink-0 hover:bg-[#1D96CA]"
                 >
-                  Open Phone SMS
+                  SMS App
                 </a>
               )}
             </div>
 
+            {/* Privacy Guarantee Banner */}
+            <div className="p-3 rounded-xl bg-blue-50/80 dark:bg-[#172D47]/50 border border-[#9FBBDE]/60 dark:border-[#203854] text-xs text-[#1176BC] dark:text-[#9FBBDE] flex items-start gap-2">
+              <ShieldCheck size={16} className="shrink-0 mt-0.5 text-[#1176BC] dark:text-[#25A8E0]" />
+              <span>
+                <strong>Confidential Message:</strong> This message is delivered privately to <strong>{textTarget.name}</strong>. It will <strong>never</strong> be visible on the public class discussion board.
+              </span>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF] mb-1.5">
-                Message (posts to Class Discussion &amp; notifies {textTarget.name})
+                Your Private Message
               </label>
               <textarea
                 value={textBody}
                 onChange={(e) => setTextBody(e.target.value)}
-                rows={3}
-                maxLength={450}
+                rows={4}
+                maxLength={600}
                 required
-                placeholder={`Write your message to ${textTarget.name}...`}
+                placeholder={`Type your confidential inquiry, payment confirmation, or request to ${textTarget.name}...`}
                 className="w-full rounded-xl border border-[#C6CACB] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033] p-3 text-sm text-[#0B1A2B] dark:text-[#FFFFFF] placeholder:text-[#52677D] dark:placeholder:text-[#9FBBDE] focus:outline-none focus:ring-2 focus:ring-[#25A8E0]/40"
               />
+            </div>
+
+            {/* Quick message templates */}
+            <div className="space-y-1">
+              <span className="text-[10px] text-[#52677D] dark:text-[#C6CACB] font-bold uppercase tracking-wider block">Quick templates:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Payment confirmation sent via mobile money',
+                  'Requesting extension for this week payment',
+                  'I need to discuss my contribution in person',
+                  'Question regarding the class handouts expense',
+                ].map((tpl) => (
+                  <button
+                    key={tpl}
+                    type="button"
+                    onClick={() => setTextBody(tpl)}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-[#ECECEC] dark:bg-[#172D47] hover:bg-[#9FBBDE]/30 text-[#0B1A2B] dark:text-[#FFFFFF] transition-colors"
+                  >
+                    {tpl}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {textStatus && (
@@ -939,7 +981,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
               </p>
             )}
 
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-1">
               <Button
                 type="button"
                 variant="secondary"
@@ -954,7 +996,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                 disabled={!textBody.trim() || textSending}
                 className="bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-[#FFFFFF]"
               >
-                <Send size={14} /> Send Message
+                <Lock size={14} /> Send Private Message
               </Button>
             </div>
           </form>
