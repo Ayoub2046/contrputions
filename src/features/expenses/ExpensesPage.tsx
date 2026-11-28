@@ -36,6 +36,7 @@ export function ExpensesPage() {
   const { total } = useExpenseTotal(classId, canViewAllClasses)
 
   const [showForm, setShowForm] = useState(false)
+  const [formClassId, setFormClassId] = useState('')
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -45,10 +46,12 @@ export function ExpensesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!description.trim() || !amount || !date) { setError(t('expenses.validation.required')); return }
+    const targetClass = classId || formClassId || null
+    if (!targetClass) { setError('Please select a class for this expense.'); return }
     setSubmitting(true)
-    const err = await create(description.trim(), parseFloat(amount), date)
+    const err = await create(description.trim(), parseFloat(amount), date, targetClass)
     if (err) setError(err)
-    else { setShowForm(false); setDescription(''); setAmount(''); setError('') }
+    else { setShowForm(false); setFormClassId(''); setDescription(''); setAmount(''); setError('') }
     setSubmitting(false)
   }
 
@@ -162,6 +165,27 @@ export function ExpensesPage() {
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={t('expenses.modal.title')}>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!classId && classes.length > 0 && (
+            <div>
+              <label htmlFor="expenseClass" className="block text-xs font-semibold text-muted mb-1">
+                Class
+              </label>
+              <select
+                id="expenseClass"
+                value={formClassId}
+                onChange={(e) => setFormClassId(e.target.value)}
+                required
+                className="w-full rounded-btn border border-border-hover bg-bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+              >
+                <option value="">Select class…</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <Input
             id="desc"
             label={t('expenses.modal.description')}

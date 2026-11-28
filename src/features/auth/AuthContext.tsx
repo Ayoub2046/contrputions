@@ -151,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profile) {
         setUser(profile)
         await fetchAdminClasses(profile)
+        if (profile.class_id) setActiveClassId(profile.class_id)
         // Log login event
         supabase.from('activity_logs').insert({
           user_id: authRes.data.user.id,

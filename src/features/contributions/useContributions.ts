@@ -8,6 +8,21 @@ export interface ContributionWithStudent extends Contribution {
   profiles: { student_id: string; name: string }
 }
 
+/** Resolve a non-null class_id from explicit/active selection or the student's profile. */
+export async function resolveStudentClassId(
+  studentId: string,
+  preferredClassId?: string | null
+): Promise<string | null> {
+  if (preferredClassId) return preferredClassId
+  if (!studentId) return null
+  const { data } = await supabase
+    .from('profiles')
+    .select('class_id')
+    .eq('id', studentId)
+    .single()
+  return (data as { class_id?: string | null } | null)?.class_id ?? null
+}
+
 export function useContributions(classId?: string | null) {
   const [contributions, setContributions] = useState<ContributionWithStudent[]>([])
   const [loading, setLoading] = useState(true)
@@ -27,11 +42,21 @@ export function useContributions(classId?: string | null) {
 
   useEffect(() => { fetch() }, [classId])
 
-  async function create(studentId: string, amount: number, date: string) {
+  async function create(
+    studentId: string,
+    amount: number,
+    date: string,
+    overrideClassId?: string | null
+  ) {
+    const resolvedClassId = await resolveStudentClassId(studentId, overrideClassId ?? classId)
+    if (!resolvedClassId) {
+      return 'Cannot record contribution: please select a class or assign this student to a class first.'
+    }
+
     const uid = (await supabase.auth.getUser()).data.user?.id
     const { error } = await supabase.from('contributions').insert({
       student_id: studentId,
-      class_id: classId,
+      class_id: resolvedClassId,
       amount,
       date,
       recorded_by: uid,
@@ -43,7 +68,7 @@ export function useContributions(classId?: string | null) {
         title: '💰 Contribution Received',
         body: `A contribution of $${amount} was recorded.`,
         category: 'contribution',
-        classId: classId || null,
+        classId: resolvedClassId,
         createdAt: new Date().toISOString(),
       }).catch(() => {})
     }
@@ -78,7 +103,14 @@ export function useContributions(classId?: string | null) {
   }
 
   async function clearAll(): Promise<string | null> {
-    const { error } = await supabase.from('contributions').update({ deleted_at: new Date().toISOString() } as never).eq('class_id', classId).is('deleted_at', null)
+    if (!classId) {
+      return 'Please select a specific class before clearing contributions.'
+    }
+    const { error } = await supabase
+      .from('contributions')
+      .update({ deleted_at: new Date().toISOString() } as never)
+      .eq('class_id', classId)
+      .is('deleted_at', null)
     if (!error) fetch()
     return error?.message ?? null
   }

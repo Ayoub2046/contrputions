@@ -184,6 +184,8 @@ export function ContributionsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingContribution, setEditingContribution] = useState<ContributionWithStudent | null>(null)
   const [selectedStudent, setSelectedStudent] = useState('')
+  const [selectedStudentClassId, setSelectedStudentClassId] = useState<string | null>(null)
+  const [manualFormClassId, setManualFormClassId] = useState('')
   const [studentSearch, setStudentSearch] = useState('')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -194,6 +196,7 @@ export function ContributionsPage() {
   const [showTargetModal, setShowTargetModal] = useState(false)
   const [targetStudentId, setTargetStudentId] = useState('')
   const [targetStudentName, setTargetStudentName] = useState('')
+  const [targetStudentClassId, setTargetStudentClassId] = useState<string | null>(null)
   const [targetAmount, setTargetAmount] = useState('')
   const [targetNote, setTargetNote] = useState('')
   const [targetError, setTargetError] = useState('')
@@ -260,14 +263,19 @@ export function ContributionsPage() {
       return
     }
     setSubmitting(true)
+    const studentProfileClassId = students.find((s) => s.id === selectedStudent)?.class_id ?? null
+    const resolvedClassId =
+      classId || selectedStudentClassId || studentProfileClassId || manualFormClassId || null
     const err = editingContribution
       ? await update(editingContribution.id, parseFloat(amount), date)
-      : await create(selectedStudent, parseFloat(amount), date)
+      : await create(selectedStudent, parseFloat(amount), date, resolvedClassId)
     if (err) setFormError(err)
     else {
       setShowForm(false)
       setEditingContribution(null)
       setSelectedStudent('')
+      setSelectedStudentClassId(null)
+      setManualFormClassId('')
       setStudentSearch('')
       setAmount('')
       setFormError('')
@@ -278,6 +286,7 @@ export function ContributionsPage() {
   function openEdit(c: ContributionWithStudent) {
     setEditingContribution(c)
     setSelectedStudent(c.student_id)
+    setSelectedStudentClassId(c.class_id ?? null)
     setStudentSearch(`${c.profiles?.name} (${c.profiles?.student_id})`)
     setAmount(String(c.amount))
     setDate(c.date)
@@ -289,12 +298,20 @@ export function ContributionsPage() {
     setEditingContribution(null)
     setStudentSearch('')
     setSelectedStudent('')
+    setSelectedStudentClassId(null)
+    setManualFormClassId('')
     setAmount('')
     setFormError('')
   }
 
-  function handleQuickRecord(studentId: string, studentName: string, defaultAmount?: number) {
+  function handleQuickRecord(
+    studentId: string,
+    studentName: string,
+    defaultAmount?: number,
+    studentClassId?: string | null
+  ) {
     setSelectedStudent(studentId)
+    setSelectedStudentClassId(studentClassId ?? null)
     setStudentSearch(studentName)
     if (defaultAmount && defaultAmount > 0) {
       setAmount(String(defaultAmount))
@@ -311,12 +328,20 @@ export function ContributionsPage() {
       return
     }
     setTargetSubmitting(true)
-    const err = await upsertTarget(targetStudentId, parseFloat(targetAmount), targetNote || undefined)
+    const studentClassId =
+      classId || targetStudentClassId || students.find((s) => s.id === targetStudentId)?.class_id || null
+    const err = await upsertTarget(
+      targetStudentId,
+      parseFloat(targetAmount),
+      targetNote || undefined,
+      studentClassId
+    )
     if (err) setTargetError(err)
     else {
       setShowTargetModal(false)
       setTargetStudentId('')
       setTargetStudentName('')
+      setTargetStudentClassId(null)
       setTargetAmount('')
       setTargetNote('')
       setTargetSearch('')
@@ -333,8 +358,8 @@ export function ContributionsPage() {
     setBulkMsg('')
     let success = 0
     for (const s of students) {
-      await upsertTarget(s.id, parseFloat(bulkTargetAmount))
-      success++
+      const err = await upsertTarget(s.id, parseFloat(bulkTargetAmount), undefined, s.class_id ?? classId)
+      if (!err) success++
     }
     setBulkMsg(`✓ Assigned $${bulkTargetAmount} to ${success} students.`)
     setBulkTargetAmount('')
@@ -408,7 +433,7 @@ export function ContributionsPage() {
                 Manage Targets
                 {showTargetPanel ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
-              {contributions.length > 0 && isSuperAdmin && (
+              {classId && contributions.length > 0 && isSuperAdmin && (
                 <button
                   onClick={() => setShowClearConfirm(true)}
                   className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
@@ -547,6 +572,7 @@ export function ContributionsPage() {
                         onClick={() => {
                           setTargetStudentId(s.id)
                           setTargetStudentName(s.name)
+                          setTargetStudentClassId(s.class_id ?? null)
                           setTargetAmount(tgt ? String(tgt) : '')
                           setShowTargetModal(true)
                         }}
@@ -557,7 +583,7 @@ export function ContributionsPage() {
                       </button>
                       {tgt !== null && (
                         <button
-                          onClick={() => removeTarget(s.id)}
+                          onClick={() => removeTarget(s.id, s.class_id ?? classId)}
                           className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-[#9FBBDE] hover:text-red-500 transition-colors cursor-pointer"
                           title="Remove Target"
                         >
@@ -870,25 +896,60 @@ export function ContributionsPage() {
                         s.student_id.toLowerCase().includes(studentSearch.toLowerCase())
                     )
                     .slice(0, 8)
-                    .map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedStudent(s.id)
-                          setStudentSearch(`${s.name} (${s.student_id})`)
-                        }}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] transition-colors ${
-                          selectedStudent === s.id
-                            ? 'bg-[#EAF4FB] dark:bg-[#0d2a40] text-[#1176BC]'
-                            : 'text-[#1a2332] dark:text-[#e8f0f8]'
-                        }`}
-                      >
-                        {s.name} <span className="text-[#9FBBDE] text-xs">#{s.student_id}</span>
-                      </button>
-                    ))}
+                    .map((s) => {
+                      const clsName = classes.find((c) => c.id === s.class_id)?.name
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStudent(s.id)
+                            setSelectedStudentClassId(s.class_id ?? null)
+                            setStudentSearch(`${s.name} (${s.student_id})`)
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] transition-colors flex items-center justify-between gap-2 ${
+                            selectedStudent === s.id
+                              ? 'bg-[#EAF4FB] dark:bg-[#0d2a40] text-[#1176BC]'
+                              : 'text-[#1a2332] dark:text-[#e8f0f8]'
+                          }`}
+                        >
+                          <span>
+                            {s.name} <span className="text-[#9FBBDE] text-xs">#{s.student_id}</span>
+                          </span>
+                          {!classId && clsName && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#EAF4FB] dark:bg-[#0d2a40] text-[#1176BC]">
+                              {clsName}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                 </div>
               )}
+              {!classId &&
+                selectedStudent &&
+                !selectedStudentClassId &&
+                !students.find((s) => s.id === selectedStudent)?.class_id &&
+                classes.length > 0 && (
+                  <div className="mt-3">
+                    <label className="text-xs font-semibold text-[#9FBBDE] block mb-1">
+                      Target Class (Required)
+                    </label>
+                    <select
+                      value={manualFormClassId}
+                      onChange={(e) => setManualFormClassId(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 text-sm border border-[#ECECEC] dark:border-[#1e3550] rounded-xl bg-white dark:bg-[#132033] text-[#1a2332] dark:text-[#e8f0f8] focus:outline-none focus:ring-2 focus:ring-[#25A8E0]/30"
+                    >
+                      <option value="">Select class…</option>
+                      {classes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
             </div>
           )}
           <Input
@@ -957,6 +1018,7 @@ export function ContributionsPage() {
                         onClick={() => {
                           setTargetStudentId(s.id)
                           setTargetStudentName(s.name)
+                          setTargetStudentClassId(s.class_id ?? null)
                           setTargetSearch(s.name)
                         }}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-[#EAF4FB] dark:hover:bg-[#0d2a40] text-[#1a2332] dark:text-[#e8f0f8] transition-colors"

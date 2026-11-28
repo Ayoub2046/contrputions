@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { resolveStudentClassId } from './useContributions'
 
 export interface StudentTarget {
   id: string
@@ -11,31 +12,39 @@ export interface StudentTarget {
   updated_at: string
 }
 
-/** Fetch all student targets for a given class */
+/** Fetch student targets for a specific class or across all classes when classId is omitted. */
 export function useStudentTargets(classId?: string | null) {
   const [targets, setTargets] = useState<StudentTarget[]>([])
   const [loading, setLoading] = useState(false)
 
   async function fetchTargets() {
-    if (!classId) { setTargets([]); return }
     setLoading(true)
-    const { data } = await supabase
-      .from('student_contribution_targets')
-      .select('*')
-      .eq('class_id', classId)
+    let query = supabase.from('student_contribution_targets').select('*')
+    if (classId) query = query.eq('class_id', classId)
+    const { data } = await query
     if (data) setTargets(data as StudentTarget[])
     setLoading(false)
   }
 
   useEffect(() => { fetchTargets() }, [classId])
 
-  async function upsertTarget(studentId: string, targetAmount: number, note?: string): Promise<string | null> {
+  async function upsertTarget(
+    studentId: string,
+    targetAmount: number,
+    note?: string,
+    overrideClassId?: string | null
+  ): Promise<string | null> {
+    const resolvedClassId = await resolveStudentClassId(studentId, overrideClassId ?? classId)
+    if (!resolvedClassId) {
+      return 'Cannot save target: please select a class or assign this student to a class first.'
+    }
+
     const uid = (await supabase.auth.getUser()).data.user?.id
     const { error } = await supabase
       .from('student_contribution_targets')
       .upsert({
         student_id: studentId,
-        class_id: classId,
+        class_id: resolvedClassId,
         target_amount: targetAmount,
         set_by: uid,
         note: note ?? null,
@@ -45,12 +54,21 @@ export function useStudentTargets(classId?: string | null) {
     return error?.message ?? null
   }
 
-  async function removeTarget(studentId: string): Promise<string | null> {
+  async function removeTarget(studentId: string, overrideClassId?: string | null): Promise<string | null> {
+    const existingClassId = targets.find((t) => t.student_id === studentId)?.class_id
+    const resolvedClassId = await resolveStudentClassId(
+      studentId,
+      overrideClassId ?? classId ?? existingClassId
+    )
+    if (!resolvedClassId) {
+      return 'Cannot remove target: class assignment not found for this student.'
+    }
+
     const { error } = await supabase
       .from('student_contribution_targets')
       .delete()
       .eq('student_id', studentId)
-      .eq('class_id', classId)
+      .eq('class_id', resolvedClassId)
     if (!error) fetchTargets()
     return error?.message ?? null
   }

@@ -19,7 +19,7 @@ interface StudentPaymentStatusTableProps {
   periodLabel: string
   periodType: 'weekly' | 'monthly' | 'yearly' | 'all'
   isFinanceManager?: boolean
-  onQuickRecord?: (studentId: string, studentName: string, defaultAmount?: number) => void
+  onQuickRecord?: (studentId: string, studentName: string, defaultAmount?: number, studentClassId?: string | null) => void
 }
 
 export function StudentPaymentStatusTable({
@@ -326,7 +326,7 @@ export function StudentPaymentStatusTable({
                     {/* Quick Record for Admins */}
                     {!isFinanceManager && onQuickRecord && (
                       <button
-                        onClick={() => onQuickRecord(student.id, student.name, remaining > 0 ? remaining : target || undefined)}
+                        onClick={() => onQuickRecord(student.id, student.name, remaining > 0 ? remaining : target || undefined, student.class_id)}
                         className="p-1.5 rounded-lg border border-[#1176BC]/30 bg-[#1176BC]/10 text-[#1176BC] hover:bg-[#1176BC] hover:text-white transition-all cursor-pointer text-xs flex items-center gap-1"
                         title="Record Payment for this Student"
                       >

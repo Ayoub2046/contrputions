@@ -19,10 +19,14 @@ export function useExpenses(classId?: string | null) {
 
   useEffect(() => { fetch() }, [classId])
 
-  async function create(description: string, amount: number, date: string) {
+  async function create(description: string, amount: number, date: string, overrideClassId?: string | null) {
+    const resolvedClassId = overrideClassId ?? classId ?? null
+    if (!resolvedClassId) {
+      return 'Please select a class before recording an expense.'
+    }
     const uid = (await supabase.auth.getUser()).data.user?.id
     const { error } = await supabase.from('expenses').insert({
-      class_id: classId,
+      class_id: resolvedClassId,
       description,
       amount,
       date,
@@ -35,7 +39,7 @@ export function useExpenses(classId?: string | null) {
         title: '🧾 New Class Expense',
         body: `An expense of $${amount} was recorded: ${description}`,
         category: 'expense',
-        classId: classId || null,
+        classId: resolvedClassId,
         createdAt: new Date().toISOString(),
       }).catch(() => {})
     }
