@@ -22,29 +22,8 @@ type PreviewTab = 'card' | 'expenses' | 'private'
 export function LandingHero({ settings }: LandingHeroProps) {
   const [activePreview, setActivePreview] = useState<PreviewTab>('card')
 
-  const hasBgImage = Boolean(
-    settings.hero_bg_image &&
-      settings.hero_bg_image.trim() !== '' &&
-      !settings.hero_bg_image.startsWith('data:image')
-  )
-  const overlayOpacity = Math.max(0.45, Math.min(0.95, (settings.hero_bg_overlay_opacity ?? 80) / 100))
-
   return (
     <section className="relative overflow-hidden border-b border-[#C6CACB]/80 dark:border-[#1D3552] bg-[#FFFFFF] dark:bg-[#08121E]">
-      {/* Subtle architectural background photo if uploaded in CMS, with crisp dual-mode directional scrim */}
-      {hasBgImage && (
-        <>
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: `url(${settings.hero_bg_image})` }}
-          />
-          <div
-            className="absolute inset-0 bg-gradient-to-r from-[#FFFFFF] via-[#FFFFFF]/92 to-[#FFFFFF]/70 dark:from-[#08121E] dark:via-[#08121E]/92 dark:to-[#08121E]/75 transition-opacity duration-500"
-            style={{ opacity: overlayOpacity }}
-          />
-        </>
-      )}
-
       {/* Subtle architectural grid lines — zero AI glow blobs */}
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.035] dark:opacity-[0.06]"

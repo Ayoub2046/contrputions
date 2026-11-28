@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 
 const FAQS = [
   {
@@ -74,53 +74,6 @@ export function LandingHowItWorks() {
                 </p>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* Clear Role Breakdown: Students vs Class Leadership (No super_admin exposure!) */}
-        <div id="transparency" className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-[#C6CACB] dark:border-[#1D3552] bg-[#ECECEC]/35 dark:bg-[#0E1D31] p-7 space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#1176BC] dark:text-[#25A8E0]">
-              For Students
-            </span>
-            <h3 className="text-2xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
-              Privacy &amp; clear receipts in your pocket
-            </h3>
-            <ul className="space-y-2.5 text-sm text-[#2F465E] dark:text-[#DCE8F5]">
-              {[
-                'Check paid amount, semester target, and remaining balance',
-                'View itemized class expenses for handouts and printing',
-                'Send private 1-on-1 messages directly to your Class Admin',
-                'Save or print your Clearance Pass before exams',
-              ].map((pt) => (
-                <li key={pt} className="flex items-start gap-2.5">
-                  <Check size={16} className="text-[#1176BC] dark:text-[#25A8E0] shrink-0 mt-0.5" />
-                  <span>{pt}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-2xl border border-[#C6CACB] dark:border-[#1D3552] bg-[#FFFFFF] dark:bg-[#0E1D31] p-7 space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#25A8E0]">
-              For Class Representatives
-            </span>
-            <h3 className="text-2xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
-              Zero spreadsheets, fewer mistakes
-            </h3>
-            <ul className="space-y-2.5 text-sm text-[#2F465E] dark:text-[#DCE8F5]">
-              {[
-                'Record student contributions in seconds with live timestamps',
-                'Document shared course expenses with descriptions',
-                'Receive & reply to private student inquiries from your dashboard',
-                'Export clean PDF statements for semester class reviews',
-              ].map((pt) => (
-                <li key={pt} className="flex items-start gap-2.5">
-                  <Check size={16} className="text-[#25A8E0] shrink-0 mt-0.5" />
-                  <span>{pt}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
 

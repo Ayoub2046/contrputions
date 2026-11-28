@@ -13,7 +13,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k.startsWith('app-html-shell') && k !== 'app-html-shell-v5')
+            .filter((k) => k !== 'app-html-shell-v6' && k !== 'app-images-v6' && k !== DELIVERED_CACHE_NAME)
             .map((k) => caches.delete(k))
         )
       )
@@ -29,7 +29,7 @@ precacheAndRoute(self.__WB_MANIFEST)
 registerRoute(
   new NavigationRoute(
     new NetworkFirst({
-      cacheName: 'app-html-shell-v5',
+      cacheName: 'app-html-shell-v6',
       networkTimeoutSeconds: 2,
       plugins: [new ExpirationPlugin({ maxEntries: 5, maxAgeSeconds: 86400 })],
     }),
@@ -42,7 +42,7 @@ registerRoute(
 registerRoute(
   /\.(?:png|jpg|jpeg|webp)$/i,
   new CacheFirst({
-    cacheName: 'app-images-v5',
+    cacheName: 'app-images-v6',
     plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 2592000 })],
   }),
   'GET'
