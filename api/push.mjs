@@ -14,7 +14,7 @@ export const VAPID_PUBLIC_KEY =
   'BIQ74Oz-r2eA4OauixHmwq8IWIGoEynmNUQ65D4cebpBe0p_JKdPkAk6oMjwxnHC1XdG4Z8zk1UzhmznPf8mCvk'
 export const VAPID_PRIVATE_KEY =
   process.env.VAPID_PRIVATE_KEY || 'bAJF6SgBdPx7z-nVTN6Qry2p8fUIBUeVLpGlV_nFaj0'
-export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@classbank.local'
+export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@zustbaidoa.net'
 
 let vapidConfigured = false
 function ensureVapidConfigured() {
@@ -585,32 +585,6 @@ export async function dispatchPushNotification(req, body = {}) {
   }
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
-  if (req.method === 'OPTIONS') {
-    res.statusCode = 204
-    return res.end()
-  }
-
-  const url = new URL(req.url || '/api/push', 'http://localhost:5173')
-  const pathname = url.pathname
-  const action = url.searchParams.get('action')
-
-  // 1. GET /api/push/vapid or GET /api/push - Returns public VAPID key
-  if (req.method === 'GET' && (pathname === '/api/push/vapid' || pathname === '/api/push' || action === 'vapid')) {
-    return res.status(200).json({ ok: true, publicKey: VAPID_PUBLIC_KEY })
-  }
-
-  const body = req.method === 'POST' ? await parseJsonBody(req) : {}
-
-  // 2. Subscribe / refresh device endpoint (never overwrites other devices or wipes logged-out owner)
-  const isSubscribeRequest =
-    req.method === 'POST' &&
-    (pathname.endsWith('/subscribe') || action === 'subscribe' || body.action === 'subscribe')
-
 function resolveSubscribedClassId(caller, body) {
   const requested = body.classId || body.class_id || null
   if (caller.isServiceRole) return requested
@@ -687,6 +661,32 @@ async function authorizeDispatch(req, caller, body) {
 
   return { allowed: true }
 }
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204
+    return res.end()
+  }
+
+  const url = new URL(req.url || '/api/push', 'http://localhost:5173')
+  const pathname = url.pathname
+  const action = url.searchParams.get('action')
+
+  // 1. GET /api/push/vapid or GET /api/push - Returns public VAPID key
+  if (req.method === 'GET' && (pathname === '/api/push/vapid' || pathname === '/api/push' || action === 'vapid')) {
+    return res.status(200).json({ ok: true, publicKey: VAPID_PUBLIC_KEY })
+  }
+
+  const body = req.method === 'POST' ? await parseJsonBody(req) : {}
+
+  // 2. Subscribe / refresh device endpoint (never overwrites other devices or wipes logged-out owner)
+  const isSubscribeRequest =
+    req.method === 'POST' &&
+    (pathname.endsWith('/subscribe') || action === 'subscribe' || body.action === 'subscribe')
 
   if (isSubscribeRequest) {
     const rawSub = body.subscription || body

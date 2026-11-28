@@ -201,7 +201,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             if (!swHandled && document.visibilityState === 'visible') {
               triggerSystemNotification(notif)
             }
-          }, 2000)
+          }, 5000)
           pendingFallbackTimersRef.current.set(notif.id, fallbackTimer)
         } else {
           await triggerSystemNotification(notif)

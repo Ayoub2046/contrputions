@@ -41,7 +41,7 @@ async function recordDeliveredInCache(eventId) {
   } catch {}
 }
 
-async function showStackableNotification(data) {
+async function showStackableNotification(data, isDuplicate = false) {
   const now = Date.now()
   const title = data.title || (data.appName ? `${data.appName} Notification` : 'ClassBank Notification')
   const rawEventId =
@@ -54,11 +54,15 @@ async function showStackableNotification(data) {
     body: data.body || 'You have a new update.',
     icon: data.icon || '/icons/notif-logo-192.png',
     badge: data.badge || '/icons/notif-badge-96.png',
-    vibrate: Array.isArray(data.vibrate) ? data.vibrate : [300, 150, 300, 150, 400],
+    vibrate: isDuplicate
+      ? undefined
+      : Array.isArray(data.vibrate)
+      ? data.vibrate
+      : [300, 150, 300, 150, 400],
     requireInteraction: false,
-    silent: false,
+    silent: Boolean(isDuplicate),
     tag: uniqueTag,
-    renotify: true,
+    renotify: !isDuplicate,
     timestamp: typeof data.timestamp === 'number' ? data.timestamp : now,
     data: {
       url: data.url || '/dashboard',
@@ -79,9 +83,9 @@ async function showStackableNotification(data) {
         icon: '/icons/notif-logo-192.png',
         badge: '/icons/notif-badge-96.png',
         vibrate: options.vibrate,
-        silent: false,
+        silent: options.silent,
         tag: uniqueTag,
-        renotify: true,
+        renotify: options.renotify,
         data: options.data,
       })
       shown = true
@@ -89,9 +93,9 @@ async function showStackableNotification(data) {
       try {
         await self.registration.showNotification(title, {
           body: options.body,
-          silent: false,
+          silent: options.silent,
           tag: uniqueTag,
-          renotify: true,
+          renotify: options.renotify,
           data: options.data,
         })
         shown = true
@@ -130,13 +134,11 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  if (data.id && markShownAndCheckDuplicate(String(data.id))) {
-    return
-  }
+  const isDuplicate = Boolean(data.id && markShownAndCheckDuplicate(String(data.id)))
 
   event.waitUntil(
     Promise.all([
-      showStackableNotification(data),
+      showStackableNotification(data, isDuplicate),
       notifyOpenClientsPushDelivered(data),
     ])
   )

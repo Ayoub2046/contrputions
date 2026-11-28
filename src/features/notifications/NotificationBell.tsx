@@ -130,6 +130,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
   const [refreshing, setRefreshing] = useState(false)
   const [testingPush, setTestingPush] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [showBgHelp, setShowBgHelp] = useState(false)
   const [showBroadcastModal, setShowBroadcastModal] = useState(false)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
@@ -525,6 +526,33 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             >
               {testResult.message}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Compact Android Background & Sound Troubleshooting Helper */}
+      {permission === 'granted' && (
+        <div className="px-3.5 py-1.5 bg-[#F8FAFC] dark:bg-[#0d1a2d]/60 border-b border-[#ECECEC] dark:border-[#1e3550] shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowBgHelp((v) => !v)}
+            className="w-full flex items-center justify-between text-[11px] text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1176BC] dark:hover:text-[#38BDF8] cursor-pointer"
+          >
+            <span>Only getting alerts when opening the app?</span>
+            <span className="font-semibold">{showBgHelp ? 'Hide' : 'Android Fix'}</span>
+          </button>
+          {showBgHelp && (
+            <ul className="mt-1.5 pb-1 space-y-1 text-[10px] text-[#4a5a72] dark:text-[#9FBBDE] leading-relaxed list-disc pl-4">
+              <li>
+                <strong>Battery:</strong> Android <em>Settings → Apps → Chrome &amp; {appName} → Battery → Unrestricted</em> (so alerts wake your phone when closed).
+              </li>
+              <li>
+                <strong>Autostart / Sleeping Apps:</strong> On Xiaomi, Tecno, Infinix, or Samsung, enable <em>Autostart / Never sleeping apps</em> for Chrome &amp; {appName}.
+              </li>
+              <li>
+                <strong>Sound:</strong> Android <em>App Info → Notifications</em> → turn ON <em>Sound &amp; Pop-up</em>.
+              </li>
+            </ul>
           )}
         </div>
       )}

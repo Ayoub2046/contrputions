@@ -73,7 +73,7 @@ async function recordDeliveredInCache(eventId) {
   } catch {}
 }
 
-async function displayIndependentNotification(payload) {
+async function displayIndependentNotification(payload, isDuplicate = false) {
   const title = payload.title || (payload.appName ? `${payload.appName} Notification` : 'ClassBank Notification')
   const now = Date.now()
   const rawEventId =
@@ -82,18 +82,23 @@ async function displayIndependentNotification(payload) {
     (self.crypto?.randomUUID ? self.crypto.randomUUID() : `${now}-${Math.random().toString(36).slice(2)}`)
 
   // Use a strictly unique tag per event + renotify: true so Android Chrome stacks every
-  // notification independently without ever replacing or collapsing prior messages.
+  // distinct notification independently; if exact same ID repeats, replace silently (renotify: false)
+  // while ALWAYS calling showNotification() inside `push` to satisfy Chrome's userVisibleOnly policy.
   const uniqueTag = rawEventId.startsWith('cb-') ? rawEventId : `cb-${rawEventId}`
 
   const options = {
     body: payload.body || 'You have a new update.',
     icon: payload.icon || '/icons/notif-logo-192.png',
     badge: payload.badge || '/icons/notif-badge-96.png',
-    vibrate: Array.isArray(payload.vibrate) ? payload.vibrate : [300, 150, 300, 150, 400],
+    vibrate: isDuplicate
+      ? undefined
+      : Array.isArray(payload.vibrate)
+      ? payload.vibrate
+      : [300, 150, 300, 150, 400],
     requireInteraction: false,
-    silent: false,
+    silent: Boolean(isDuplicate),
     tag: uniqueTag,
-    renotify: true,
+    renotify: !isDuplicate,
     timestamp: typeof payload.timestamp === 'number' ? payload.timestamp : now,
     data: {
       url: payload.url || '/dashboard',
@@ -115,9 +120,9 @@ async function displayIndependentNotification(payload) {
         icon: '/icons/notif-logo-192.png',
         badge: '/icons/notif-badge-96.png',
         vibrate: options.vibrate,
-        silent: false,
+        silent: options.silent,
         tag: uniqueTag,
-        renotify: true,
+        renotify: options.renotify,
         data: options.data,
       })
       shown = true
@@ -125,9 +130,9 @@ async function displayIndependentNotification(payload) {
       try {
         await self.registration.showNotification(title, {
           body: options.body,
-          silent: false,
+          silent: options.silent,
           tag: uniqueTag,
-          renotify: true,
+          renotify: options.renotify,
           data: options.data,
         })
         shown = true
@@ -166,13 +171,11 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  if (data.id && markShownAndCheckDuplicate(String(data.id))) {
-    return
-  }
+  const isDuplicate = Boolean(data.id && markShownAndCheckDuplicate(String(data.id)))
 
   event.waitUntil(
     Promise.all([
-      displayIndependentNotification(data),
+      displayIndependentNotification(data, isDuplicate),
       notifyOpenClientsPushDelivered(data),
     ])
   )
