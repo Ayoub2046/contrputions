@@ -19,6 +19,7 @@ import {
   Check,
   CheckCheck,
   RefreshCw,
+  Lock,
 } from 'lucide-react'
 import { BroadcastNotificationModal } from './BroadcastNotificationModal'
 import type { StoredNotification } from './notificationTypes'
@@ -30,7 +31,10 @@ interface NotificationBellProps {
 type FilterTab = 'all' | 'unread'
 type CategoryFilter = 'all' | 'contribution' | 'expense' | 'news' | 'reminder'
 
-function getCategoryIcon(cat?: string) {
+function getCategoryIcon(cat?: string, title?: string) {
+  if (title?.includes('🔒') || title?.includes('Private Message')) {
+    return <Lock size={15} className="text-[#1176BC] dark:text-[#25A8E0]" />
+  }
   switch (cat) {
     case 'contribution':
       return <Wallet size={15} className="text-emerald-600 dark:text-emerald-400" />
@@ -240,7 +244,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
               n.category
             )}`}
           >
-            {getCategoryIcon(n.category)}
+            {getCategoryIcon(n.category, n.title)}
           </div>
 
           {/* Content */}
@@ -249,8 +253,17 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
               <div
                 onClick={() => {
                   if (!n.read) markAsRead(n.id)
+                  if (n.url) {
+                    setOpen(false)
+                    if (n.url.includes('#')) {
+                      const hash = n.url.split('#')[1]
+                      window.location.hash = hash
+                      const el = document.getElementById(hash)
+                      if (el) el.scrollIntoView({ behavior: 'smooth' })
+                    }
+                  }
                 }}
-                className={`min-w-0 space-y-1 flex-1 ${!n.read ? 'cursor-pointer' : ''}`}
+                className="min-w-0 space-y-1 flex-1 cursor-pointer"
               >
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {!n.read && (

@@ -24,6 +24,7 @@ import {
   wasDeliveredByServiceWorker,
 } from './notificationService'
 import { subscribeToWebPush, getCurrentPushEndpoint } from './webPushService'
+import { getValidAuthToken } from '../../lib/admin-api'
 import type { PushNotificationPayload, StoredNotification, NotificationCategory } from './notificationTypes'
 
 interface TestPushResult {
@@ -141,6 +142,48 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const filterClass =
       user.role === 'student' ? user.class_id || activeClassId : activeClassId || user.class_id
     const list = await fetchNotificationsList(filterClass, user.id)
+
+    // For Class Admins and Super Admins: also fetch private student messages and merge them into the notifications list!
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      try {
+        const token = await getValidAuthToken()
+        if (token) {
+          const res = await fetch('/api/comments?action=private_messages', {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (res.ok) {
+            const dms = await res.json()
+            if (Array.isArray(dms)) {
+              for (const dm of dms) {
+                // Incoming messages from students directed to this admin
+                if (dm.sender_id !== user.id) {
+                  const studentName = dm.sender?.name || 'Student'
+                  const isRead = readIdsRef.current.has(dm.id)
+                  const dmNotif: StoredNotification = {
+                    id: dm.id,
+                    title: `🔒 Private Message from ${studentName}`,
+                    body: dm.content,
+                    category: 'reminder',
+                    createdAt: dm.created_at,
+                    read: isRead,
+                    url: '/dashboard#student-private-messages',
+                    senderName: studentName,
+                    senderRole: 'student',
+                    classId: dm.sender?.class_id || null,
+                  }
+                  list.push(dmNotif)
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Private messages notification merge error:', e)
+      }
+    }
+
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
     for (const item of list) {
       seenIdsRef.current.add(item.id)
       if (item.read) readIdsRef.current.add(item.id)
@@ -151,6 +194,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     refreshNotifications()
+    const interval = setInterval(() => {
+      refreshNotifications()
+    }, 15000)
+    return () => clearInterval(interval)
   }, [refreshNotifications])
 
   const handleIncomingNotification = useCallback(async (notif: PushNotificationPayload) => {

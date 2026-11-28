@@ -12,6 +12,7 @@ import {
   Clock, BarChart2, Award, Printer, Filter
 } from 'lucide-react'
 import { ClassCommentsSection } from './ClassCommentsSection'
+import { AdminPrivateMessagesInbox } from './AdminPrivateMessagesInbox'
 import { BroadcastNotificationModal } from '../notifications/BroadcastNotificationModal'
 import type { Profile } from '../../lib/types'
 
@@ -264,6 +265,9 @@ export function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {/* Row 1.5: Confidential Student Inquiries (Private Messages for Class Admin) */}
+          <AdminPrivateMessagesInbox classId={classFilter} />
 
           {/* Row 2: Charts & Visual Analytics */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

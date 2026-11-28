@@ -160,26 +160,30 @@ export default async function handler(req, res) {
       }
 
       // ----------------------------------------------------
-      // GET /api/comments?action=private_messages&admin_id=...
+      // GET /api/comments?action=private_messages
       // Retrieve private direct messages between student & admin
       // ----------------------------------------------------
       if (url.searchParams.get('action') === 'private_messages') {
         const adminId = url.searchParams.get('admin_id')
-        let dmQuery = `${SUPABASE_URL}/rest/v1/admin_messages?select=id,sender_id,content,category,created_at&order=created_at.asc`
+        const selectCols = 'id,sender_id,content,category,created_at,sender:profiles!admin_messages_sender_id_fkey(id,name,phone,student_id,class_id,classes:class_id(name))'
+        let dmQuery = `${SUPABASE_URL}/rest/v1/admin_messages?select=${encodeURIComponent(selectCols)}&order=created_at.desc`
+
         if (caller.role === 'student') {
           if (adminId) {
             dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${adminId}),and(sender_id.eq.${adminId},category.eq.dm:${caller.id}))`
           } else {
             dmQuery += `&or=(sender_id.eq.${caller.id},category.eq.dm:${caller.id})`
           }
-        } else if (caller.role === 'admin') {
+        } else if (caller.role === 'admin' || caller.role === 'super_admin' || caller.role === 'finance_manager') {
           const studentId = url.searchParams.get('student_id')
           if (studentId) {
             dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${studentId}),and(sender_id.eq.${studentId},category.eq.dm:${caller.id}))`
           } else {
+            // Fetch all private messages directed to this admin, or sent by this admin
             dmQuery += `&or=(sender_id.eq.${caller.id},category.eq.dm:${caller.id})`
           }
         }
+
         const dmRes = await fetch(dmQuery, {
           headers: {
             Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
@@ -430,6 +434,22 @@ export default async function handler(req, res) {
 
       if (!commentId) {
         return res.status(400).json({ error: 'Missing comment id to delete' })
+      }
+
+      // Handle private direct message deletion
+      if (url.searchParams.get('action') === 'private_message' || url.searchParams.get('is_private') === 'true') {
+        const delDmRes = await fetch(`${SUPABASE_URL}/rest/v1/admin_messages?id=eq.${commentId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+            apikey: SERVICE_ROLE_KEY,
+          },
+        })
+        if (!delDmRes.ok) {
+          const errJson = await delDmRes.json().catch(() => ({}))
+          return res.status(500).json({ error: errJson.message || 'Failed to delete private message' })
+        }
+        return res.status(200).json({ ok: true })
       }
 
       // Check permissions
