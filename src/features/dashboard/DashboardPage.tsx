@@ -138,7 +138,7 @@ export function DashboardPage() {
                   : t('dashboard.title')}
               </h1>
             </div>
-            <p className="text-xs text-[#9FBBDE] mt-0.5">
+            <p className="text-xs text-[#52677D] dark:text-[#9FBBDE] mt-0.5 font-medium">
               {selectedClassId
                 ? availableClasses.find((c) => c.id === selectedClassId)?.name || 'Class Group'
                 : 'All Classes Overview'} · Real-time Financial Ledger
@@ -248,7 +248,7 @@ export function DashboardPage() {
                 className="rounded-2xl border border-[#ECECEC] dark:border-[#1e3550] bg-white dark:bg-[#132033] p-4 flex flex-col justify-between shadow-2xs hover:shadow-sm transition-all"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#9FBBDE]">{m.label}</span>
+                  <span className="text-xs font-semibold text-[#52677D] dark:text-[#9FBBDE]">{m.label}</span>
                   <div
                     className="size-8 rounded-lg flex items-center justify-center shrink-0"
                     style={{ backgroundColor: m.bg }}
@@ -257,17 +257,19 @@ export function DashboardPage() {
                   </div>
                 </div>
                 <div className="mt-2">
-                  <p className="text-xl sm:text-2xl font-bold font-serif text-[#1a2332] dark:text-[#e8f0f8] tabular-nums">
+                  <p className="text-xl sm:text-2xl font-bold font-serif text-[#0B1A2B] dark:text-[#FFFFFF] tabular-nums">
                     {m.value}
                   </p>
-                  <p className="text-[10px] text-[#9FBBDE] mt-1 font-medium">{m.sub}</p>
+                  <p className="text-[11px] text-[#52677D] dark:text-[#C6CACB] mt-1 font-medium">{m.sub}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Row 1.5: Confidential Student Inquiries (Private Messages for Class Admin) */}
-          <AdminPrivateMessagesInbox classId={classFilter} />
+          {/* Row 1.5: Confidential Student Inquiries (Private Messages for Class Admin & Super Admin) */}
+          {(user?.role === 'admin' || user?.role === 'super_admin') && (
+            <AdminPrivateMessagesInbox classId={classFilter} />
+          )}
 
           {/* Row 2: Charts & Visual Analytics */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -280,11 +282,11 @@ export function DashboardPage() {
                     Top Contributing Students
                   </h3>
                 </div>
-                <span className="text-[11px] text-[#9FBBDE] font-semibold">Ranked by Paid Amount</span>
+                <span className="text-[11px] text-[#52677D] dark:text-[#9FBBDE] font-semibold">Ranked by Paid Amount</span>
               </div>
 
               {data.topStudents.length === 0 ? (
-                <div className="py-12 text-center text-[#9FBBDE] text-xs">
+                <div className="py-12 text-center text-[#52677D] dark:text-[#9FBBDE] text-xs">
                   No student contributions logged yet.
                 </div>
               ) : (
@@ -305,7 +307,7 @@ export function DashboardPage() {
                                   ? 'bg-slate-300 text-slate-800'
                                   : idx === 2
                                   ? 'bg-amber-700/60 text-white'
-                                  : 'bg-[#ECECEC] dark:bg-[#1e3550] text-[#9FBBDE]'
+                                  : 'bg-[#ECECEC] dark:bg-[#1e3550] text-[#52677D] dark:text-[#9FBBDE]'
                               )}
                             >
                               {idx + 1}
@@ -313,7 +315,7 @@ export function DashboardPage() {
                             <span className="font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">
                               {s.name}
                             </span>
-                            <span className="text-[10px] text-[#9FBBDE] font-mono shrink-0">
+                            <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] font-mono shrink-0">
                               #{s.student_id}
                             </span>
                             <span className="text-[10px] text-[#1176BC] bg-[#EAF4FB] dark:bg-[#0d2a40] px-1.5 py-0.2 rounded-full hidden sm:inline">
@@ -355,7 +357,7 @@ export function DashboardPage() {
                     className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                       classComparisonTab === 'top'
                         ? 'bg-white dark:bg-[#132033] text-[#0C9B5E] shadow-2xs'
-                        : 'text-[#9FBBDE] hover:text-[#1a2332]'
+                        : 'text-[#52677D] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-white'
                     }`}
                   >
                     🏆 Top Paid
@@ -366,7 +368,7 @@ export function DashboardPage() {
                     className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                       classComparisonTab === 'unpaid'
                         ? 'bg-white dark:bg-[#132033] text-[#ef4444] shadow-2xs'
-                        : 'text-[#9FBBDE] hover:text-[#1a2332]'
+                        : 'text-[#52677D] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-white'
                     }`}
                   >
                     ⚠️ Unpaid Dues
@@ -375,7 +377,7 @@ export function DashboardPage() {
               </div>
 
               {data.topClasses.length === 0 ? (
-                <div className="py-12 text-center text-[#9FBBDE] text-xs">
+                <div className="py-12 text-center text-[#52677D] dark:text-[#9FBBDE] text-xs">
                   No classes found in the registry.
                 </div>
               ) : (
@@ -403,7 +405,7 @@ export function DashboardPage() {
                             <span className="font-bold text-[#1a2332] dark:text-[#e8f0f8]">
                               {cls.class_name}
                             </span>
-                            <span className="text-[10px] text-[#9FBBDE]">
+                            <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE]">
                               ({cls.student_count} students)
                             </span>
                           </div>
@@ -414,7 +416,7 @@ export function DashboardPage() {
                                   {formatCurrency(cls.total_income)}
                                 </span>
                                 {cls.target > 0 && (
-                                  <span className="text-[10px] text-[#9FBBDE] ml-1">
+                                  <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] ml-1">
                                     / {formatCurrency(expectedTotal)} target
                                   </span>
                                 )}
@@ -424,7 +426,7 @@ export function DashboardPage() {
                                 <span className={`font-bold tabular-nums ${unpaidAmount > 0 ? 'text-[#ef4444]' : 'text-[#0C9B5E]'}`}>
                                   {unpaidAmount > 0 ? `-${formatCurrency(unpaidAmount)} unpaid` : '✓ Fully Cleared'}
                                 </span>
-                                <span className="text-[10px] text-[#9FBBDE] ml-1">
+                                <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] ml-1">
                                   ({formatCurrency(cls.total_income)} collected)
                                 </span>
                               </>
@@ -458,7 +460,7 @@ export function DashboardPage() {
               <h3 className="text-sm font-bold text-[#1a2332] dark:text-[#e8f0f8]">
                 Student Clearance Status Breakdown
               </h3>
-              <span className="text-xs text-[#9FBBDE] font-medium">
+              <span className="text-xs text-[#52677D] dark:text-[#9FBBDE] font-medium">
                 {data.totalStudents} total students
               </span>
             </div>
@@ -524,7 +526,7 @@ export function DashboardPage() {
                     {row.count}
                   </p>
                   <MiniBar pct={row.pct} color={row.color} />
-                  <p className="text-[10px] text-[#9FBBDE] font-medium">
+                  <p className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] font-medium">
                     {Math.round(row.pct)}% of student pool
                   </p>
                 </div>
@@ -555,7 +557,7 @@ export function DashboardPage() {
                       className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                         studentStatusTab === tab.id
                           ? 'bg-white dark:bg-[#132033] text-[#1176BC] shadow-2xs'
-                          : 'text-[#9FBBDE] hover:text-[#1a2332]'
+                          : 'text-[#52677D] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-white'
                       }`}
                     >
                       {tab.label}
@@ -583,7 +585,7 @@ export function DashboardPage() {
                             <span className="font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">
                               {st.name}
                             </span>
-                            <span className="text-[10px] font-mono text-[#9FBBDE]">#{st.student_id}</span>
+                            <span className="text-[10px] font-mono text-[#52677D] dark:text-[#9FBBDE]">#{st.student_id}</span>
                             <span className="text-[10px] text-[#1176BC] bg-[#EAF4FB] dark:bg-[#0d2a40] px-1.5 py-0.2 rounded-full">
                               {st.class_name}
                             </span>
@@ -595,7 +597,7 @@ export function DashboardPage() {
                               {formatCurrency(st.total_paid)}
                             </span>
                             {st.target > 0 && (
-                              <span className="text-[10px] text-[#9FBBDE] ml-1">
+                              <span className="text-[10px] text-[#52677D] dark:text-[#9FBBDE] ml-1">
                                 / {formatCurrency(st.target)}
                               </span>
                             )}
@@ -653,11 +655,11 @@ export function DashboardPage() {
                           </span>
                         ))}
                         {!(adminClasses[a.id]?.length) && (
-                          <span className="text-xs text-[#9FBBDE]">No classes assigned</span>
+                          <span className="text-xs text-[#52677D] dark:text-[#9FBBDE]">No classes assigned</span>
                         )}
                       </div>
                     </div>
-                    <span className="text-xs font-mono text-[#9FBBDE]">{a.student_id}</span>
+                    <span className="text-xs font-mono text-[#52677D] dark:text-[#9FBBDE]">{a.student_id}</span>
                   </div>
                 ))}
               </div>
@@ -674,7 +676,7 @@ export function DashboardPage() {
                     Audit & Security Activity Log
                   </h3>
                 </div>
-                <span className="text-xs text-[#9FBBDE]">Live Auth Events</span>
+                <span className="text-xs text-[#52677D] dark:text-[#9FBBDE]">Live Auth Events</span>
               </div>
 
               {logLoading ? (
@@ -690,7 +692,7 @@ export function DashboardPage() {
                   ))}
                 </div>
               ) : activityLog.length === 0 ? (
-                <p className="text-xs text-[#9FBBDE] py-4 text-center">
+                <p className="text-xs text-[#52677D] dark:text-[#9FBBDE] py-4 text-center">
                   No activity logged yet. Login/logout events will appear here automatically.
                 </p>
               ) : (
@@ -720,17 +722,17 @@ export function DashboardPage() {
                           ) : isLogout ? (
                             <LogOut size={13} className="text-red-500" />
                           ) : (
-                            <Activity size={13} className="text-[#9FBBDE]" />
+                            <Activity size={13} className="text-[#52677D] dark:text-[#9FBBDE]" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-[#1a2332] dark:text-[#e8f0f8] truncate">
                             {log.profiles?.name || 'Unknown User'}
-                            <span className="font-normal text-[#9FBBDE] ml-1">
+                            <span className="font-normal text-[#52677D] dark:text-[#9FBBDE] ml-1">
                               · {log.action}
                             </span>
                           </p>
-                          <p className="text-[10px] text-[#9FBBDE]">
+                          <p className="text-[10px] text-[#52677D] dark:text-[#9FBBDE]">
                             {new Date(log.timestamp).toLocaleString()}
                           </p>
                         </div>

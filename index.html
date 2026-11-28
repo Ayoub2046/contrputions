@@ -15,6 +15,15 @@
     <script>
       // ── Register PWA Service Worker immediately ──────────────────────────────
       if ('serviceWorker' in navigator) {
+        var hadController = Boolean(navigator.serviceWorker.controller);
+        var swReloading = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          if (hadController && !swReloading) {
+            swReloading = true;
+            window.location.reload();
+          }
+        });
+
         window.addEventListener('load', function() {
           // Clean up legacy /firebase-messaging-sw.js or foreign-origin SW registrations
           navigator.serviceWorker.getRegistrations().then(function(regs) {

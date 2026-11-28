@@ -67,6 +67,7 @@ export function useAdminCommunications() {
             phone
           )
         `)
+        .not('category', 'like', 'dm:%')
         .order('created_at', { ascending: false })
 
       if (err) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useNotifications } from '../notifications/NotificationContext'
@@ -36,6 +36,8 @@ import {
   MessageSquareText,
   Lock,
   Shield,
+  Send,
+  RefreshCw,
 } from 'lucide-react'
 
 interface StudentDashboardViewProps {
@@ -50,6 +52,17 @@ interface ClassLeader {
   role: string
   student_id?: string | null
   isAssignedClassAdmin?: boolean
+}
+
+interface StudentPrivateMessage {
+  id: string
+  sender_id: string
+  recipient_id?: string | null
+  content: string
+  category: string
+  created_at: string
+  sender?: { id: string; name: string; role?: string | null } | null
+  recipient?: { id: string; name: string; role?: string | null } | null
 }
 
 function formatWhatsAppNumber(phone: string): string {
@@ -67,20 +80,69 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   const appName = useAppName()
   const { isInstalled } = usePwaInstall()
   const { data, loading } = useStudentDashboard(userId, classId)
-  const { notifications, markAsRead, markAsUnread } = useNotifications()
+  const { notifications, markAsRead, markAsUnread, refreshNotifications } = useNotifications()
 
   const [copiedId, setCopiedId] = useState(false)
   const [showClearanceModal, setShowClearanceModal] = useState(false)
 
-  // Class leaders (Class Admins + Super Admin)
+  // Assigned Class Admins ONLY (super_admin is strictly excluded)
   const [classLeaders, setClassLeaders] = useState<ClassLeader[]>([])
   const [leadersLoading, setLeadersLoading] = useState(false)
 
-  // Direct Quick Text Composer Modal
+  // 1-on-1 Confidential Private Messages history (Student <-> Class Admin)
+  const [privateDms, setPrivateDms] = useState<StudentPrivateMessage[]>([])
+  const [dmsLoading, setDmsLoading] = useState(false)
+
+  // Direct Private Message Modal
   const [textTarget, setTextTarget] = useState<ClassLeader | null>(null)
   const [textBody, setTextBody] = useState('')
   const [textSending, setTextSending] = useState(false)
   const [textStatus, setTextStatus] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const readNotifIds = useMemo(() => {
+    const s = new Set<string>()
+    for (const n of notifications) {
+      if (n.read) s.add(n.id)
+    }
+    return s
+  }, [notifications])
+
+  const loadPrivateDms = useCallback(async () => {
+    try {
+      const token = await getValidAuthToken()
+      if (!token) return
+      const res = await fetch('/api/comments?action=private_messages', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const list = await res.json()
+        if (Array.isArray(list)) {
+          // Strict safety: filter out anything involving super_admin
+          const safe = list.filter(
+            (m: StudentPrivateMessage) =>
+              m.sender?.role !== 'super_admin' && m.recipient?.role !== 'super_admin'
+          )
+          setPrivateDms(safe)
+        }
+      }
+    } catch {}
+    setDmsLoading(false)
+  }, [])
+
+  useEffect(() => {
+    setDmsLoading(true)
+    loadPrivateDms()
+    const timer = setInterval(loadPrivateDms, 15000)
+    return () => clearInterval(timer)
+  }, [loadPrivateDms])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#my-private-messages') {
+      setTimeout(() => {
+        document.getElementById('my-private-messages')?.scrollIntoView({ behavior: 'smooth' })
+      }, 250)
+    }
+  }, [])
 
   useEffect(() => {
     if (!classId) return
@@ -88,7 +150,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
     setLeadersLoading(true)
 
     async function loadLeaders() {
-      // 1. Primary path: authenticated serverless API (bypasses profiles RLS cleanly)
+      // 1. Primary path: authenticated serverless API (strictly returns assigned class admins only)
       try {
         const token = await getValidAuthToken()
         if (token) {
@@ -98,7 +160,6 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
           if (resp.ok) {
             const list = await resp.json()
             if (active && Array.isArray(list)) {
-              // STRICT: Exclude super_admin completely. Students can only see and contact assigned class admins.
               const adminsOnly = list.filter((l: any) => l.role === 'admin' && l.role !== 'super_admin')
               setClassLeaders(adminsOnly)
               setLeadersLoading(false)
@@ -161,6 +222,10 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
     setTextTarget(leader)
     setTextBody('')
     setTextStatus(null)
+    // Mark incoming replies from this admin as read
+    privateDms
+      .filter((m) => m.sender_id === leader.id && m.category === `dm:${userId}` && !readNotifIds.has(m.id))
+      .forEach((m) => markAsRead(m.id))
   }
 
   async function handleSendInAppText(e: React.FormEvent) {
@@ -189,26 +254,57 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
         }),
       })
 
+      const resData = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}))
-        throw new Error(errJson.error || 'Failed to send private message')
+        throw new Error(resData.error || 'Failed to send private message')
+      }
+
+      if (resData?.data) {
+        setPrivateDms((prev) => [
+          {
+            ...resData.data,
+            sender: user ? { id: user.id, name: user.name, role: user.role } : null,
+            recipient: { id: textTarget.id, name: textTarget.name, role: textTarget.role },
+            recipient_id: textTarget.id,
+          },
+          ...prev,
+        ])
+      } else {
+        await loadPrivateDms()
       }
 
       setTextSending(false)
       setTextStatus({
         ok: true,
-        msg: `🔒 Private message delivered! Only you and your class leader ${textTarget.name} have access to this communication.`,
+        msg: `🔒 Private message delivered to ${textTarget.name}. Your conversation stays strictly confidential.`,
       })
       setTextBody('')
       setTimeout(() => {
-        setTextTarget(null)
         setTextStatus(null)
-      }, 2200)
+      }, 2500)
     } catch (err: any) {
       setTextSending(false)
       setTextStatus({ ok: false, msg: err.message || 'Failed to send private message' })
     }
   }
+
+  // Chronological conversation filtered for active modal leader
+  const modalConversation = useMemo(() => {
+    if (!textTarget) return []
+    return privateDms
+      .filter(
+        (m) =>
+          (m.sender_id === userId && m.category === `dm:${textTarget.id}`) ||
+          (m.sender_id === textTarget.id && m.category === `dm:${userId}`)
+      )
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  }, [privateDms, textTarget, userId])
+
+  const unreadAdminReplies = useMemo(() => {
+    return privateDms.filter(
+      (m) => m.sender_id !== userId && m.category === `dm:${userId}` && !readNotifIds.has(m.id)
+    )
+  }, [privateDms, userId, readNotifIds])
 
   if (loading) {
     return (
@@ -271,7 +367,9 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
   const progressPct = data.target > 0 ? Math.min(100, Math.round((data.personalTotal / data.target) * 100)) : 0
   const remainingNeeded = Math.max(0, data.target - data.personalTotal)
 
-  const classNotifs = notifications.filter((n) => !n.classId || n.classId === classId).slice(0, 3)
+  const classNotifs = notifications
+    .filter((n) => n.category !== 'private_message' && (!n.classId || n.classId === classId))
+    .slice(0, 3)
 
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto">
@@ -622,12 +720,137 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                       >
                         <Lock size={12} className="text-[#1176BC] dark:text-[#25A8E0]" />
                         <span>Private Message</span>
+                        {privateDms.filter((m) => m.sender_id === leader.id && m.category === `dm:${userId}` && !readNotifIds.has(m.id)).length > 0 && (
+                          <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-[#1176BC] text-[#FFFFFF] text-[10px]">
+                            {
+                              privateDms.filter(
+                                (m) => m.sender_id === leader.id && m.category === `dm:${userId}` && !readNotifIds.has(m.id)
+                              ).length
+                            }
+                          </span>
+                        )}
                       </button>
                     </div>
                   </CardContent>
                 </Card>
               )
             })}
+          </div>
+        )}
+
+        {/* MY CONFIDENTIAL 1-ON-1 PRIVATE CONVERSATION HISTORY (with Admin Replies!) */}
+        {(privateDms.length > 0 || dmsLoading) && (
+          <div id="my-private-messages" className="scroll-mt-20">
+          <Card
+            className="rounded-2xl border-[#9FBBDE]/70 dark:border-[#25A8E0]/40 bg-[#FFFFFF] dark:bg-[#102033] overflow-hidden shadow-xs"
+          >
+            <div className="px-4 sm:px-5 py-3 border-b border-[#ECECEC] dark:border-[#203854] bg-[#F4F8FC] dark:bg-[#0D1B2C] flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Lock size={14} className="text-[#1176BC] dark:text-[#25A8E0]" />
+                <h3 className="text-xs sm:text-sm font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+                  My Confidential Messages with Class Admin
+                </h3>
+                {unreadAdminReplies.length > 0 && (
+                  <span className="px-2 py-0.2 rounded-full bg-[#1176BC] text-[#FFFFFF] text-[10px] font-bold">
+                    {unreadAdminReplies.length} New {unreadAdminReplies.length === 1 ? 'Reply' : 'Replies'}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {unreadAdminReplies.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => unreadAdminReplies.forEach((m) => markAsRead(m.id))}
+                    className="text-[11px] font-bold text-[#1176BC] dark:text-[#25A8E0] hover:underline cursor-pointer"
+                  >
+                    Mark replies read
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    loadPrivateDms()
+                    refreshNotifications()
+                  }}
+                  className="p-1 rounded-lg border border-[#C6CACB]/60 dark:border-[#203854] text-[#52677D] dark:text-[#9FBBDE] hover:text-[#1176BC] cursor-pointer"
+                  title="Refresh private messages"
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </div>
+            </div>
+
+            <CardContent className="p-4 space-y-2.5 max-h-80 overflow-y-auto">
+              {[...privateDms]
+                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                .map((msg) => {
+                  const isMine = msg.sender_id === userId
+                  const partnerLeader = classLeaders.find(
+                    (l) => l.id === (isMine ? msg.recipient_id : msg.sender_id)
+                  )
+                  const isUnreadReply = !isMine && !readNotifIds.has(msg.id)
+                  const senderLabel = isMine
+                    ? 'You'
+                    : msg.sender?.name || partnerLeader?.name || 'Class Admin'
+
+                  return (
+                    <div
+                      key={msg.id}
+                      onClick={() => {
+                        if (isUnreadReply) markAsRead(msg.id)
+                      }}
+                      className={`p-3 rounded-xl border text-xs sm:text-sm space-y-1 transition-colors ${
+                        isMine
+                          ? 'ml-4 sm:ml-10 bg-[#1176BC] text-[#FFFFFF] border-[#1176BC]'
+                          : isUnreadReply
+                          ? 'mr-4 sm:mr-10 bg-[#EAF4FB] dark:bg-[#172D47] border-[#25A8E0] text-[#0B1A2B] dark:text-[#FFFFFF] cursor-pointer'
+                          : 'mr-4 sm:mr-10 bg-[#F4F8FC] dark:bg-[#0D1B2C] border-[#ECECEC] dark:border-[#203854] text-[#0B1A2B] dark:text-[#FFFFFF]'
+                      }`}
+                    >
+                      <div
+                        className={`flex items-center justify-between gap-2 text-[10px] font-bold ${
+                          isMine ? 'text-[#FFFFFF]/85' : 'text-[#1176BC] dark:text-[#25A8E0]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>{isMine ? 'You (Private)' : `${senderLabel} (Class Admin Reply)`}</span>
+                          {isUnreadReply && (
+                            <span className="px-1.5 py-0.2 rounded bg-[#1176BC] text-[#FFFFFF] text-[9px]">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                        <span className={isMine ? 'text-[#FFFFFF]/75 font-normal' : 'text-[#52677D] dark:text-[#C6CACB] font-normal'}>
+                          {formatDate(msg.created_at)}
+                        </span>
+                      </div>
+                      <p
+                        className={`whitespace-pre-wrap break-words leading-relaxed ${
+                          isMine ? 'text-[#FFFFFF]' : 'text-[#0B1A2B] dark:text-[#FFFFFF]'
+                        }`}
+                      >
+                        {msg.content}
+                      </p>
+                      {!isMine && partnerLeader && (
+                        <div className="pt-1 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openQuickTextModal(partnerLeader)
+                            }}
+                            className="text-[11px] font-bold text-[#1176BC] dark:text-[#25A8E0] hover:underline cursor-pointer"
+                          >
+                            Reply to {partnerLeader.name} &rarr;
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+            </CardContent>
+          </Card>
           </div>
         )}
       </div>
@@ -885,7 +1108,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
       {/* 8. CLASS DISCUSSION & STUDENT FEEDBACK */}
       <ClassCommentsSection classId={classId} />
 
-      {/* 100% PRIVATE CONFIDENTIAL DIRECT MESSAGE MODAL */}
+      {/* 100% PRIVATE CONFIDENTIAL DIRECT MESSAGE MODAL (2-WAY CONVERSATION) */}
       <Modal
         open={Boolean(textTarget)}
         onClose={() => {
@@ -894,7 +1117,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
             setTextStatus(null)
           }
         }}
-        title={textTarget ? `🔒 Private Message to ${textTarget.name}` : 'Private Message'}
+        title={textTarget ? `🔒 Private Chat: ${textTarget.name}` : 'Private Message'}
       >
         {textTarget && (
           <form onSubmit={handleSendInAppText} className="space-y-4">
@@ -928,21 +1151,52 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
             <div className="p-3 rounded-xl bg-blue-50/80 dark:bg-[#172D47]/50 border border-[#9FBBDE]/60 dark:border-[#203854] text-xs text-[#1176BC] dark:text-[#9FBBDE] flex items-start gap-2">
               <ShieldCheck size={16} className="shrink-0 mt-0.5 text-[#1176BC] dark:text-[#25A8E0]" />
               <span>
-                <strong>Confidential Message:</strong> This message is delivered privately to <strong>{textTarget.name}</strong>. It will <strong>never</strong> be visible on the public class discussion board.
+                <strong>100% Confidential:</strong> Only you and <strong>{textTarget.name}</strong> can read messages or replies in this private thread. It never appears on the class board.
               </span>
             </div>
 
+            {/* Previous 1-on-1 Messages & Admin Replies */}
+            {modalConversation.length > 0 && (
+              <div className="max-h-48 overflow-y-auto space-y-2 rounded-xl border border-[#ECECEC] dark:border-[#203854] bg-[#F4F8FC] dark:bg-[#0D1B2C] p-3">
+                {modalConversation.map((m) => {
+                  const isMine = m.sender_id === userId
+                  return (
+                    <div
+                      key={m.id}
+                      className={`p-2.5 rounded-xl text-xs space-y-1 ${
+                        isMine
+                          ? 'ml-6 bg-[#1176BC] text-[#FFFFFF]'
+                          : 'mr-6 bg-[#FFFFFF] dark:bg-[#102033] text-[#0B1A2B] dark:text-[#FFFFFF] border border-[#ECECEC] dark:border-[#203854]'
+                      }`}
+                    >
+                      <div
+                        className={`flex items-center justify-between text-[10px] ${
+                          isMine ? 'text-[#FFFFFF]/80' : 'text-[#52677D] dark:text-[#9FBBDE]'
+                        }`}
+                      >
+                        <span className="font-bold">
+                          {isMine ? 'You' : `${textTarget.name} (Class Admin)`}
+                        </span>
+                        <span>{formatDate(m.created_at)}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-bold text-[#0B1A2B] dark:text-[#FFFFFF] mb-1.5">
-                Your Private Message
+                {modalConversation.length > 0 ? 'Send Follow-Up Private Message' : 'Your Private Message'}
               </label>
               <textarea
                 value={textBody}
                 onChange={(e) => setTextBody(e.target.value)}
-                rows={4}
+                rows={3}
                 maxLength={600}
                 required
-                placeholder={`Type your confidential inquiry, payment confirmation, or request to ${textTarget.name}...`}
+                placeholder={`Write privately to ${textTarget.name}...`}
                 className="w-full rounded-xl border border-[#C6CACB] dark:border-[#203854] bg-[#FFFFFF] dark:bg-[#102033] p-3 text-sm text-[#0B1A2B] dark:text-[#FFFFFF] placeholder:text-[#52677D] dark:placeholder:text-[#9FBBDE] focus:outline-none focus:ring-2 focus:ring-[#25A8E0]/40"
               />
             </div>
@@ -961,7 +1215,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                     key={tpl}
                     type="button"
                     onClick={() => setTextBody(tpl)}
-                    className="text-[11px] px-2.5 py-1 rounded-lg bg-[#ECECEC] dark:bg-[#172D47] hover:bg-[#9FBBDE]/30 text-[#0B1A2B] dark:text-[#FFFFFF] transition-colors"
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-[#ECECEC] dark:bg-[#172D47] hover:bg-[#9FBBDE]/30 text-[#0B1A2B] dark:text-[#FFFFFF] transition-colors cursor-pointer"
                   >
                     {tpl}
                   </button>
@@ -988,7 +1242,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                 disabled={textSending}
                 onClick={() => setTextTarget(null)}
               >
-                Cancel
+                Close
               </Button>
               <Button
                 type="submit"
@@ -996,7 +1250,7 @@ export function StudentDashboardView({ userId, classId }: StudentDashboardViewPr
                 disabled={!textBody.trim() || textSending}
                 className="bg-gradient-to-r from-[#1176BC] to-[#25A8E0] text-[#FFFFFF]"
               >
-                <Lock size={14} /> Send Private Message
+                <Send size={14} /> Send Private Message
               </Button>
             </div>
           </form>

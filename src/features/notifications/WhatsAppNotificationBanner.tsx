@@ -1,10 +1,17 @@
 import { useEffect } from 'react'
 import { useNotifications } from './NotificationContext'
+import { useAuth } from '../auth/AuthContext'
 import { AppLogo, useAppName } from '../../hooks/useAppLogo'
-import { Bell, X, MessageSquare, Wallet, Receipt, Info } from 'lucide-react'
+import { Bell, X, MessageSquare, Wallet, Receipt, Info, Lock } from 'lucide-react'
 
 function getCategoryBadge(category?: string) {
   switch (category) {
+    case 'private_message':
+      return (
+        <span className="size-5 rounded-full bg-[#1176BC] text-white flex items-center justify-center shadow-sm ring-2 ring-white dark:ring-slate-900">
+          <Lock size={10} />
+        </span>
+      )
     case 'contribution':
       return (
         <span className="size-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm ring-2 ring-white dark:ring-slate-900">
@@ -41,6 +48,7 @@ function getCategoryBadge(category?: string) {
 
 export function WhatsAppNotificationBanner() {
   const { activeBanner, dismissBanner } = useNotifications()
+  const { user } = useAuth()
   const appName = useAppName()
 
   useEffect(() => {
@@ -53,11 +61,24 @@ export function WhatsAppNotificationBanner() {
 
   if (!activeBanner) return null
 
+  const handleBannerClick = () => {
+    const targetUrl = activeBanner.url
+    dismissBanner()
+    if (targetUrl && targetUrl.includes('#')) {
+      const hash = targetUrl.split('#')[1]
+      window.location.hash = hash
+      setTimeout(() => {
+        const el = document.getElementById(hash)
+        if (el) el.scrollIntoView({ behavior: 'smooth' })
+      }, 80)
+    }
+  }
+
   return (
     <div className="fixed top-4 left-3 right-3 sm:left-auto sm:right-4 z-[110] max-w-sm sm:w-96 animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-auto">
       <div
         className="rounded-2xl bg-white dark:bg-slate-900 border border-[#1176BC]/30 shadow-2xl overflow-hidden backdrop-blur-md cursor-pointer transition-transform hover:scale-[1.01]"
-        onClick={dismissBanner}
+        onClick={handleBannerClick}
       >
         {/* Top bar with dynamic App Name */}
         <div className="bg-gradient-to-r from-[#1176BC] to-[#0D5A8A] px-3.5 py-1.5 flex items-center justify-between text-white text-xs font-semibold">
@@ -100,7 +121,13 @@ export function WhatsAppNotificationBanner() {
               <p className="text-[10px] text-[#1176BC] dark:text-[#38BDF8] font-medium mt-1.5 flex items-center gap-1">
                 <span>From: {activeBanner.senderName}</span>
                 {activeBanner.senderRole && (
-                  <span className="opacity-80">({activeBanner.senderRole})</span>
+                  <span className="opacity-80">
+                    (
+                    {activeBanner.senderRole === 'super_admin' && user?.role === 'student'
+                      ? 'Administration'
+                      : activeBanner.senderRole}
+                    )
+                  </span>
                 )}
               </p>
             )}

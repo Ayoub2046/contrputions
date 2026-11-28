@@ -29,10 +29,10 @@ interface NotificationBellProps {
 }
 
 type FilterTab = 'all' | 'unread'
-type CategoryFilter = 'all' | 'contribution' | 'expense' | 'news' | 'reminder'
+type CategoryFilter = 'all' | 'private_message' | 'contribution' | 'expense' | 'news' | 'reminder'
 
 function getCategoryIcon(cat?: string, title?: string) {
-  if (title?.includes('🔒') || title?.includes('Private Message')) {
+  if (cat === 'private_message' || title?.includes('🔒') || title?.includes('Private Message') || title?.includes('Private Reply')) {
     return <Lock size={15} className="text-[#1176BC] dark:text-[#25A8E0]" />
   }
   switch (cat) {
@@ -52,6 +52,8 @@ function getCategoryIcon(cat?: string, title?: string) {
 
 function getCategoryColor(cat?: string) {
   switch (cat) {
+    case 'private_message':
+      return 'bg-[#EAF4FB] dark:bg-[#1176BC]/25 ring-1 ring-[#1176BC]/35 dark:ring-[#25A8E0]/40'
     case 'contribution':
       return 'bg-emerald-100 dark:bg-emerald-950/60 ring-1 ring-emerald-200 dark:ring-emerald-800'
     case 'expense':
@@ -68,6 +70,8 @@ function getCategoryColor(cat?: string) {
 
 function getCategoryLabel(cat?: string) {
   switch (cat) {
+    case 'private_message':
+      return 'Private DM'
     case 'contribution':
       return 'Contribution'
     case 'expense':
@@ -84,8 +88,8 @@ function getCategoryLabel(cat?: string) {
   }
 }
 
-function formatRole(role?: string) {
-  if (role === 'super_admin') return 'Super Admin'
+function formatRole(role?: string, viewerRole?: string) {
+  if (role === 'super_admin') return viewerRole === 'student' ? 'Administration' : 'Super Admin'
   if (role === 'admin') return 'Class Admin'
   if (role === 'finance_manager') return 'Finance'
   if (role === 'student') return 'Student'
@@ -343,7 +347,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
               )}
               {n.senderRole && (
                 <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-[#F1F5F9] dark:bg-[#0d1a2d] text-[#64748b] dark:text-[#9FBBDE]">
-                  {formatRole(n.senderRole)}
+                  {formatRole(n.senderRole, user?.role)}
                 </span>
               )}
             </div>
@@ -458,6 +462,7 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
             {(
               [
                 { id: 'all', label: 'Everything' },
+                { id: 'private_message', label: '🔒 Private' },
                 { id: 'news', label: 'News' },
                 { id: 'contribution', label: 'Payments' },
                 { id: 'expense', label: 'Expenses' },

@@ -1,4 +1,4 @@
-import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { CacheFirst, NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
@@ -13,11 +13,19 @@ self.addEventListener('activate', (event) => {
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 
-// SPA navigation fallback (exclude /api/* and static icons/files)
+// SPA navigation: prefer fresh HTML from network so newly deployed Landing Page & UI appear immediately,
+// falling back cleanly to the precached shell when offline.
 registerRoute(
-  new NavigationRoute(createHandlerBoundToURL('index.html'), {
-    denylist: [/^\/api\//, /^\/sw\.js$/, /^\/custom-sw\.js$/, /^\/firebase-messaging-sw\.js$/],
-  })
+  new NavigationRoute(
+    new NetworkFirst({
+      cacheName: 'app-html-shell',
+      networkTimeoutSeconds: 3,
+      plugins: [new ExpirationPlugin({ maxEntries: 5, maxAgeSeconds: 86400 })],
+    }),
+    {
+      denylist: [/^\/api\//, /^\/sw\.js$/, /^\/custom-sw\.js$/, /^\/firebase-messaging-sw\.js$/],
+    }
+  )
 )
 
 registerRoute(

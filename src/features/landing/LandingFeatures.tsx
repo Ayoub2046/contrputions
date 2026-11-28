@@ -31,13 +31,13 @@ export function LandingFeatures({ features }: LandingFeaturesProps) {
       ? features
       : [
           {
-            title: 'Student Self-Service & Privacy',
-            desc: 'Log in with your Student ID to check your payments, remaining balance, and verified timestamps without public exposure.',
+            title: 'Personal Contribution Record',
+            desc: 'Log in with your Student ID to check weekly and monthly contributions, remaining balances, and verified timestamps.',
             icon: 'ShieldCheck',
           },
           {
-            title: 'Itemized Course Expenses',
-            desc: 'Transparent accounting of class printing, study handouts, practical materials, and events. Every dollar is documented.',
+            title: 'Itemized Class Expenses',
+            desc: 'Complete accounting of class printing, study handouts, practical materials, and events. Every dollar is documented.',
             icon: 'Calculator',
           },
           {
@@ -53,40 +53,48 @@ export function LandingFeatures({ features }: LandingFeaturesProps) {
         ]
 
   return (
-    <section id="features" className="py-20 bg-[#FFFFFF] dark:bg-[#09131F] border-b border-[#ECECEC] dark:border-[#203854]">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
-          <p className="text-xs font-bold uppercase tracking-wider text-[#1176BC] dark:text-[#25A8E0]">
-            Core Platform Capabilities
-          </p>
+    <section id="features" className="py-16 sm:py-24 bg-[#ECECEC]/40 dark:bg-[#0E1D31] border-b border-[#C6CACB]/80 dark:border-[#1D3552]">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
+        <div className="max-w-2xl space-y-2.5">
+          <span className="text-xs font-bold uppercase tracking-widest text-[#1176BC] dark:text-[#25A8E0]">
+            What Each Portal Includes
+          </span>
           <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
-            Designed for Real University Classrooms
+            Practical tools built for daily class life
           </h2>
-          <p className="text-base text-[#2F465E] dark:text-[#DCE8F5]">
-            Replacing disorganized group chats and paper notebooks with an audited, bank-grade ledger that protects student dignity and ensures total accountability.
+          <p className="text-sm sm:text-base text-[#2F465E] dark:text-[#DCE8F5]">
+            Everything students and class leaders need during a semester, organized cleanly without clutter.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Unified 2x2 Architectural Hairline Frame (instead of disconnected floating cards) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 rounded-2xl border border-[#C6CACB] dark:border-[#1D3552] bg-[#FFFFFF] dark:bg-[#08121E] overflow-hidden divide-y md:divide-y-0">
           {displayFeatures.map((feat, idx) => {
             const Icon = (feat.icon && ICON_MAP[feat.icon]) || CheckCircle
+            const isRightCol = idx % 2 === 1
+            const isSecondRow = idx >= 2
 
             return (
               <div
                 key={idx}
-                className="group relative rounded-2xl border border-[#ECECEC] dark:border-[#203854] bg-[#F4F8FC] dark:bg-[#102033] p-6 space-y-4 hover:border-[#1176BC] dark:hover:border-[#25A8E0] hover:shadow-lg transition-all"
+                className={`p-7 sm:p-9 space-y-3.5 transition-colors hover:bg-[#ECECEC]/35 dark:hover:bg-[#0E1D31]/70 ${
+                  isRightCol ? 'md:border-l md:border-[#C6CACB]/80 dark:md:border-[#1D3552]' : ''
+                } ${isSecondRow ? 'md:border-t md:border-[#C6CACB]/80 dark:md:border-[#1D3552]' : ''}`}
               >
-                <div className="size-11 rounded-xl bg-[#FFFFFF] dark:bg-[#172D47] border border-[#ECECEC] dark:border-[#203854] flex items-center justify-center text-[#1176BC] dark:text-[#25A8E0] shadow-2xs group-hover:scale-105 transition-transform">
-                  <Icon size={20} />
+                <div className="flex items-center justify-between">
+                  <div className="size-10 rounded-lg bg-[#1176BC]/10 dark:bg-[#1176BC]/25 text-[#1176BC] dark:text-[#25A8E0] flex items-center justify-center">
+                    <Icon size={20} />
+                  </div>
+                  <span className="font-mono text-xs font-semibold text-[#52677D] dark:text-[#9FBBDE]">
+                    0{idx + 1}
+                  </span>
                 </div>
-                <div className="space-y-1.5">
-                  <h3 className="text-base font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
-                    {feat.title}
-                  </h3>
-                  <p className="text-xs sm:text-sm text-[#2F465E] dark:text-[#C6CACB] leading-relaxed">
-                    {feat.desc}
-                  </p>
-                </div>
+                <h3 className="text-lg font-bold text-[#0B1A2B] dark:text-[#FFFFFF]">
+                  {feat.title}
+                </h3>
+                <p className="text-sm text-[#2F465E] dark:text-[#C6CACB] leading-relaxed">
+                  {feat.desc}
+                </p>
               </div>
             )
           })}

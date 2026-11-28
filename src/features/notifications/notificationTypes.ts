@@ -1,4 +1,11 @@
-export type NotificationCategory = 'news' | 'announcement' | 'reminder' | 'contribution' | 'expense' | 'system'
+export type NotificationCategory =
+  | 'news'
+  | 'announcement'
+  | 'reminder'
+  | 'contribution'
+  | 'expense'
+  | 'private_message'
+  | 'system'
 
 export interface PushNotificationPayload {
   id: string

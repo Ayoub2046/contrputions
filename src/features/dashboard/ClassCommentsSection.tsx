@@ -236,7 +236,9 @@ export function ClassCommentsSection({ classId }: ClassCommentsSectionProps) {
                                 : 'bg-brand-600 text-white'
                             }`}>
                               {comment.author_role === 'super_admin'
-                                ? '👑 Super Admin'
+                                ? user?.role === 'student'
+                                  ? '🛡 Class Administration'
+                                  : '👑 Super Admin'
                                 : comment.author_role === 'finance_manager'
                                 ? '💼 Finance Manager'
                                 : '🛡 Class Admin'}

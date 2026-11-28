@@ -161,27 +161,32 @@ export default async function handler(req, res) {
 
       // ----------------------------------------------------
       // GET /api/comments?action=private_messages
-      // Retrieve private direct messages between student & admin
+      // Retrieve 1-on-1 private direct messages between student & assigned class admin
+      // Strictly filters category like 'dm:%' so public admin noticeboard posts never leak in!
       // ----------------------------------------------------
       if (url.searchParams.get('action') === 'private_messages') {
         const adminId = url.searchParams.get('admin_id')
-        const selectCols = 'id,sender_id,content,category,created_at,sender:profiles!admin_messages_sender_id_fkey(id,name,phone,student_id,class_id,classes:class_id(name))'
-        let dmQuery = `${SUPABASE_URL}/rest/v1/admin_messages?select=${encodeURIComponent(selectCols)}&order=created_at.desc`
+        const selectCols =
+          'id,sender_id,content,category,created_at,sender:profiles!admin_messages_sender_id_fkey(id,name,role,phone,student_id,class_id,classes:class_id(name))'
+        let dmQuery = `${SUPABASE_URL}/rest/v1/admin_messages?select=${encodeURIComponent(selectCols)}&category=like.dm:*&order=created_at.desc&limit=200`
 
         if (caller.role === 'student') {
           if (adminId) {
-            dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${adminId}),and(sender_id.eq.${adminId},category.eq.dm:${caller.id}))`
+            dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${encodeURIComponent(adminId)}),and(sender_id.eq.${encodeURIComponent(adminId)},category.eq.dm:${caller.id}))`
           } else {
             dmQuery += `&or=(sender_id.eq.${caller.id},category.eq.dm:${caller.id})`
           }
-        } else if (caller.role === 'admin' || caller.role === 'super_admin' || caller.role === 'finance_manager') {
+        } else if (caller.role === 'admin' || caller.role === 'super_admin') {
           const studentId = url.searchParams.get('student_id')
           if (studentId) {
-            dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${studentId}),and(sender_id.eq.${studentId},category.eq.dm:${caller.id}))`
+            dmQuery += `&or=(and(sender_id.eq.${caller.id},category.eq.dm:${encodeURIComponent(studentId)}),and(sender_id.eq.${encodeURIComponent(studentId)},category.eq.dm:${caller.id}))`
           } else {
-            // Fetch all private messages directed to this admin, or sent by this admin
+            // Fetch all private DMs directed to this admin OR sent by this admin
             dmQuery += `&or=(sender_id.eq.${caller.id},category.eq.dm:${caller.id})`
           }
+        } else {
+          // Other roles (e.g. finance_manager) do not participate in confidential student-admin DMs
+          return res.status(200).json([])
         }
 
         const dmRes = await fetch(dmQuery, {
@@ -193,8 +198,55 @@ export default async function handler(req, res) {
         if (!dmRes.ok) {
           return res.status(200).json([])
         }
-        const dms = await dmRes.json()
-        return res.status(200).json(dms)
+        const dms = (await dmRes.json()) || []
+
+        // Collect all recipient IDs from category 'dm:<uuid>' so UI knows both sides of the thread
+        const recipientIds = Array.from(
+          new Set(
+            dms
+              .map((m) => (typeof m.category === 'string' && m.category.startsWith('dm:') ? m.category.slice(3) : null))
+              .filter(Boolean)
+          )
+        )
+
+        const recipientMap = new Map()
+        if (recipientIds.length > 0) {
+          const recRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/profiles?id=in.(${recipientIds.map((id) => encodeURIComponent(id)).join(',')})&select=id,name,role,phone,student_id,class_id,classes:class_id(name)`,
+            {
+              headers: {
+                Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+                apikey: SERVICE_ROLE_KEY,
+              },
+            }
+          )
+          if (recRes.ok) {
+            const recRows = await recRes.json()
+            for (const r of recRows || []) {
+              if (r?.id) recipientMap.set(r.id, r)
+            }
+          }
+        }
+
+        const enriched = dms
+          .map((m) => {
+            const recipientId = typeof m.category === 'string' && m.category.startsWith('dm:') ? m.category.slice(3) : null
+            const recipient = recipientId ? recipientMap.get(recipientId) || null : null
+            return {
+              ...m,
+              recipient_id: recipientId,
+              recipient,
+            }
+          })
+          .filter((m) => {
+            // Strictly hide super_admin from students
+            if (caller.role === 'student') {
+              if (m.sender?.role === 'super_admin' || m.recipient?.role === 'super_admin') return false
+            }
+            return true
+          })
+
+        return res.status(200).json(enriched)
       }
 
       let filterClassId = null
@@ -266,11 +318,61 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Message content cannot be empty' })
       }
 
-      // Handle 100% PRIVATE Direct Message (Student -> Class Admin)
+      // Handle 100% PRIVATE Direct Message (Student <-> Assigned Class Admin)
       // NEVER posts to class_comments! Stored confidentially with push notification.
       if (is_private || recipient_id) {
         if (!recipient_id) {
           return res.status(400).json({ error: 'Recipient is required for private messages' })
+        }
+
+        // Verify recipient profile and enforce strict student privacy boundaries
+        const recRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(recipient_id)}&select=id,name,role,class_id&limit=1`,
+          {
+            headers: {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              apikey: SERVICE_ROLE_KEY,
+            },
+          }
+        )
+        const recRows = recRes.ok ? await recRes.json() : []
+        const recipientProfile = recRows?.[0]
+        if (!recipientProfile) {
+          return res.status(404).json({ error: 'Recipient user not found' })
+        }
+
+        // STRICT: Students can ONLY send private messages to their assigned Class Admin (NEVER super_admin!)
+        if (caller.role === 'student') {
+          if (recipientProfile.role !== 'admin') {
+            return res.status(403).json({
+              error: 'Forbidden: Students can only send private messages to their assigned class administrator.',
+            })
+          }
+          if (!caller.class_id) {
+            return res.status(403).json({ error: 'Forbidden: No class assigned to your student profile.' })
+          }
+          const caCheckRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/class_admins?class_id=eq.${encodeURIComponent(caller.class_id)}&admin_id=eq.${encodeURIComponent(recipient_id)}&select=admin_id`,
+            {
+              headers: {
+                Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+                apikey: SERVICE_ROLE_KEY,
+              },
+            }
+          )
+          const caCheckRows = caCheckRes.ok ? await caCheckRes.json() : []
+          const isAssigned = (caCheckRows?.length ?? 0) > 0 || recipientProfile.class_id === caller.class_id
+          if (!isAssigned) {
+            return res.status(403).json({
+              error: 'Forbidden: You can only message administrators assigned to your class.',
+            })
+          }
+        } else if (caller.role === 'admin') {
+          if (recipientProfile.role === 'student' && recipientProfile.class_id && !adminClassIds.includes(recipientProfile.class_id)) {
+            return res.status(403).json({ error: 'Forbidden: Student does not belong to your assigned classes.' })
+          }
+        } else if (caller.role !== 'super_admin') {
+          return res.status(403).json({ error: 'Forbidden: Unauthorized role for private messaging' })
         }
 
         const isUuid = typeof requestedId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedId)
@@ -299,15 +401,24 @@ export default async function handler(req, res) {
           return res.status(500).json({ error: errJson.message || 'Failed to send private message' })
         }
 
-        // Dispatch background Web Push directly to the class admin's device
+        const createdDmRows = await insertDmRes.json().catch(() => [])
+        const createdDm = createdDmRows?.[0] || { ...dmPayload, created_at: new Date().toISOString() }
+
+        // Dispatch background Web Push directly to recipient's device with deep link to inbox
+        const isToStudent = recipientProfile.role === 'student'
+        const pushTitle = isToStudent
+          ? `🔒 Private Reply from ${caller.name}`
+          : `🔒 Private Message from ${caller.name}`
+        const pushUrl = isToStudent ? '/dashboard#my-private-messages' : '/dashboard#student-private-messages'
+
         try {
           await dispatchPushNotification(req, {
             id: msgId,
-            title: `🔒 Private Message from ${caller.name}`,
-            body: String(content).trim().slice(0, 100),
-            category: 'reminder',
+            title: pushTitle,
+            body: String(content).trim().slice(0, 140),
+            category: 'private_message',
             targetUserIds: [recipient_id],
-            url: '/dashboard',
+            url: pushUrl,
             senderName: caller.name,
             senderRole: caller.role,
           })
@@ -318,8 +429,8 @@ export default async function handler(req, res) {
         return res.status(201).json({
           ok: true,
           is_private: true,
-          message: 'Private message sent confidentially to class leader.',
-          data: dmPayload,
+          message: 'Private message sent confidentially.',
+          data: createdDm,
         })
       }
 
@@ -436,9 +547,29 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing comment id to delete' })
       }
 
-      // Handle private direct message deletion
+      // Handle private direct message deletion with strict ownership verification
       if (url.searchParams.get('action') === 'private_message' || url.searchParams.get('is_private') === 'true') {
-        const delDmRes = await fetch(`${SUPABASE_URL}/rest/v1/admin_messages?id=eq.${commentId}`, {
+        const lookupRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/admin_messages?id=eq.${encodeURIComponent(commentId)}&select=id,sender_id,category&limit=1`,
+          {
+            headers: {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              apikey: SERVICE_ROLE_KEY,
+            },
+          }
+        )
+        const lookupRows = lookupRes.ok ? await lookupRes.json() : []
+        const dmRow = lookupRows?.[0]
+        if (!dmRow) {
+          return res.status(404).json({ error: 'Private message not found' })
+        }
+
+        const isParticipant = dmRow.sender_id === caller.id || dmRow.category === `dm:${caller.id}`
+        if (caller.role !== 'super_admin' && !isParticipant) {
+          return res.status(403).json({ error: 'Forbidden: You cannot delete this private message' })
+        }
+
+        const delDmRes = await fetch(`${SUPABASE_URL}/rest/v1/admin_messages?id=eq.${encodeURIComponent(commentId)}`, {
           method: 'DELETE',
           headers: {
             Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
