@@ -72,6 +72,98 @@ function getSupabaseHeaders(req, extra = {}) {
   }
 }
 
+async function fetchCallerMembership(url, headers, userId) {
+  let role = null
+  let classId = null
+  const adminClassIds = []
+
+  try {
+    const profResp = await fetch(
+      `${url}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=id,role,class_id&limit=1`,
+      { headers }
+    )
+    if (profResp.ok) {
+      const rows = await profResp.json()
+      const prof = Array.isArray(rows) ? rows[0] : null
+      if (prof) {
+        role = prof.role || null
+        classId = prof.class_id || null
+      }
+    }
+  } catch {}
+
+  if (role === 'admin') {
+    try {
+      const caResp = await fetch(
+        `${url}/rest/v1/class_admins?admin_id=eq.${encodeURIComponent(userId)}&select=class_id`,
+        { headers }
+      )
+      if (caResp.ok) {
+        const caRows = await caResp.json()
+        if (Array.isArray(caRows)) {
+          for (const r of caRows) {
+            if (r?.class_id && !adminClassIds.includes(r.class_id)) {
+              adminClassIds.push(r.class_id)
+            }
+          }
+        }
+      }
+    } catch {}
+    if (classId && !adminClassIds.includes(classId)) {
+      adminClassIds.push(classId)
+    }
+  }
+
+  return { role, classId, adminClassIds }
+}
+
+async function resolveVerifiedCaller(req) {
+  const { url, serviceKey, anonKey } = getSupabaseEnv()
+  const callerAuth = req?.headers?.authorization || req?.headers?.Authorization
+  if (!callerAuth || typeof callerAuth !== 'string' || !callerAuth.startsWith('Bearer ')) {
+    return { ok: false, userId: null, isServiceRole: false, role: null, classId: null, adminClassIds: [] }
+  }
+  const token = callerAuth.slice(7).trim()
+  if (!token) {
+    return { ok: false, userId: null, isServiceRole: false, role: null, classId: null, adminClassIds: [] }
+  }
+  if (serviceKey && token === serviceKey) {
+    return { ok: true, userId: null, isServiceRole: true, role: 'super_admin', classId: null, adminClassIds: [] }
+  }
+  const apiKey = serviceKey || anonKey
+  if (!url || !apiKey) {
+    return { ok: false, userId: null, isServiceRole: false, role: null, classId: null, adminClassIds: [] }
+  }
+  try {
+    const resp = await fetch(`${url}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: apiKey,
+      },
+    })
+    if (!resp.ok) {
+      return { ok: false, userId: null, isServiceRole: false, role: null, classId: null, adminClassIds: [] }
+    }
+    const userJson = await resp.json()
+    if (userJson?.id) {
+      const dbHeaders = getSupabaseHeaders(req) || {
+        Authorization: `Bearer ${token}`,
+        apikey: apiKey,
+      }
+      const membership = await fetchCallerMembership(url, dbHeaders, userJson.id)
+      return {
+        ok: true,
+        userId: userJson.id,
+        isServiceRole: false,
+        role: membership.role,
+        classId: membership.classId,
+        adminClassIds: membership.adminClassIds,
+      }
+    }
+  } catch {}
+  return { ok: false, userId: null, isServiceRole: false, role: null, classId: null, adminClassIds: [] }
+}
+
 async function parseJsonBody(req) {
   if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
     return req.body
@@ -265,24 +357,44 @@ async function fetchAppBranding(req) {
   return defaults
 }
 
-async function fetchRoleUserIds(req, roles) {
+async function fetchRecipientDirectory(req) {
   const { url: supabaseUrl } = getSupabaseEnv()
   const headers = getSupabaseHeaders(req)
-  if (!supabaseUrl || !headers || !Array.isArray(roles) || roles.length === 0) return null
+  const profileById = new Map()
+  const adminClassesByAdminId = new Map()
+  if (!supabaseUrl || !headers) {
+    return { loaded: false, profileById, adminClassesByAdminId }
+  }
 
   try {
-    const cleanRoles = roles.map((r) => encodeURIComponent(String(r).trim())).filter(Boolean)
-    if (cleanRoles.length === 0) return null
-    const resp = await fetch(
-      `${supabaseUrl}/rest/v1/profiles?role=in.(${cleanRoles.join(',')})&select=id`,
-      { headers }
-    )
-    if (!resp.ok) return null
-    const rows = await resp.json()
-    if (!Array.isArray(rows)) return null
-    return new Set(rows.map((r) => r.id).filter(Boolean))
+    const [profResp, caResp] = await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/profiles?select=id,role,class_id`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/class_admins?select=admin_id,class_id`, { headers }),
+    ])
+    if (!profResp.ok) {
+      return { loaded: false, profileById, adminClassesByAdminId }
+    }
+    const profRows = await profResp.json()
+    if (Array.isArray(profRows)) {
+      for (const row of profRows) {
+        if (row?.id) profileById.set(row.id, row)
+      }
+    }
+    if (caResp.ok) {
+      const caRows = await caResp.json()
+      if (Array.isArray(caRows)) {
+        for (const row of caRows) {
+          if (!row?.admin_id || !row?.class_id) continue
+          if (!adminClassesByAdminId.has(row.admin_id)) {
+            adminClassesByAdminId.set(row.admin_id, new Set())
+          }
+          adminClassesByAdminId.get(row.admin_id).add(row.class_id)
+        }
+      }
+    }
+    return { loaded: true, profileById, adminClassesByAdminId }
   } catch {
-    return null
+    return { loaded: false, profileById, adminClassesByAdminId }
   }
 }
 
@@ -318,10 +430,9 @@ export async function dispatchPushNotification(req, body = {}) {
     }
   }
 
-  let roleUserSet = null
-  if (targetRoles && targetRoles.length > 0) {
-    roleUserSet = await fetchRoleUserIds(req, targetRoles)
-  }
+  const directory = targetEndpoint
+    ? { loaded: false, profileById: new Map(), adminClassesByAdminId: new Map() }
+    : await fetchRecipientDirectory(req)
 
   // Collect all registered device subscriptions (multi-device per user preserved)
   const allSubsMap = new Map()
@@ -359,20 +470,36 @@ export async function dispatchPushNotification(req, body = {}) {
 
   const allSubs = Array.from(allSubsMap.values())
 
-  // Filter eligible recipients across ALL their registered devices:
-  // 1) targetEndpoint (single device test push)
-  // 2) targetRoles (admin/finance-only notifications)
-  // 3) targetUserSet (user-targeted receipts, targets, reminders, congrats)
-  // 4) targetClassId (class announcements/contributions/expenses/comments + global/admin subs with class_id=null)
+  // Filter eligible recipients strictly across ALL their registered devices:
+  // 1) targetEndpoint (single-device self push test)
+  // 2) Require known authenticated user profile when directory loaded (never leak private alerts to unbound anonymous endpoints)
+  // 3) targetRoles (admin/finance-only notifications)
+  // 4) targetUserSet (user-targeted receipts, targets, reminders, congrats)
+  // 5) targetClassId (class notifications verified against profile.class_id / class_admins, not trustable stale sub.class_id alone)
   const targetSubs = allSubs.filter((sub) => {
     if (targetEndpoint) return sub.endpoint === targetEndpoint
-    if (roleUserSet) {
-      if (!sub.user_id || !roleUserSet.has(sub.user_id)) return false
+    if (!sub.user_id) return false
+
+    const profile = directory.loaded ? directory.profileById.get(sub.user_id) : null
+    if (directory.loaded && !profile) return false
+
+    if (targetRoles && targetRoles.length > 0) {
+      if (!profile || !targetRoles.includes(profile.role)) return false
     }
     if (targetUserSet.size > 0) {
-      if (!sub.user_id || !targetUserSet.has(sub.user_id)) return false
+      if (!targetUserSet.has(sub.user_id)) return false
     }
-    if (targetClassId && targetUserSet.size === 0 && !roleUserSet) {
+    if (targetClassId && targetUserSet.size === 0 && !(targetRoles && targetRoles.length > 0)) {
+      if (profile) {
+        if (profile.role === 'super_admin' || profile.role === 'finance_manager') {
+          return !sub.class_id || sub.class_id === targetClassId
+        }
+        if (profile.role === 'admin') {
+          const managed = directory.adminClassesByAdminId.get(sub.user_id)
+          return Boolean(managed?.has(targetClassId) || profile.class_id === targetClassId)
+        }
+        return profile.class_id === targetClassId
+      }
       return !sub.class_id || sub.class_id === targetClassId
     }
     return true
@@ -484,6 +611,83 @@ export default async function handler(req, res) {
     req.method === 'POST' &&
     (pathname.endsWith('/subscribe') || action === 'subscribe' || body.action === 'subscribe')
 
+function resolveSubscribedClassId(caller, body) {
+  const requested = body.classId || body.class_id || null
+  if (caller.isServiceRole) return requested
+  if (caller.role === 'student') {
+    return caller.classId || null
+  }
+  if (caller.role === 'admin') {
+    if (requested && caller.adminClassIds.includes(requested)) return requested
+    return caller.adminClassIds.length === 1 ? caller.adminClassIds[0] : null
+  }
+  return requested
+}
+
+async function authorizeDispatch(req, caller, body) {
+  if (!caller.ok) {
+    return { allowed: false, status: 401, error: 'Unauthorized: Valid session required to dispatch push notifications' }
+  }
+  if (caller.isServiceRole) return { allowed: true }
+
+  const targetEndpoint = body.targetEndpoint || null
+  const targetClassId = body.classId || body.class_id || null
+  const targetRoles = Array.isArray(body.targetRoles) ? body.targetRoles : null
+  const targetUserId = body.targetUserId || body.target_user_id || null
+  const rawTargetUserIds = Array.isArray(body.targetUserIds) ? body.targetUserIds : []
+
+  if (targetEndpoint) {
+    if (caller.role === 'super_admin' || caller.role === 'admin' || caller.role === 'finance_manager') {
+      return { allowed: true }
+    }
+    // Non-admin can only test their own subscribed device endpoint
+    const { url: supabaseUrl } = getSupabaseEnv()
+    const headers = getSupabaseHeaders(req)
+    if (supabaseUrl && headers) {
+      try {
+        const resp = await fetch(
+          `${supabaseUrl}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(targetEndpoint)}&select=user_id&limit=1`,
+          { headers }
+        )
+        if (resp.ok) {
+          const rows = await resp.json()
+          if (rows?.[0]?.user_id === caller.userId) return { allowed: true }
+        }
+      } catch {}
+    }
+    return { allowed: false, status: 403, error: 'Forbidden: Cannot target another device endpoint' }
+  }
+
+  if (caller.role === 'student') {
+    const isOwnClassComment =
+      body.category === 'news' &&
+      Boolean(caller.classId) &&
+      targetClassId === caller.classId &&
+      !targetRoles?.length &&
+      !targetUserId &&
+      rawTargetUserIds.length === 0
+    if (!isOwnClassComment) {
+      return { allowed: false, status: 403, error: 'Forbidden: Students can only trigger own-class comment notifications' }
+    }
+    return { allowed: true }
+  }
+
+  if (caller.role === 'admin') {
+    if (targetClassId && !targetRoles?.length && !caller.adminClassIds.includes(targetClassId)) {
+      return { allowed: false, status: 403, error: 'Forbidden: You do not administer this class' }
+    }
+    if (!targetClassId && !targetRoles?.length && !targetUserId && rawTargetUserIds.length === 0) {
+      if (caller.adminClassIds.length === 1) {
+        body.classId = caller.adminClassIds[0]
+      } else {
+        return { allowed: false, status: 403, error: 'Forbidden: Class admins must scope broadcasts to an assigned class' }
+      }
+    }
+  }
+
+  return { allowed: true }
+}
+
   if (isSubscribeRequest) {
     const rawSub = body.subscription || body
     const normalized = normalizeSubscription(rawSub)
@@ -492,17 +696,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid push subscription payload. Missing endpoint or keys.' })
     }
 
-    const explicitUserId = body.userId || body.user_id || null
-    const explicitClassId = body.classId || body.class_id || null
-    normalized.user_id = explicitUserId
-    normalized.class_id = explicitClassId
-    normalized.user_agent = req.headers?.['user-agent'] || null
-    normalized.updated_at = new Date().toISOString()
-
+    // Only trust user_id & class_id bindings backed by verified Supabase Auth JWT (or service role).
+    // Prevents unauthenticated callers from claiming or snooping another user's/class's private notifications.
+    const verifiedCaller = await resolveVerifiedCaller(req)
     const previousEndpoint =
       typeof body.previousEndpoint === 'string' && body.previousEndpoint.trim()
         ? body.previousEndpoint.trim()
         : null
+
+    normalized.user_id = verifiedCaller.isServiceRole
+      ? body.userId || body.user_id || null
+      : verifiedCaller.ok
+      ? verifiedCaller.userId
+      : null
+    normalized.class_id = verifiedCaller.ok ? resolveSubscribedClassId(verifiedCaller, body) : null
+    normalized.user_agent = req.headers?.['user-agent'] || null
+    normalized.updated_at = new Date().toISOString()
 
     const { url: supabaseUrl } = getSupabaseEnv()
     const dbHeaders = getSupabaseHeaders(req, {
@@ -510,8 +719,9 @@ export default async function handler(req, res) {
       Prefer: 'resolution=merge-duplicates,return=minimal',
     })
 
-    // Preserve existing ownership when renewing via `pushsubscriptionchange`, on unauthenticated page load, or after logout
-    if (supabaseUrl && dbHeaders && (!normalized.user_id || !normalized.class_id)) {
+    // Preserve existing ownership ONLY when unauthenticated (e.g. `pushsubscriptionchange` in SW, logged-out boot).
+    // Never inherit a prior user's class_id onto an authenticated caller (e.g. Super Admin signing in after Student).
+    if (supabaseUrl && dbHeaders && !verifiedCaller.ok) {
       const lookupEndpoints = [normalized.endpoint, previousEndpoint].filter(
         (ep, i, arr) => Boolean(ep) && arr.indexOf(ep) === i
       )
@@ -525,8 +735,8 @@ export default async function handler(req, res) {
             const prevRows = await prevResp.json()
             const prev = Array.isArray(prevRows) ? prevRows[0] : null
             if (prev) {
-              normalized.user_id = normalized.user_id || prev.user_id || null
-              normalized.class_id = normalized.class_id || prev.class_id || null
+              normalized.user_id = prev.user_id || null
+              normalized.class_id = prev.class_id || null
               if (normalized.user_id) break
             }
           }
@@ -536,12 +746,12 @@ export default async function handler(req, res) {
 
     // Update local file cache (local dev fallback)
     const currentSubs = getLocalSubscriptions()
-    const existingLocal = currentSubs.find((s) => s.endpoint === normalized.endpoint)
-    if (!normalized.user_id && existingLocal?.user_id) {
-      normalized.user_id = existingLocal.user_id
-    }
-    if (!normalized.class_id && existingLocal?.class_id) {
-      normalized.class_id = existingLocal.class_id
+    const existingLocal = currentSubs.find(
+      (s) => s.endpoint === normalized.endpoint || (previousEndpoint && s.endpoint === previousEndpoint)
+    )
+    if (!verifiedCaller.ok && existingLocal) {
+      normalized.user_id = normalized.user_id || existingLocal.user_id || null
+      normalized.class_id = normalized.class_id || existingLocal.class_id || null
     }
     const filtered = currentSubs.filter(
       (s) => s.endpoint !== normalized.endpoint && s.endpoint !== previousEndpoint
@@ -597,12 +807,21 @@ export default async function handler(req, res) {
       dbSaved,
       dbError,
       preservedUserId: normalized.user_id,
+      preservedClassId: normalized.class_id,
       message: 'Device push subscription registered',
     })
   }
 
   // 3. POST /api/push or /api/push/send - Dispatches background push notifications
   if (req.method === 'POST') {
+    const { url: supabaseUrl, serviceKey, anonKey } = getSupabaseEnv()
+    if (supabaseUrl && (serviceKey || anonKey)) {
+      const caller = await resolveVerifiedCaller(req)
+      const authz = await authorizeDispatch(req, caller, body)
+      if (!authz.allowed) {
+        return res.status(authz.status || 403).json({ error: authz.error })
+      }
+    }
     const result = await dispatchPushNotification(req, body)
     return res.status(result.ok ? 200 : 502).json(result)
   }

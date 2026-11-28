@@ -54,6 +54,25 @@ function markShownAndCheckDuplicate(id) {
   return false
 }
 
+const DELIVERED_CACHE_NAME = 'cb-delivered-notifs'
+
+async function recordDeliveredInCache(eventId) {
+  if (!eventId || typeof caches === 'undefined') return
+  try {
+    const cache = await caches.open(DELIVERED_CACHE_NAME)
+    await cache.put(
+      `/__cb_sw_delivered/${encodeURIComponent(String(eventId))}`,
+      new Response(JSON.stringify({ ts: Date.now() }), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    const keys = await cache.keys()
+    if (keys.length > 80) {
+      await Promise.all(keys.slice(0, keys.length - 80).map((k) => cache.delete(k)))
+    }
+  } catch {}
+}
+
 async function displayIndependentNotification(payload) {
   const title = payload.title || (payload.appName ? `${payload.appName} Notification` : 'ClassBank Notification')
   const now = Date.now()
@@ -84,19 +103,50 @@ async function displayIndependentNotification(payload) {
     actions: [{ action: 'open', title: 'Open App' }],
   }
 
+  let shown = false
   try {
     await self.registration.showNotification(title, options)
+    shown = true
   } catch {
     // Fallback without remote assets/actions in case an icon fetch fails offline
     try {
       await self.registration.showNotification(title, {
         body: options.body,
+        icon: '/icons/notif-logo-192.png',
+        badge: '/icons/notif-badge-96.png',
+        vibrate: options.vibrate,
+        silent: false,
         tag: uniqueTag,
         renotify: true,
         data: options.data,
       })
-    } catch {}
+      shown = true
+    } catch {
+      try {
+        await self.registration.showNotification(title, {
+          body: options.body,
+          silent: false,
+          tag: uniqueTag,
+          renotify: true,
+          data: options.data,
+        })
+        shown = true
+      } catch {}
+    }
   }
+
+  if (shown) {
+    await recordDeliveredInCache(payload.id || rawEventId)
+  }
+}
+
+async function notifyOpenClientsPushDelivered(payload) {
+  try {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const client of clients) {
+      client.postMessage({ type: 'SW_PUSH_DELIVERED', payload })
+    }
+  } catch {}
 }
 
 self.addEventListener('push', (event) => {
@@ -120,22 +170,35 @@ self.addEventListener('push', (event) => {
     return
   }
 
-  event.waitUntil(displayIndependentNotification(data))
+  event.waitUntil(
+    Promise.all([
+      displayIndependentNotification(data),
+      notifyOpenClientsPushDelivered(data),
+    ])
+  )
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const rawUrl = event.notification.data?.url || '/dashboard'
+  const notifId = event.notification.data?.id || null
   const targetUrl = new URL(rawUrl, self.location.origin).href
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windowClients) => {
       for (const client of windowClients) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
-          if ('navigate' in client && !client.url.includes(rawUrl)) {
-            return client.navigate(targetUrl).then((c) => (c ? c.focus() : client.focus()))
-          }
-          return client.focus()
+          try {
+            if ('navigate' in client && !client.url.includes(rawUrl)) {
+              const navigated = await client.navigate(targetUrl).catch(() => client)
+              await (navigated ? navigated.focus() : client.focus())
+              navigated?.postMessage({ type: 'SW_NOTIFICATION_CLICKED', payload: { id: notifId, url: rawUrl } })
+              return
+            }
+          } catch {}
+          await client.focus().catch(() => {})
+          client.postMessage({ type: 'SW_NOTIFICATION_CLICKED', payload: { id: notifId, url: rawUrl } })
+          return
         }
       }
       if (self.clients.openWindow) {

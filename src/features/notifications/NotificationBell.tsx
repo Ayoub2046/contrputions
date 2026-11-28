@@ -128,6 +128,8 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
   const [open, setOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [testingPush, setTestingPush] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [showBroadcastModal, setShowBroadcastModal] = useState(false)
   const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
@@ -182,6 +184,20 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
       await refreshNotifications()
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  async function handleTestPush() {
+    if (testingPush) return
+    setTestingPush(true)
+    setTestResult(null)
+    try {
+      const res = await testNotification()
+      setTestResult({ ok: res.ok, message: res.message })
+    } catch {
+      setTestResult({ ok: false, message: 'Failed to trigger test push.' })
+    } finally {
+      setTestingPush(false)
     }
   }
 
@@ -475,25 +491,41 @@ export function NotificationBell({ placement = 'header' }: NotificationBellProps
 
       {/* Admin Quick Actions */}
       {isAdmin && (
-        <div className="px-3.5 py-2 bg-[#F5F8FA] dark:bg-[#0d1a2d] border-b border-[#ECECEC] dark:border-[#1e3550] flex items-center justify-between gap-2 shrink-0">
-          <button
-            onClick={testNotification}
-            className="flex items-center gap-1.5 text-xs text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] px-2.5 py-1.5 rounded-lg hover:bg-white dark:hover:bg-[#132033] transition-colors cursor-pointer"
-          >
-            <Volume2 size={13} className="text-emerald-500" />
-            <span>Test Push</span>
-          </button>
+        <div className="bg-[#F5F8FA] dark:bg-[#0d1a2d] border-b border-[#ECECEC] dark:border-[#1e3550] shrink-0">
+          <div className="px-3.5 py-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={handleTestPush}
+              disabled={testingPush}
+              className="flex items-center gap-1.5 text-xs text-[#4a5a72] dark:text-[#9FBBDE] hover:text-[#1a2332] dark:hover:text-[#e8f0f8] px-2.5 py-1.5 rounded-lg hover:bg-white dark:hover:bg-[#132033] transition-colors cursor-pointer disabled:opacity-60"
+            >
+              <Volume2 size={13} className={`text-emerald-500 ${testingPush ? 'animate-pulse' : ''}`} />
+              <span>{testingPush ? 'Sending...' : 'Test Push'}</span>
+            </button>
 
-          <button
-            onClick={() => {
-              setOpen(false)
-              setShowBroadcastModal(true)
-            }}
-            className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#1176BC] to-[#25A8E0] hover:opacity-90 transition-opacity cursor-pointer shadow-sm active:scale-95"
-          >
-            <Send size={12} />
-            <span>Send Push Alert</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                setShowBroadcastModal(true)
+              }}
+              className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#1176BC] to-[#25A8E0] hover:opacity-90 transition-opacity cursor-pointer shadow-sm active:scale-95"
+            >
+              <Send size={12} />
+              <span>Send Push Alert</span>
+            </button>
+          </div>
+          {testResult && (
+            <div
+              className={`mx-3.5 mb-2 px-2.5 py-1.5 rounded-lg text-[11px] leading-snug border ${
+                testResult.ok
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800'
+              }`}
+            >
+              {testResult.message}
+            </div>
+          )}
         </div>
       )}
 

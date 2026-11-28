@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getValidAuthToken } from '../../lib/admin-api'
 
 export const VAPID_PUBLIC_KEY =
   'BIQ74Oz-r2eA4OauixHmwq8IWIGoEynmNUQ65D4cebpBe0p_JKdPkAk6oMjwxnHC1XdG4Z8zk1UzhmznPf8mCvk'
@@ -36,6 +37,11 @@ function waitForActivation(reg: ServiceWorkerRegistration, timeoutMs = 8000): Pr
       }).catch(() => resolve(reg))
       return
     }
+    if (worker.state === 'activated' || reg.active) {
+      clearTimeout(timer)
+      resolve(reg)
+      return
+    }
     const onStateChange = () => {
       if (worker.state === 'activated' || reg.active) {
         worker.removeEventListener('statechange', onStateChange)
@@ -49,6 +55,8 @@ function waitForActivation(reg: ServiceWorkerRegistration, timeoutMs = 8000): Pr
 
 const PUSH_ENDPOINT_STORAGE_KEY = 'classbank_last_push_endpoint'
 let subscribeInFlight: Promise<PushSubscription | null> | null = null
+let activeSubscribeKey: string | null = null
+let pendingSubscribeArgs: { userId?: string | null; classId?: string | null } | null = null
 
 function getScriptUrl(reg: ServiceWorkerRegistration): string {
   return (
@@ -195,48 +203,12 @@ async function performWebPushSubscribe(
       if (!endpoint || !p256dh || !auth) return null
 
       // Grab auth token if logged in so both API & Supabase RLS work seamlessly
-      let accessToken: string | null = null
-      try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        accessToken = sessionData.session?.access_token || null
-      } catch {}
+      const accessToken = await getValidAuthToken().catch(() => null)
 
       let persisted = false
 
-      // 1. Direct authenticated upsert into Supabase push_subscriptions ONLY when userId is known,
-      // so unauthenticated page loads or logouts NEVER overwrite device ownership with user_id=null.
-      if (accessToken && userId) {
-        try {
-          const { error: dbErr } = await supabase.from('push_subscriptions').upsert(
-            {
-              endpoint,
-              p256dh,
-              auth,
-              user_id: userId,
-              class_id: classId || null,
-              user_agent: navigator.userAgent,
-              updated_at: new Date().toISOString(),
-            } as never,
-            { onConflict: 'endpoint' }
-          )
-          if (!dbErr) {
-            persisted = true
-            // Remove replaced endpoint ONLY when this device rotated its own endpoint
-            if (previousEndpoint && previousEndpoint !== endpoint) {
-              try {
-                await supabase
-                  .from('push_subscriptions' as never)
-                  .delete()
-                  .eq('endpoint', previousEndpoint)
-              } catch {}
-            }
-          } else {
-            console.warn('[WebPush Supabase Upsert Notice]:', dbErr.message)
-          }
-        } catch {}
-      }
-
-      // 2. Register/refresh with serverless API (/api/push?action=subscribe preserves existing owner when userId is omitted)
+      // 1. Register/refresh via backend API first (enforces verified user_id + role class scope;
+      // preserves existing owner when unauthenticated/logged-out).
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (accessToken) headers.Authorization = `Bearer ${accessToken}`
@@ -264,6 +236,38 @@ async function performWebPushSubscribe(
         console.warn('[WebPush API Subscribe Notice]:', apiErr)
       }
 
+      // 2. Fallback direct authenticated upsert into Supabase ONLY if serverless API didn't persist
+      // (and only when authenticated with userId so logged-out boots never wipe ownership).
+      if (!persisted && accessToken && userId) {
+        try {
+          const { error: dbErr } = await supabase.from('push_subscriptions').upsert(
+            {
+              endpoint,
+              p256dh,
+              auth,
+              user_id: userId,
+              class_id: classId || null,
+              user_agent: navigator.userAgent,
+              updated_at: new Date().toISOString(),
+            } as never,
+            { onConflict: 'endpoint' }
+          )
+          if (!dbErr) {
+            persisted = true
+            if (previousEndpoint && previousEndpoint !== endpoint) {
+              try {
+                await supabase
+                  .from('push_subscriptions' as never)
+                  .delete()
+                  .eq('endpoint', previousEndpoint)
+              } catch {}
+            }
+          } else {
+            console.warn('[WebPush Supabase Upsert Notice]:', dbErr.message)
+          }
+        } catch {}
+      }
+
       try {
         localStorage.setItem(PUSH_ENDPOINT_STORAGE_KEY, endpoint)
       } catch {}
@@ -283,11 +287,31 @@ export async function subscribeToWebPush(
   userId?: string | null,
   classId?: string | null
 ): Promise<PushSubscription | null> {
+  const key = `${userId || ''}::${classId || ''}`
   if (subscribeInFlight) {
-    return subscribeInFlight
+    // Do not drop an authenticated/class-scoped sync behind an earlier pre-auth sync
+    if (key !== activeSubscribeKey) {
+      pendingSubscribeArgs = { userId, classId }
+    }
+    const firstResult = await subscribeInFlight
+    if (pendingSubscribeArgs && pendingSubscribeArgs.userId === userId && pendingSubscribeArgs.classId === classId) {
+      const next = pendingSubscribeArgs
+      pendingSubscribeArgs = null
+      return subscribeToWebPush(next.userId, next.classId)
+    }
+    return firstResult
   }
+
+  activeSubscribeKey = key
   subscribeInFlight = performWebPushSubscribe(userId, classId).finally(() => {
     subscribeInFlight = null
+    activeSubscribeKey = null
   })
-  return subscribeInFlight
+  const result = await subscribeInFlight
+  if (pendingSubscribeArgs) {
+    const next = pendingSubscribeArgs
+    pendingSubscribeArgs = null
+    return subscribeToWebPush(next.userId, next.classId)
+  }
+  return result
 }

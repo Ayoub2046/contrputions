@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getValidAuthToken } from '../../lib/admin-api'
 import { playWhatsAppChime } from './notificationAudio'
 import type { PushNotificationPayload, StoredNotification } from './notificationTypes'
 
@@ -385,15 +386,22 @@ export async function broadcastMarkUnread(id: string, userId?: string | null): P
   await sendRealtimeReadSync('mark_unread', { id, userId })
 }
 
+export async function wasDeliveredByServiceWorker(id?: string | null): Promise<boolean> {
+  if (!id || typeof caches === 'undefined') return false
+  try {
+    const cache = await caches.open('cb-delivered-notifs')
+    const match = await cache.match(`/__cb_sw_delivered/${encodeURIComponent(String(id))}`)
+    return Boolean(match)
+  } catch {
+    return false
+  }
+}
+
 export async function dispatchWebPushApi(
   payload: PushNotificationPayload & { targetEndpoint?: string | null }
 ): Promise<{ sent: number; failed: number; totalTargets: number; eventId?: string } | null> {
   try {
-    let accessToken: string | null = null
-    try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      accessToken = sessionData.session?.access_token || null
-    } catch {}
+    const accessToken = await getValidAuthToken().catch(() => null)
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`

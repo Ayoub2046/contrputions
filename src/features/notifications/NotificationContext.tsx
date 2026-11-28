@@ -21,9 +21,18 @@ import {
   saveLocalReadIds,
   isLocalSentNotification,
   markLocalSentNotification,
+  wasDeliveredByServiceWorker,
 } from './notificationService'
 import { subscribeToWebPush, getCurrentPushEndpoint } from './webPushService'
 import type { PushNotificationPayload, StoredNotification, NotificationCategory } from './notificationTypes'
+
+interface TestPushResult {
+  ok: boolean
+  sent: number
+  failed: number
+  totalTargets: number
+  message: string
+}
 
 interface NotificationContextType {
   permission: NotificationPermission
@@ -38,7 +47,7 @@ interface NotificationContextType {
   markAllAsRead: () => Promise<void>
   markAsRead: (id: string) => Promise<void>
   markAsUnread: (id: string) => Promise<void>
-  testNotification: () => Promise<void>
+  testNotification: () => Promise<TestPushResult>
   refreshNotifications: () => Promise<void>
 }
 
@@ -53,10 +62,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [activeBanner, setActiveBanner] = useState<PushNotificationPayload | null>(null)
 
   const seenIdsRef = useRef<Set<string>>(new Set())
+  const swDeliveredIdsRef = useRef<Set<string>>(new Set())
+  const pendingFallbackTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const readIdsRef = useRef<Set<string>>(loadLocalReadIds(user?.id))
   const initialSyncDoneRef = useRef(false)
   const userRef = useRef(user)
   const activeClassIdRef = useRef(activeClassId)
+  const webPushReadyRef = useRef(webPushReady)
+
+  useEffect(() => {
+    webPushReadyRef.current = webPushReady
+  }, [webPushReady])
 
   useEffect(() => {
     userRef.current = user
@@ -117,9 +133,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Load notifications from database along with persistent per-user read status
   const refreshNotifications = useCallback(async () => {
+    if (!user?.id) {
+      initialSyncDoneRef.current = false
+      setNotifications([])
+      return
+    }
     const filterClass =
-      user?.role === 'student' ? user?.class_id || activeClassId : activeClassId || user?.class_id
-    const list = await fetchNotificationsList(filterClass, user?.id)
+      user.role === 'student' ? user.class_id || activeClassId : activeClassId || user.class_id
+    const list = await fetchNotificationsList(filterClass, user.id)
     for (const item of list) {
       seenIdsRef.current.add(item.id)
       if (item.read) readIdsRef.current.add(item.id)
@@ -134,17 +155,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const handleIncomingNotification = useCallback(async (notif: PushNotificationPayload) => {
     if (!notif || !notif.id) return
+    const currUser = userRef.current
+    if (!currUser) return
 
     if (seenIdsRef.current.has(notif.id)) return
     seenIdsRef.current.add(notif.id)
 
-    const currUser = userRef.current
     const currClass =
-      currUser?.role === 'student'
-        ? currUser?.class_id || activeClassIdRef.current
-        : activeClassIdRef.current || currUser?.class_id
+      currUser.role === 'student'
+        ? currUser.class_id || activeClassIdRef.current
+        : activeClassIdRef.current || currUser.class_id
 
-    if (notif.classId && currClass && notif.classId !== currClass && currUser?.role === 'student') {
+    if (notif.classId && currClass && notif.classId !== currClass && currUser.role === 'student') {
       return
     }
 
@@ -158,15 +180,83 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       return
     }
 
+    const isVisible = typeof document !== 'undefined' && document.visibilityState === 'visible'
+    const deliveredBySw =
+      swDeliveredIdsRef.current.has(notif.id) || (await wasDeliveredByServiceWorker(notif.id))
+
+    if (deliveredBySw) {
+      swDeliveredIdsRef.current.add(notif.id)
+    }
+
     if (!alreadyRead) {
-      await triggerSystemNotification(notif)
       setActiveBanner(notif)
+      // Only trigger frontend fallback chime/notification when app tab IS visibly open
+      // AND Service Worker hasn't already delivered the native push notification.
+      if (isVisible && !deliveredBySw) {
+        if (webPushReadyRef.current) {
+          const fallbackTimer = setTimeout(async () => {
+            pendingFallbackTimersRef.current.delete(notif.id)
+            const swHandled =
+              swDeliveredIdsRef.current.has(notif.id) || (await wasDeliveredByServiceWorker(notif.id))
+            if (!swHandled && document.visibilityState === 'visible') {
+              triggerSystemNotification(notif)
+            }
+          }, 2000)
+          pendingFallbackTimersRef.current.set(notif.id, fallbackTimer)
+        } else {
+          await triggerSystemNotification(notif)
+        }
+      }
     }
 
     setNotifications((prev) => [
       { ...notif, read: alreadyRead },
       ...prev.filter((p) => p.id !== notif.id),
     ])
+  }, [])
+
+  // Listen for Service Worker native push delivery & click events so foreground UI syncs without double sound/popup
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const onSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'SW_NOTIFICATION_CLICKED' && event.data?.payload?.id) {
+        setActiveBanner((prev) => (prev?.id === event.data.payload.id ? null : prev))
+        return
+      }
+      if (event.data?.type !== 'SW_PUSH_DELIVERED' || !event.data?.payload?.id) return
+      const payload = event.data.payload as PushNotificationPayload
+      swDeliveredIdsRef.current.add(payload.id)
+      const pending = pendingFallbackTimersRef.current.get(payload.id)
+      if (pending) {
+        clearTimeout(pending)
+        pendingFallbackTimersRef.current.delete(payload.id)
+      }
+      const currUser = userRef.current
+      if (!currUser) return
+      const currClass =
+        currUser.role === 'student'
+          ? currUser.class_id || activeClassIdRef.current
+          : activeClassIdRef.current || currUser.class_id
+      if (payload.classId && currClass && payload.classId !== currClass && currUser.role === 'student') {
+        return
+      }
+      if (!seenIdsRef.current.has(payload.id)) {
+        seenIdsRef.current.add(payload.id)
+        if (!isLocalSentNotification(payload.id)) {
+          setActiveBanner(payload)
+          setNotifications((prev) => [
+            { ...payload, createdAt: payload.createdAt || new Date().toISOString(), read: false },
+            ...prev.filter((p) => p.id !== payload.id),
+          ])
+        }
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onSwMessage)
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onSwMessage)
+      for (const t of pendingFallbackTimersRef.current.values()) clearTimeout(t)
+      pendingFallbackTimersRef.current.clear()
+    }
   }, [])
 
   // Realtime subscription: postgres_changes + WebSocket events
@@ -262,11 +352,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     async function syncDatabaseNotifications() {
       try {
         const currUser = userRef.current
+        if (!currUser?.id) return
         const userClass =
-          currUser?.role === 'student'
-            ? currUser?.class_id || activeClassIdRef.current
-            : activeClassIdRef.current || currUser?.class_id
-        const list = await fetchNotificationsList(userClass, currUser?.id)
+          currUser.role === 'student'
+            ? currUser.class_id || activeClassIdRef.current
+            : activeClassIdRef.current || currUser.class_id
+        const list = await fetchNotificationsList(userClass, currUser.id)
         if (!isMounted || !list || list.length === 0) return
 
         const now = Date.now()
@@ -395,12 +486,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     [user?.id]
   )
 
-  const testNotification = useCallback(async () => {
+  const testNotification = useCallback(async (): Promise<TestPushResult> => {
     const appName = (typeof document !== 'undefined' && document.title) || 'ClassBank'
     const sample: PushNotificationPayload = {
       id: generateUUID(),
       title: `📢 ${appName} Push Test`,
-      body: 'Real background push notification is active! Multiple notifications arrive independently even before opening the app.',
+      body: 'Real background push notification is active! Multiple notifications arrive independently with sound even when the app is closed.',
       category: 'announcement',
       senderName: user?.name || appName,
       senderRole: user?.role || 'super_admin',
@@ -408,20 +499,44 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       url: '/dashboard',
     }
 
+    seenIdsRef.current.add(sample.id)
     const ep = await getCurrentPushEndpoint()
-    if (ep) {
-      const result = await dispatchWebPushApi({ ...sample, targetEndpoint: ep })
-      if (result && result.sent > 0) {
-        setActiveBanner(sample)
-        setNotifications((prev) => [{ ...sample, read: false }, ...prev])
-        return
+    if (!ep) {
+      await triggerSystemNotification(sample)
+      setActiveBanner(sample)
+      setNotifications((prev) => [{ ...sample, read: false }, ...prev])
+      return {
+        ok: false,
+        sent: 0,
+        failed: 0,
+        totalTargets: 0,
+        message: 'No PushManager endpoint active — tap Allow Notifications or reload page.',
       }
     }
 
-    await triggerSystemNotification(sample)
+    const result = await dispatchWebPushApi({ ...sample, targetEndpoint: ep })
     setActiveBanner(sample)
-    setNotifications((prev) => [{ ...sample, read: false }, ...prev])
-  }, [user])
+    setNotifications((prev) => [{ ...sample, read: false }, ...prev.filter((p) => p.id !== sample.id)])
+
+    if (result && result.sent > 0) {
+      return {
+        ok: true,
+        sent: result.sent,
+        failed: result.failed,
+        totalTargets: result.totalTargets,
+        message: `Background push sent (${result.sent}/${result.totalTargets}). If silent, enable Sound in Android App Info → Notifications.`,
+      }
+    }
+
+    await syncPushRegistration()
+    return {
+      ok: false,
+      sent: result?.sent ?? 0,
+      failed: result?.failed ?? 0,
+      totalTargets: result?.totalTargets ?? 0,
+      message: 'Endpoint synced just now — tap Test Push again to verify live FCM delivery.',
+    }
+  }, [syncPushRegistration, user])
 
   const unreadCount = notifications.filter((n) => !n.read).length
 

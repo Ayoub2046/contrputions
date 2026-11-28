@@ -114,6 +114,7 @@ export default defineConfig(({ mode }) => {
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.js',
+      injectRegister: false,
       registerType: 'autoUpdate',
       devOptions: {
         enabled: true,
@@ -121,7 +122,7 @@ export default defineConfig(({ mode }) => {
       },
       includeAssets: ['icons/*.png'],
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,svg,ico,json,woff2}', 'icons/notif-*.png'],
+        globPatterns: ['**/*.{js,css,html,svg,ico,json,woff2}', 'icons/*.png'],
       },
       manifest: {
         id: '/',
